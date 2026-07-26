@@ -73,7 +73,7 @@ def write_html():
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><title>FirmForge Serial</title>
 <style>
-:root{{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#64748b;--acc:#22d3ee;--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748}}
+:root{{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#94a3b8;--acc:#22d3ee;--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748}}
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}}
 .tbar{{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(--hdr);border-bottom:1px solid var(--sep);flex-shrink:0;min-height:36px}}
@@ -119,7 +119,7 @@ setInterval(function(){{
     var t=x.responseText,m=t.match(/<div class="out" id="out">([\\s\\S]*?)<!--\\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
-    if(n!==cur){{cur=n;out.innerHTML=m[1];out.scrollTop=out.scrollHeight;}}
+    if(n!==cur){{if(n>window._cn||!window._cn){{out.innerHTML=m[1];out.scrollTop=out.scrollHeight;}}cur=n;}}
     var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);
     if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
@@ -131,7 +131,7 @@ setInterval(function(){{
   x.send();
 }},500);
 window.onload=function(){{out.scrollTop=out.scrollHeight;}};
-function clearOutput(){{out.innerHTML='';cur=0;}}
+function clearOutput(){{window._cn=cur;out.innerHTML='';}}
 function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
 </script>
 </body></html>"""
