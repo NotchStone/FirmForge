@@ -1,6 +1,7 @@
-"""Serial collector — writes live HTML with iframe-based silent refresh.
+"""Serial collector — writes live HTML with JS polling.
 
 Usage: python serial_collector.py <html_path> <port> <baud>
+Stop: create <html_path>.stop file, collector exits within 1s
 """
 
 import sys
@@ -12,20 +13,15 @@ import atexit
 html_path = sys.argv[1]
 port_name = sys.argv[2]
 baud = int(sys.argv[3])
+timeout_s = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 stop_file = html_path + ".stop"
+_start_time = time.time()
 
 lines = []
 ser = None
 
 
 def cleanup():
-    global ser
-    if ser is not None:
-        try:
-            ser.close()
-        except Exception:
-            pass
-        ser = None
     try:
         os.unlink(stop_file)
     except Exception:
@@ -109,40 +105,54 @@ window.onload = () => out.scrollTop = out.scrollHeight;
 # Initial write
 write_html()
 
-# Main loop
+# Main loop — uses ComPort (pySerial → Win32Serial fallback, same pattern as S5)
 try:
-    import serial
-    ser = serial.Serial(port_name, baud, timeout=0.5)
-    ser.reset_input_buffer()
-    buf = ""
-    last_write = time.time()
+    sys.path.insert(0, os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))))
+    from firmforge.providers.com_port import ComPort
 
-    while True:
-        if os.path.exists(stop_file):
-            break
+    with ComPort(port_name, baud, timeout=0.3) as ser:
+        time.sleep(0.5)
+        try:
+            ser.reset_input_buffer()
+        except Exception:
+            pass
+        buf = ""
+        last_write = time.time()
 
-        data = ser.read(ser.in_waiting or 1)
-        changed = False
-        if data:
-            text = data.decode("ascii", errors="replace")
-            buf += text
-            while chr(10) in buf:
-                line, buf = buf.split(chr(10), 1)
-                line = line.rstrip(chr(13))
-                if line:
-                    lines.append(line)
-                    if len(lines) > 500:
-                        lines = lines[-500:]
-                    changed = True
+        write_html()
 
-        now = time.time()
-        if changed or (now - last_write >= 3):
-            write_html()
-            last_write = now
+        while True:
+            if os.path.exists(stop_file):
+                break
+            if timeout_s > 0 and time.time() - _start_time > timeout_s:
+                break
 
-        time.sleep(0.1)
+            try:
+                chunk = ser.read(64)
+            except Exception:
+                time.sleep(0.5)
+                continue
+
+            if chunk:
+            if chunk:
+                if isinstance(chunk, bytes):
+                    chunk = chunk.decode("ascii", errors="replace")
+                buf += chunk
+                while chr(10) in buf:
+                    line, buf = buf.split(chr(10), 1)
+                    line = line.rstrip(chr(13))
+                    if line:
+                        lines.append(line)
+                        if len(lines) > 500:
+                            lines = lines[-500:]
+
+            now = time.time()
+            if now - last_write >= 0.3:
+                write_html()
+                last_write = now
+
+            time.sleep(0.05)
 
 except Exception:
     pass
-finally:
-    cleanup()
