@@ -113,8 +113,8 @@ function stopMonitor(){{
         os.makedirs(data_dir, exist_ok=True)
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html)
-    except Exception as e:
-        print(f"write_html FAILED: {e}", file=sys.stderr)
+    except Exception:
+        pass
 
 
 # ---------- Serial (ComPort context manager, same as S5) ----------
