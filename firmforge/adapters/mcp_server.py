@@ -413,12 +413,68 @@ if MCP_AVAILABLE and mcp is not None:
         _add_project_root_to_path()
         return _do_monitor(port, baud, action)
 
+_monitor_httpd = None  # singleton HTTP server
+
+
+def _start_monitor_httpd(root: str) -> int:
+    """Start HTTP server serving .firmforge/ on port 9878. Returns port.
+    Singleton: first call starts, subsequent calls return existing port.
+    Server has /stop endpoint for Stop button on panel.
+    """
+    global _monitor_httpd
+    if _monitor_httpd is not None:
+        return _monitor_httpd.server_address[1]
+
+    import os as _os
+    import threading
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+    data_dir = _os.path.join(root, ".firmforge")
+    stop_file = _os.path.join(data_dir, "serial_live.html.stop")
+
+    class _H(SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=data_dir, **kw)
+
+        def do_POST(self):
+            if self.path == "/stop":
+                try:
+                    with open(stop_file, "w") as f:
+                        f.write("x")
+                except Exception:
+                    pass
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"STOPPED")
+
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            super().end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    for p in range(9878, 9888):
+        try:
+            _monitor_httpd = HTTPServer(("127.0.0.1", p), _H)
+            threading.Thread(target=_monitor_httpd.serve_forever, daemon=True).start()
+            logger.info("Monitor HTTP server started on port %d", p)
+            return p
+        except Exception as e:
+            logger.warning("Monitor HTTP port %d failed: %s", p, e)
+    return 0
+
 
 # -- Main entry point --
 
 def _do_monitor(port: str = "", baud: int = 9600,
                 action: str = "start", timeout: int = 0) -> dict[str, Any]:
-    """Start/stop serial monitor — independent process writes live HTML.
+    """Start/stop serial monitor + HTTP panel.
+
+    start: auto-detect port, start collector + HTTP server, write goto_panel.html
+    serve-only: start HTTP server only (collector already running from ff_run)
+    stop: signal collector to exit + clean close port
 
     timeout: auto-stop after N seconds (0 = run indefinitely)
     """
@@ -429,12 +485,13 @@ def _do_monitor(port: str = "", baud: int = 9600,
     import time
     root = _add_project_root_to_path()
     html_path = os.path.join(str(root), ".firmforge", "serial_live.html")
+    goto_path = os.path.join(str(root), ".firmforge", "goto_panel.html")
 
     if action == "stop":
         stop_file = html_path + ".stop"
         try:
             Path(stop_file).touch()
-            time.sleep(3)  # let collector detect, exit, and release port
+            time.sleep(3)
             try:
                 from firmforge.providers.com_port import com_port_clean_close
                 if port:
@@ -447,35 +504,55 @@ def _do_monitor(port: str = "", baud: int = 9600,
             pass
         return {"status": "stopped"}
 
-    if not port:
-        # Auto-detect via BoardDetector (same as S1)
-        try:
-            from firmforge.core.board_detector import BoardDetector
-            from pathlib import PurePath
-            bd = BoardDetector(boards_dir=str(root / "boards"))
-            result = bd.detect()
-            for c in (result.candidates or []):
-                p = c.details.get("port", "")
-                if p and p.upper().startswith("COM"):
-                    port = p
-                    logger.info("ff_monitor auto-detected port: %s", port)
-                    break
-        except Exception as e:
-            logger.warning("ff_monitor auto-detect failed: %s", e)
-    if not port:
-        return {"status": "error", "message": "port required for start action"}
+    if action in ("start", "serve-only"):
+        # Auto-detect port if needed
+        if not port:
+            try:
+                from firmforge.core.board_detector import BoardDetector
+                bd = BoardDetector(boards_dir=str(root / "boards"))
+                result = bd.detect()
+                for c in (result.candidates or []):
+                    p = c.details.get("port", "")
+                    if p and p.upper().startswith("COM"):
+                        port = p
+                        logger.info("ff_monitor auto-detected port: %s", port)
+                        break
+            except Exception as e:
+                logger.warning("ff_monitor auto-detect failed: %s", e)
+        if not port:
+            return {"status": "error", "message": "port required"}
 
-    collector = str(root / "firmforge" / "tools" / "serial_collector.py")
+        # Start collector (skip for serve-only)
+        if action == "start":
+            collector = str(root / "firmforge" / "tools" / "serial_collector.py")
+            DETACHED = 0x00000008
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen(
+                [sys.executable, collector, html_path, port, str(baud), str(timeout)],
+                creationflags=DETACHED | CREATE_NO_WINDOW,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+            )
+            time.sleep(1)
 
-    DETACHED = 0x00000008
-    CREATE_NO_WINDOW = 0x08000000
-    subprocess.Popen(
-        [sys.executable, collector, html_path, port, str(baud), str(timeout)],
-        creationflags=DETACHED | CREATE_NO_WINDOW,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
-    )
-    return {"status": "started", "port": port, "baud": baud,
-            "file": ".firmforge/serial_live.html"}
+        # Start HTTP server (singleton)
+        http_port = _start_monitor_httpd(str(root))
+
+        # Write redirect page
+        if http_port:
+            try:
+                with open(goto_path, "w", encoding="utf-8") as f:
+                    f.write(f'<meta http-equiv="refresh" content="0;url=http://127.0.0.1:{http_port}/serial_live.html">')
+            except Exception:
+                pass
+
+        return {
+            "status": "started", "port": port, "baud": baud,
+            "panel_url": f"http://127.0.0.1:{http_port}/serial_live.html" if http_port else "",
+            "panel_file": ".firmforge/goto_panel.html",
+            "data_file": ".firmforge/serial_live.html",
+        }
+
+    return {"status": "error", "message": f"unknown action: {action}"}
 
 
 def main() -> None:

@@ -1,9 +1,12 @@
-"""Serial collector — writes live HTML with XHR polling.
+"""Serial collector — writes live HTML with XHR polling + optional sample JSON.
 
-Usage: python serial_collector.py <html_path> <port> <baud> [timeout]
+Usage: python serial_collector.py <html_path> <port> <baud> [timeout] [--sample <json>]
+  --sample <path> : write 3 sample lines to JSON path, then continue HTML output
+                    (used by ff_run S5 Verify to feed Agent)
+
 Stop: create <html_path>.stop file
 
-Uses ComPort (pySerial → Win32Serial fallback) to avoid CH340 deadlock.
+Uses ComPort (Win32Serial → pySerial fallback) to avoid CH340 deadlock.
 Same proven pattern as pipeline S5 test stage.
 """
 
@@ -17,6 +20,20 @@ html_path = sys.argv[1]
 port_name = sys.argv[2]
 baud = int(sys.argv[3])
 timeout_s = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+sample_path = ""
+_sample_timeout = 8.0  # seconds to wait for sample lines
+
+idx = 5
+while idx < len(sys.argv):
+    if sys.argv[idx] == "--sample" and idx + 1 < len(sys.argv):
+        sample_path = sys.argv[idx + 1]
+        idx += 2
+    elif sys.argv[idx] == "--sample-timeout" and idx + 1 < len(sys.argv):
+        _sample_timeout = float(sys.argv[idx + 1])
+        idx += 2
+    else:
+        idx += 1
+
 stop_file = html_path + ".stop"
 _start_time = time.time()
 data_dir = os.path.dirname(os.path.abspath(html_path))
@@ -61,6 +78,7 @@ body{{background:var(--bg);color:var(--text);font-family:Consolas,monospace;font
 <div class="header">
   <span><span class="dot" id="dot"></span><span class="port">{port_name} @ {baud} baud</span></span>
   <span id="info">{cnt} lines | {ts}</span>
+  <button onclick="stopMonitor()" style="background:var(--warn);color:#fff;border:none;padding:2px 12px;border-radius:4px;cursor:pointer;font-size:11px">Stop</button>
 </div>
 <div class="output" id="output">{rows}</div>
 <div class="footer">FirmForge Serial Monitor</div>
@@ -86,14 +104,17 @@ setInterval(function(){{
   x.send();
 }},500);
 window.onload=function(){{out.scrollTop=out.scrollHeight;}};
+function stopMonitor(){{
+  fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style=\"padding:40px;text-align:center;font-size:16px\">Stopped — COM port released. Close this page.</div>';}});
+}}
 </script>
 </body></html>"""
     try:
         os.makedirs(data_dir, exist_ok=True)
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"write_html FAILED: {e}", file=sys.stderr)
 
 
 # ---------- Serial (ComPort context manager, same as S5) ----------
@@ -103,15 +124,35 @@ try:
     from firmforge.providers.com_port import ComPort
 
     with ComPort(port_name, baud, timeout=0.3) as ser:
-        time.sleep(0.5)
+        time.sleep(2.0)
         try:
             ser.reset_input_buffer()
         except Exception:
             pass
         buf = ""
+        _sample_written = False
         last_write = time.time()
 
         write_html()
+
+        while True:
+            if os.path.exists(stop_file):
+                break
+            if timeout_s > 0 and time.time() - _start_time > timeout_s:
+                break
+
+            # Write sample JSON when 3 lines collected or timeout
+            if sample_path and not _sample_written:
+                if len(lines) >= 3 or (time.time() - _start_time > _sample_timeout):
+                    try:
+                        import json
+                        os.makedirs(os.path.dirname(sample_path), exist_ok=True)
+                        samples = lines[:3] if lines else []
+                        with open(sample_path, "w") as f:
+                            json.dump({"sample_lines": samples, "total": len(lines)}, f)
+                    except Exception:
+                        pass
+                    _sample_written = True
 
         while True:
             if os.path.exists(stop_file):
