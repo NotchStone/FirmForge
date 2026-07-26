@@ -157,11 +157,11 @@ try:
 
     write_html()
 
-        while True:
-            if os.path.exists(stop_file):
-                os._exit(0)
-            if timeout_s > 0 and time.time() - _start_time > timeout_s:
-                break
+    while True:
+        if os.path.exists(stop_file):
+            os._exit(0)
+        if timeout_s > 0 and time.time() - _start_time > timeout_s:
+            break
 
         # Write sample JSON when 3 lines collected or timeout
         if sample_path and not _sample_written:
@@ -191,7 +191,7 @@ try:
                 line = line.rstrip(chr(13))
                 if line:
                     lines.append(line)
-                    lines = lines[-500:]
+                    # unlimited
 
         now = time.time()
         if now - last_write >= 0.3:
