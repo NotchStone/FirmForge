@@ -750,11 +750,15 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             collector = str(root / "firmforge" / "tools" / "serial_collector.py")
             DETACHED = 0x00000008
             CREATE_NO_WINDOW = 0x08000000
+            pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+            if not os.path.exists(pyw):
+                pyw = sys.executable
             subprocess.Popen(
-                [sys.executable, collector, html_path, port, "9600", "0",
+                [pyw, collector, html_path, port, "9600", "0",
                  "--sample", sample_path],
                 creationflags=DETACHED | CREATE_NO_WINDOW,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, close_fds=True,
             )
 
             # Wait for sample JSON (collector writes after 3 lines or 8s timeout)
