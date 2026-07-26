@@ -1,9 +1,12 @@
-"""Shared serial port utilities — platform-agnostic COM port layer.
+"""Shared serial port utilities — Win32Serial primary, pySerial fallback.
 
-ComPort: pyserial context manager with Win32Serial fallback for CH340 4.0 driver.
-com_port_clean_close: safe port close that handles stale lock state.
+ComPort: context manager using Win32 API (CreateFile/SetCommState/ReadFile).
+com_port_clean_close: baud-toggle reset to heal CH340 driver lock state.
 
-Used by: board_detector, pipeline_runner, all platform flash providers.
+Win32Serial mirrors STC-ISP behavior — no CH340 compatibility issues.
+pySerial retained as fallback for non-Windows or exotic hardware.
+
+Used by: board_detector, pipeline_runner, all platform flash providers, collector.
 """
 
 from __future__ import annotations
@@ -12,19 +15,25 @@ from typing import Any
 
 
 def com_port_clean_close(port: str) -> None:
-    """Clean close a COM port — restores CH340 driver state without DTR reset."""
+    """Reset CH340 driver via Win32 baud toggle (1200→9600)."""
+    from firmforge.providers.win32serial import Win32Serial
     try:
-        with ComPort(port, 9600, timeout=0.1, dsrdtr=False):
+        with Win32Serial(port, 1200, timeout=0.1):
+            pass
+    except Exception:
+        pass
+    try:
+        with Win32Serial(port, 9600, timeout=0.1):
             pass
     except Exception:
         pass
 
 
 class ComPort:
-    """Auto-fallback serial port: pyserial -> Win32Serial.
+    """Win32Serial-primary context manager.
 
-    CH340 3.9/4.0 driver fails on same-baud SetCommState.
-    This wraps the open with a toggle fallback transparently.
+    Opens COM port via Win32 API — same behavior as STC-ISP.
+    Falls back to pySerial for exotic hardware or non-Windows.
 
     Usage:
         with ComPort("COM5", 115200, timeout=0.3) as ser:
@@ -40,15 +49,18 @@ class ComPort:
         self._ser: Any = None
 
     def __enter__(self):
-        import serial as pyserial
+        # 1. Win32Serial — CH340-safe, STC-ISP compatible
         try:
-            self._ser = pyserial.Serial(port=self._port, baudrate=self._baud,
-                                        timeout=self._timeout, dsrdtr=self._dsrdtr)
-        except Exception:
             from firmforge.providers.win32serial import Win32Serial
             self._ser = Win32Serial(self._port, self._baud, timeout=self._timeout)
             self._ser.open()
-        return self._ser
+            return self._ser
+        except Exception:
+            # 2. pySerial fallback for exotic hardware
+            import serial as pyserial
+            self._ser = pyserial.Serial(port=self._port, baudrate=self._baud,
+                                        timeout=self._timeout, dsrdtr=self._dsrdtr)
+            return self._ser
 
     def __exit__(self, *args):
         if self._ser:

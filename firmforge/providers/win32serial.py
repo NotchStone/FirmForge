@@ -1,21 +1,16 @@
-"""Minimal Win32 serial port — fallback for CH340 4.0 driver.
+"""Win32 serial port — primary backend for CH340 reliability.
 
-CH340 4.0 driver (pushed by Win11) fails SetCommState when the target baud
-equals the current residual baud (same-baud), returning ERROR_GEN_FAILURE(31).
-Only a baud CHANGE heals the hardware state. pyserial's open() hits this.
-
-This module is NOT the primary serial backend — pyserial is. It serves as
-a transparent fallback: if pyserial open fails, Win32Serial.open toggles
-baud to heal, then sets the target. User never sees the failure.
-
-With CH340 3.5 or normal drivers (FTDI, ATmega16U2), this module is never
-invoked — pyserial succeeds on first try.
+Uses direct Win32 API (CreateFile/SetCommState/ReadFile/CloseHandle).
+Fully replaces pySerial for COM port operations — port enumeration included.
+STC-ISP compatible behavior for all CH340 driver versions.
 """
 
 from __future__ import annotations
 
 import ctypes
 import logging
+import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +192,11 @@ class Win32Serial:
             pass
         _k.CloseHandle(self._handle)
         self._handle = None
+
+    def reset_input_buffer(self):
+        """Clear pending input (PurgeComm RXCLEAR)."""
+        if self._handle is not None:
+            _k.PurgeComm(self._handle, PURGE_RXCLEAR)
 
     def __enter__(self):
         self.open()
