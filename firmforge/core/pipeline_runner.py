@@ -700,7 +700,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # ===================================================================
 
     def _stage_test(self, board_id: str | None, expected: str = "") -> PipelineStage:
-        stage = PipelineStage(stage=5, name="Test")
+        stage = PipelineStage(stage=5, name="Verify")
         t0 = time.time()
 
         try:
