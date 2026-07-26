@@ -29,7 +29,7 @@ body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans
     <span class="port">COM4</span>
     <span class="baud">9600&nbsp;baud</span>
     <span class="sep"></span>
-    <span class="count" id="info">840&nbsp;lines&nbsp;|&nbsp;21:39:38</span>
+    <span class="count" id="info">770&nbsp;lines&nbsp;|&nbsp;21:42:35</span>
   </span>
   <span class="r">
     <button class="btn" onclick="clearOutput()">Clear</button>
@@ -806,76 +806,6 @@ body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans
 <div class="line">    *****    </div>
 <div class="line">     ***     </div>
 <div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #78</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #79</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #80</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #81</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #82</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #83</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #84</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
 </div><!--/output-->
 <div class="ftr">FirmForge Serial Monitor</div>
 <script>
@@ -889,7 +819,7 @@ setInterval(function(){
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!==cur){cur=n;if(n>cleared){out.innerHTML=m[1];var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}
-    var info=t.match(/<span id="info">([^<]+)<\/span>/);
+    var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\/span>/);
     if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\d{2}:\d{2}:\d{2})<\/span>/);
     if(tm){var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
@@ -900,7 +830,7 @@ setInterval(function(){
   x.send();
 },500);
 window.onload=function(){var el=out.lastElementChild;if(el)el.scrollIntoView(false);};
-function clearOutput(){out.innerHTML='';cur=0;cleared=cur;}
+function clearOutput(){cleared=cur;out.innerHTML='';cur=0;}
 function stopMonitor(){fetch('/stop',{method:'POST'}).then(function(){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';});}
 </script>
 </body></html>

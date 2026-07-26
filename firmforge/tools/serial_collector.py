@@ -119,7 +119,7 @@ setInterval(function(){{
     var t=x.responseText,m=t.match(/<div class="out" id="out">([\\s\\S]*?)<!--\\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
-    if(n!==cur){{cur=n;if(n>cleared){{out.innerHTML=m[1];var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}}}
+    if(n!==cur){{var all=(m[1].match(/<div class="line">[\\s\\S]*?<\\/div>/g)||[]);for(var i=cur;i<all.length;i++){{out.insertAdjacentHTML('beforeend',all[i]);}}cur=all.length;var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}
     var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);
     if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
@@ -131,7 +131,7 @@ setInterval(function(){{
   x.send();
 }},500);
 window.onload=function(){{var el=out.lastElementChild;if(el)el.scrollIntoView(false);}};
-function clearOutput(){{cleared=cur;out.innerHTML='';cur=0;}}
+function clearOutput(){{cleared=cur;out.innerHTML='';}}
 function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
 </script>
 </body></html>"""
