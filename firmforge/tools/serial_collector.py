@@ -97,17 +97,17 @@ body{{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,san
 <div class="tbar">
   <span class="l">
     <span class="dot" id="dot"></span>
-    <span class="port">{{port_name}}</span>
-    <span class="baud">{{baud}}&nbsp;baud</span>
+    <span class="port">{port_name}</span>
+    <span class="baud">{baud}&nbsp;baud</span>
     <span class="sep"></span>
-    <span class="count" id="info">{{cnt}}&nbsp;lines&nbsp;|&nbsp;{{ts}}</span>
+    <span class="count" id="info">{cnt}&nbsp;lines&nbsp;|&nbsp;{ts}</span>
   </span>
   <span class="r">
     <button class="btn" onclick="clearOutput()">Clear</button>
     <button class="btn danger" onclick="stopMonitor()">Stop</button>
   </span>
 </div>
-<div class="out" id="out">{{rows}}</div><!--/output-->
+<div class="out" id="out">{rows}</div><!--/output-->
 <div class="ftr">FirmForge Serial Monitor</div>
 <script>
 let cur=0,out=document.getElementById('out'),dot=document.getElementById('dot');
