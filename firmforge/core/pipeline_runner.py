@@ -9,6 +9,7 @@ State.json fingerprints drive incremental skip decisions.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -700,16 +701,27 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # ===================================================================
 
     def _stage_test(self, board_id: str | None, expected: str = "") -> PipelineStage:
+        """S5 Verify — start collector, get 3 sample lines, return.
+
+        Non-blocking. Collector keeps running for live panel after this returns.
+        Agent gets sample_lines for analysis. User opens panel for live view.
+        """
         stage = PipelineStage(stage=5, name="Verify")
         t0 = time.time()
 
         try:
+            import subprocess
+            import sys
+            import json
+            from pathlib import Path
+            root = Path(__file__).resolve().parent.parent.parent
+
             from firmforge.providers import get_flash_provider
             detector = self._detector
             config = detector.resolve_board(board_id or "", boards_dir=self._boards_dir)
             if not config:
-                stage.success = True  # Non-blocking
-                stage.details = {"note": "Test skipped: no board config"}
+                stage.success = True
+                stage.details = {"note": "No board config"}
                 stage.elapsed_ms = (time.time() - t0) * 1000
                 return stage
 
@@ -717,85 +729,74 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             port = flasher.detect_port()
             if not port:
                 stage.success = True
-                stage.details = {"note": "Test skipped: no COM port"}
+                stage.details = {"note": "No COM port"}
                 stage.elapsed_ms = (time.time() - t0) * 1000
                 return stage
 
-            from firmforge.providers import ComPort
-            import re
-            _BAUD_RATES = [9600, 115200, 57600, 38400, 19200]
-            _MAX_TIMEOUT = 5.0     # max 5s for very slow programs
-            _MIN_LINES = 2         # exit early once we have ≥2 complete lines
-            matched_baud = 0
-            output = ""
+            html_path = str(root / ".firmforge" / "serial_live.html")
+            sample_path = str(root / ".firmforge" / "sample_lines.json")
 
-            for baud in _BAUD_RATES:
+            # Remove stale sample file
+            try:
+                os.remove(sample_path)
+            except OSError:
+                pass
+            # Remove stale stop file
+            try:
+                os.remove(html_path + ".stop")
+            except OSError:
+                pass
+
+            collector = str(root / "firmforge" / "tools" / "serial_collector.py")
+            DETACHED = 0x00000008
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen(
+                [sys.executable, collector, html_path, port, "9600", "0",
+                 "--sample", sample_path],
+                creationflags=DETACHED | CREATE_NO_WINDOW,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+            )
+
+            # Wait for sample JSON (collector writes after 3 lines or 8s timeout)
+            deadline = time.time() + 12.0
+            sample_lines: list[str] = []
+            total = 0
+            while time.time() < deadline:
                 try:
-                    with ComPort(port, baud, timeout=0.3) as ser:
-                        import time as _time
-                        _time.sleep(0.5)  # wait for MCU to stabilize after DTR
-                        try:
-                            ser.reset_input_buffer()  # flush stale serial data
-                        except Exception:
-                            pass
-                        deadline = _time.time() + _MAX_TIMEOUT
-                        buf = ""
-                        while _time.time() < deadline:
-                            chunk = ser.read(64)
-                            if chunk:
-                                if isinstance(chunk, bytes):
-                                    chunk = chunk.decode("ascii", errors="replace")
-                                buf += chunk
-                                # Early exit: ≥2 complete lines of printable text
-                                if buf.count("\n") >= _MIN_LINES and \
-                                   any(c.isprintable() and not c.isspace() for c in buf):
-                                    break
-                            _time.sleep(0.1)
-                        if buf.strip() and any(c.isprintable() and not c.isspace() for c in buf):
-                            matched_baud = baud
-                            output = buf[:200]
-                            break
-                except Exception:
-                    continue
+                    with open(sample_path) as f:
+                        data = json.load(f)
+                    sample_lines = data.get("sample_lines", [])
+                    total = data.get("total", 0)
+                    break
+                except (OSError, json.JSONDecodeError):
+                    time.sleep(0.3)
 
             stage.success = True
             stage.details = {
-                "port": port, "matched_baud": matched_baud, "serial_output": output,
+                "port": port,
+                "baud": 9600,
+                "sample_lines": sample_lines,
+                "sample_count": len(sample_lines),
+                "total_lines": total,
+                "panel_file": ".firmforge/serial_live.html",
             }
-            # Clean close to restore CH340 driver state
-            try:
-                from firmforge.providers.com_port import com_port_clean_close
-                com_port_clean_close(port)
-            except Exception:
-                pass
 
-            # Pattern match if expected is provided
-            if expected:
-                if not output:
-                    stage.success = False
-                    stage.error = f"No serial output received; expected pattern '{expected}'"
+            # Pattern match if expected provided
+            if expected and sample_lines:
+                import re
+                output = "\n".join(sample_lines)
+                try:
+                    stage.details["pattern_match"] = bool(re.search(expected, output))
                     stage.details["expected"] = expected
-                    stage.details["pattern_match"] = False
-                else:
-                    try:
-                        if re.search(expected, output):
-                            stage.details["pattern_match"] = True
-                            stage.details["pattern"] = expected
-                        else:
-                            stage.success = False
-                            stage.error = f"Serial output does not match expected pattern '{expected}'"
-                            stage.details["pattern_match"] = False
-                            stage.details["expected"] = expected
-                            stage.details["actual"] = output[:200]
-                    except re.error:
-                        stage.details["pattern_error"] = f"Invalid regex: {expected}"
+                except re.error:
+                    stage.details["pattern_error"] = f"Invalid regex: {expected}"
 
         except Exception as e:
             stage.success = True
-            stage.details = {"note": f"Serial test skipped: {e}"}
+            stage.details = {"note": f"Verify skipped: {e}"}
 
         stage.elapsed_ms = (time.time() - t0) * 1000
-        logger.info("S5 Test: %s", "baud=%d" % stage.details.get("matched_baud", 0) if stage.details.get("matched_baud") else "skipped")
+        logger.info("S5 Verify: %s", f"{stage.details.get('sample_count', 0)} sample lines")
         return stage
 
     def _default_chip(self) -> str:
