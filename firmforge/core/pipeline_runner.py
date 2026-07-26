@@ -294,7 +294,7 @@ class PipelineRunner:
             pass  # never let a callback crash the pipeline
 
     def _write_serial_summary(self, source_dir: str | None, s5: PipelineStage):
-        """Write serial_live.html static snapshot after ff_verify."""
+        """Write serial_live.html static snapshot after ff_run."""
         if not source_dir:
             return
         output = s5.details.get("serial_output", "") if s5.details else ""
@@ -336,7 +336,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 <body>
 <div class="header">
   <span>Serial Monitor <span class="port">{port} @ {baud} baud</span></span>
-  <span>{source_dir or "ff_verify"}</span>
+  <span>{source_dir or "ff_run"}</span>
 </div>
 <div class="output">
   {rows}

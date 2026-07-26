@@ -14,7 +14,7 @@ def run_verify(app_dir):
     state = ROOT / ".firmforge" / "state.json"
     if state.exists(): state.write_text("{}")
     try:
-        r = subprocess.run([PYTHON, "-m", "firmforge", "verify", BOARD, "--app", str(app_dir)],
+        r = subprocess.run([PYTHON, "-m", "firmforge", "run", BOARD, "--app", str(app_dir)],
                            capture_output=True, text=True, timeout=60, cwd=str(ROOT))
     except Exception as e:
         return {"all_pass": False, "error": str(e), "ms": int((time.time()-t0)*1000)}

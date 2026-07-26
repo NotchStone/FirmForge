@@ -38,7 +38,7 @@ for name in targets:
     
     t0 = time.time()
     r = subprocess.run(
-        [PYTHON, "-m", "firmforge", "verify", BOARD, "--app", str(app_dir)],
+        [PYTHON, "-m", "firmforge", "run", BOARD, "--app", str(app_dir)],
         capture_output=True, text=True, timeout=120, cwd=str(ROOT),
     )
     ms = int((time.time()-t0)*1000)

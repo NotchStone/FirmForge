@@ -159,7 +159,7 @@ def main():
             stages_info = r.get("stages", {})
             failed_stages = [s for s, v in stages_info.items() if not v["success"]]
             print(f"  FULL FAIL   {name}  —  failed: {failed_stages}")
-            record_failure(name, "verify", str(r))
+            record_failure(name, "run", str(r))
 
     # ── Summary ─────────────────────────────────────────────────────────────
     print(f"\n{'='*60}")

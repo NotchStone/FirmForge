@@ -3,7 +3,7 @@
 Exposes 5 MCP tools for AI Coding Agents:
   - ff_detect:  Scan connected MCU boards
   - ff_context: Return board-specific register/pin/baud reference
-  - ff_verify:  Review → Build → Flash → Test (full verification pipeline)
+  - ff_run:    Review → Build → Flash → Verify (full hardware pipeline)
 
 Usage (as MCP server):
     python -m firmforge.adapters.mcp_server
@@ -77,8 +77,8 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "required": ["app"],
         },
     },
-    "ff_verify": {
-        "name": "ff_verify",
+    "ff_run": {
+        "name": "ff_run",
         "description": (
             "Verify, compile, flash and test MCU code on real hardware. "
             "Includes Source Review (register/pin reference check), confidence scoring, "
@@ -266,8 +266,8 @@ def _do_build(board: str = "", app: str = "") -> dict[str, Any]:
     }
 
 
-def _do_verify(board: str = "", app: str = "", expected: str = "") -> dict[str, Any]:
-    """Execute ff_verify."""
+def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any]:
+    """Execute ff_run: Detect → Review → Build → Flash → Verify."""
     root = _add_project_root_to_path()
     from firmforge.core.pipeline_runner import PipelineRunner
 
@@ -377,16 +377,17 @@ if MCP_AVAILABLE and mcp is not None:
 
     @mcp.tool()
     def ff_build(board: str = "", app: str = "") -> dict[str, Any]:
-        """Compile MCU source code only (no hardware required). Runs Review + Build. Use for CI/pre-commit checks. Use ff_verify when hardware is connected."""
+        """Compile MCU source code only (no hardware required). Runs Review + Build. Use for CI/pre-commit checks. Use ff_run when hardware is connected."""
         _add_project_root_to_path()
         return _do_build(board, app)
 
     @mcp.tool()
-    def ff_verify(board: str = "", app: str = "", expected: str = "") -> dict[str, Any]:
-        """Verify, compile, flash and test MCU code on real hardware.
-        Call AFTER writing code. Runs: Review(Source Review+Confidence) → Build → Flash → Test."""
+    def ff_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any]:
+        """Compile, flash and run MCU code on real hardware.
+        Full pipeline: Detect → Review → Build → Flash → Verify.
+        Call AFTER writing code. Returns sample serial lines for analysis + panel file for live monitor."""
         _add_project_root_to_path()
-        return _do_verify(board, app, expected)
+        return _do_run(board, app, expected)
 
     @mcp.tool()
     def ff_flash(board: str, firmware: str = "") -> dict[str, Any]:

@@ -12,7 +12,7 @@ def clear(): STATE.write_text('{}')
 def verify(req_id: str) -> dict:
     clear()
     t0 = time.time()
-    r = subprocess.run([sys.executable, "-m", "firmforge", "verify", "arduino_mega",
+    r = subprocess.run([sys.executable, "-m", "firmforge", "run", "arduino_mega",
                         "--app", str(TEST_DIR / req_id)],
                        capture_output=True, text=True, timeout=120, cwd=str(WORKSPACE))
     elapsed = (time.time() - t0) * 1000
