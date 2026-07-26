@@ -1,146 +1,33 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><title>Serial Live</title>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="refresh" content="2">
+<title>FirmForge Serial Output</title>
 <style>
-:root{--bg:#1a1a2e;--panel:#16213e;--text:#e0e0e0;--accent:#00d4aa;--warn:#ff6b6b;--dim:#666;--border:#2a2a4a}
+:root{--bg:#1a1a2e;--panel:#16213e;--text:#e0e0e0;--accent:#00d4aa;--dim:#666;--border:#2a2a4a}
 *{margin:0;padding:0;box-sizing:border-box}
-.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;background:var(--accent)}
-body{background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-size:13px;height:100vh;display:flex;flex-direction:column}
-.header{background:var(--panel);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;flex-shrink:0}
-.port{color:var(--accent)}
+body{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:13px;height:100vh;display:flex;flex-direction:column}
+.header{background:var(--panel);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.header span{font-size:12px;color:var(--dim)}
+.header .port{color:var(--accent)}
 .output{flex:1;overflow-y:auto;padding:10px 16px;line-height:1.6}
-.line{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:pre-wrap;word-break:break-all}
-.footer{background:var(--panel);padding:5px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--dim);text-align:center;flex-shrink:0}
-@media(prefers-color-scheme:light){:root{--bg:#f5f5f5;--panel:#e8e8e8;--text:#333;--dim:#888;--border:#ddd;--accent:#007bff;--warn:#d32f2f}}
+.output .line{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:pre-wrap;word-break:break-all}
+.footer{background:var(--panel);padding:5px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--dim);text-align:center}
+@media(prefers-color-scheme:light){:root{--bg:#f5f5f5;--panel:#e8e8e8;--text:#333;--dim:#888;--border:#ddd;--accent:#007bff}}
 </style></head>
 <body>
 <div class="header">
-  <span><span class="dot" id="dot"></span><span class="port">COM4 @ 9600 baud</span></span>
-  <span id="info">500 lines | 13:41:05</span>
+  <span>Serial Monitor <span class="port">COM4 @ 9600 baud</span></span>
+  <span>boards/arduino_328p/apps/blink</span>
 </div>
-<div class="output" id="output"><div class="line">HB=9395 ON</div>
-<div class="line">HB=9396 OFF</div>
-<div class="line">HB=9397 ON</div>
-<div class="line">HB=9398 OFF</div>
-<div class="line">HB=9399 ON</div>
-<div class="line">HB=9400 OFF</div>
-<div class="line">HB=9401 ON</div>
-<div class="line">HB=9402 OFF</div>
-<div class="line">HB=9403 ON</div>
-<div class="line">HB=9404 OFF</div>
-<div class="line">HB=9405 ON</div>
-<div class="line">HB=9406 OFF</div>
-<div class="line">HB=9407 ON</div>
-<div class="line">HB=9408 OFF</div>
-<div class="line">HB=9409 ON</div>
-<div class="line">HB=9410 OFF</div>
-<div class="line">HB=9411 ON</div>
-<div class="line">HB=9412 OFF</div>
-<div class="line">HB=9413 ON</div>
-<div class="line">HB=9414 OFF</div>
-<div class="line">HB=9415 ON</div>
-<div class="line">HB=9416 OFF</div>
-<div class="line">HB=9417 ON</div>
-<div class="line">HB=9418 OFF</div>
-<div class="line">HB=9419 ON</div>
-<div class="line">HB=9420 OFF</div>
-<div class="line">HB=9421 ON</div>
-<div class="line">HB=9422 OFF</div>
-<div class="line">HB=9423 ON</div>
-<div class="line">HB=9424 OFF</div>
-<div class="line">HB=9425 ON</div>
-<div class="line">HB=9426 OFF</div>
-<div class="line">HB=9427 ON</div>
-<div class="line">HB=9428 OFF</div>
-<div class="line">HB=9429 ON</div>
-<div class="line">HB=9430 OFF</div>
-<div class="line">HB=9431 ON</div>
-<div class="line">HB=9432 OFF</div>
-<div class="line">HB=9433 ON</div>
-<div class="line">HB=9434 OFF</div>
-<div class="line">HB=9435 ON</div>
-<div class="line">HB=9436 OFF</div>
-<div class="line">HB=9437 ON</div>
-<div class="line">HB=9438 OFF</div>
-<div class="line">HB=9439 ON</div>
-<div class="line">HB=9440 OFF</div>
-<div class="line">HB=9441 ON</div>
-<div class="line">HB=9442 OFF</div>
-<div class="line">HB=9443 ON</div>
-<div class="line">HB=9444 OFF</div>
-<div class="line">HB=9445 ON</div>
-<div class="line">HB=9446 OFF</div>
-<div class="line">HB=9447 ON</div>
-<div class="line">HB=9448 OFF</div>
-<div class="line">HB=9449 ON</div>
-<div class="line">HB=9450 OFF</div>
-<div class="line">HB=9451 ON</div>
-<div class="line">HB=9452 OFF</div>
-<div class="line">HB=9453 ON</div>
-<div class="line">HB=9454 OFF</div>
-<div class="line">HB=9455 ON</div>
-<div class="line">HB=9456 OFF</div>
-<div class="line">HB=9457 ON</div>
-<div class="line">HB=9458 OFF</div>
-<div class="line">HB=9459 ON</div>
-<div class="line">HB=9460 OFF</div>
-<div class="line">HB=9461 ON</div>
-<div class="line">HB=9462 OFF</div>
-<div class="line">HB=9463 ON</div>
-<div class="line">HB=9464 OFF</div>
-<div class="line">HB=9465 ON</div>
-<div class="line">HB=9466 OFF</div>
-<div class="line">HB=9467 ON</div>
-<div class="line">HB=9468 OFF</div>
-<div class="line">HB=9469 ON</div>
-<div class="line">HB=9470 OFF</div>
-<div class="line">HB=9471 ON</div>
-<div class="line">HB=9472 OFF</div>
-<div class="line">HB=9473 ON</div>
-<div class="line">HB=9474 OFF</div>
-<div class="line">HB=9475 ON</div>
-<div class="line">HB=9476 OFF</div>
-<div class="line">HB=9477 ON</div>
-<div class="line">HB=9478 OFF</div>
-<div class="line">HB=9479 ON</div>
-<div class="line">HB=9480 OFF</div>
-<div class="line">HB=9481 ON</div>
-<div class="line">HB=9482 OFF</div>
-<div class="line">HB=9483 ON</div>
-<div class="line">HB=9484 OFF</div>
-<div class="line">HB=9485 ON</div>
-<div class="line">HB=9486 OFF</div>
-<div class="line">HB=9487 ON</div>
-<div class="line">HB=9488 OFF</div>
-<div class="line">HB=9489 ON</div>
-<div class="line">HB=9490 OFF</div>
-<div class="line">HB=9491 ON</div>
-<div class="line">HB=9492 OFF</div>
-<div class="line">HB=9493 ON</div>
-<div class="line">HB=9494 OFF</div>
+<div class="output">
+  <div class="line">BLINK 328P</div>
+<div class="line">HB=1 ON</div>
+<div class="line">HB=2 OFF</div>
+
 </div>
-<div class="footer">FirmForge Serial Monitor</div>
-<script>
-let cur=0,out=document.getElementById('output'),dot=document.getElementById('dot');
-setInterval(function(){
-  var x=new XMLHttpRequest();
-  x.open('GET',location.pathname.split('?')[0]+'?t='+Date.now(),true);
-  x.onload=function(){
-    if(x.status!==200)return;
-    var t=x.responseText,m=t.match(/<div class="output" id="output">([\s\S]*?)<\/div>/);
-    if(!m)return;
-    var n=(m[1].match(/<div class="line">/g)||[]).length;
-    if(n!==cur){cur=n;out.innerHTML=m[1];void out.offsetHeight;out.scrollTop=out.scrollHeight;}
-    var info=t.match(/<span id="info">([^<]+)<\/span>/);
-    if(info)document.getElementById('info').innerHTML=info[1];
-    var tm=t.match(/\| (\d{2}:\d{2}:\d{2})<\/span>/);
-    if(tm){var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
-      ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),
-      df=Math.min(Math.abs(ns-fs),86400-Math.abs(ns-fs));
-      dot.style.background=df<3?'var(--accent)':'var(--warn)';}
-  };
-  x.send();
-},500);
-window.onload=function(){out.scrollTop=out.scrollHeight;};
-</script>
-</body></html>
+<div class="footer">
+  Captured during S5 Test stage | reload page for latest snapshot
+</div>
+</body>
+</html>
