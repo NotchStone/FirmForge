@@ -2,14 +2,14 @@
   "stages": {
     "detect": {
       "status": "done",
-      "board_id": "arduino_328p"
+      "board_id": "arduino_mega"
     },
     "review": {
       "status": "done"
     },
     "build": {
       "status": "done",
-      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\led_heartbeat_adc1_8a3f\\firmware.hex"
+      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_mega\\led_led_uart_32a7\\firmware.hex"
     },
     "flash": {
       "status": "done"
@@ -19,9 +19,9 @@
     }
   },
   "fingerprints": {
-    "board_id": "arduino_328p",
+    "board_id": "arduino_mega",
     "port": "COM4",
-    "source": "641e659792e3b89c",
-    "hex": "67bacb6c1dcfebe1"
+    "source": "a1e0c4029ba7a2a7",
+    "hex": "b195fb4ac7df0cbd"
   }
 }
