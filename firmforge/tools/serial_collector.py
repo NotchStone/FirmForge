@@ -121,68 +121,77 @@ function stopMonitor(){{
 try:
     sys.path.insert(0, os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-    from firmforge.providers.com_port import ComPort
+    from firmforge.providers.com_port import ComPort, com_port_clean_close
 
-    with ComPort(port_name, baud, timeout=0.3) as ser:
-        time.sleep(2.0)
+    # Retry open: avrdude may still be releasing COM4 after Flash
+    ser_wrapper = None
+    for _retry in range(10):
         try:
-            ser.reset_input_buffer()
+            ser_wrapper = ComPort(port_name, baud, timeout=0.3)
+            ser_wrapper.__enter__()
+            break
         except Exception:
-            pass
-        buf = ""
-        _sample_written = False
-        last_write = time.time()
+            time.sleep(0.5)
+    if ser_wrapper is None:
+        raise RuntimeError(f"Failed to open {port_name} after 10 retries")
 
-        write_html()
+    # ser_wrapper._ser is the open Win32Serial object
+    ser = ser_wrapper._ser
+    time.sleep(2.0)
+    try:
+        ser.reset_input_buffer()
+    except Exception:
+        pass
+    buf = ""
+    _sample_written = False
+    last_write = time.time()
 
-        while True:
-            if os.path.exists(stop_file):
-                break
-            if timeout_s > 0 and time.time() - _start_time > timeout_s:
-                break
+    write_html()
 
-            # Write sample JSON when 3 lines collected or timeout
-            if sample_path and not _sample_written:
-                if len(lines) >= 3 or (time.time() - _start_time > _sample_timeout):
-                    try:
-                        import json
-                        os.makedirs(os.path.dirname(sample_path), exist_ok=True)
-                        samples = lines[:3] if lines else []
-                        with open(sample_path, "w") as f:
-                            json.dump({"sample_lines": samples, "total": len(lines)}, f)
-                    except Exception:
-                        pass
-                    _sample_written = True
+    while True:
+        if os.path.exists(stop_file):
+            break
+        if timeout_s > 0 and time.time() - _start_time > timeout_s:
+            break
 
-        while True:
-            if os.path.exists(stop_file):
-                break
-            if timeout_s > 0 and time.time() - _start_time > timeout_s:
-                break
+        # Write sample JSON when 3 lines collected or timeout
+        if sample_path and not _sample_written:
+            if len(lines) >= 3 or (time.time() - _start_time > _sample_timeout):
+                try:
+                    import json
+                    os.makedirs(os.path.dirname(sample_path), exist_ok=True)
+                    samples = lines[:3] if lines else []
+                    with open(sample_path, "w") as f:
+                        json.dump({"sample_lines": samples, "total": len(lines)}, f)
+                except Exception:
+                    pass
+                _sample_written = True
 
-            try:
-                chunk = ser.read(64)
-            except Exception:
-                time.sleep(0.5)
-                continue
+        try:
+            chunk = ser.read(64)
+        except Exception:
+            time.sleep(0.5)
+            continue
 
-            if chunk:
-                if isinstance(chunk, bytes):
-                    chunk = chunk.decode("ascii", errors="replace")
-                buf += chunk
-                while chr(10) in buf:
-                    line, buf = buf.split(chr(10), 1)
-                    line = line.rstrip(chr(13))
-                    if line:
-                        lines.append(line)
-                        lines = lines[-500:]
+        if chunk:
+            if isinstance(chunk, bytes):
+                chunk = chunk.decode("ascii", errors="replace")
+            buf += chunk
+            while chr(10) in buf:
+                line, buf = buf.split(chr(10), 1)
+                line = line.rstrip(chr(13))
+                if line:
+                    lines.append(line)
+                    lines = lines[-500:]
 
-            now = time.time()
-            if now - last_write >= 0.3:
-                write_html()
-                last_write = now
+        now = time.time()
+        if now - last_write >= 0.3:
+            write_html()
+            last_write = now
 
-            time.sleep(0.05)
+        time.sleep(0.05)
+
+    ser_wrapper.__exit__(None, None, None)
 
 except Exception as e:
     try:
