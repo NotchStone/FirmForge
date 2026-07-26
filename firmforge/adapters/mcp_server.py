@@ -504,7 +504,7 @@ def _do_monitor(port: str = "", baud: int = 9600,
             pass
         return {"status": "stopped"}
 
-    if action in ("start", "serve-only"):
+    if action in ("start", "panel"):
         # Auto-detect port if needed
         if not port:
             try:
@@ -522,7 +522,13 @@ def _do_monitor(port: str = "", baud: int = 9600,
         if not port:
             return {"status": "error", "message": "port required"}
 
-        # Start collector (skip for serve-only)
+        # Start collector (skip if already running — .stop file absent = running)
+        collector_already_running = not Path(stop_file).exists() if hasattr(Path(''), '__iter__') else False
+        try:
+            collector_already_running = not Path(stop_file).exists()
+        except Exception:
+            pass
+        
         if action == "start":
             collector = str(root / "firmforge" / "tools" / "serial_collector.py")
             DETACHED = 0x00000008
