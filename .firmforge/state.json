@@ -12,10 +12,8 @@
       "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\multifile\\firmware.hex"
     },
     "flash": {
-      "status": "done"
-    },
-    "test": {
-      "status": "done"
+      "status": "failed",
+      "error": "Flash failed across all baud rates"
     }
   },
   "fingerprints": {
@@ -23,5 +21,9 @@
     "port": "COM4",
     "source": "6f5b3e65c06cdb2b",
     "hex": "c210d605a9119894"
+  },
+  "last_error": {
+    "stage": "flash",
+    "message": "Flash failed across all baud rates"
   }
 }
