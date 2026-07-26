@@ -494,14 +494,7 @@ def _do_monitor(port: str = "", baud: int = 9600,
         stop_file = html_path + ".stop"
         try:
             Path(stop_file).touch()
-            time.sleep(3)  # let collector detect .stop and exit naturally
-            try:
-                from firmforge.providers.com_port import com_port_clean_close
-                if port:
-                    com_port_clean_close(port)
-                    time.sleep(1)
-            except Exception:
-                pass
+            time.sleep(3)  # collector detects .stop → os._exit(0) → COM4 released by OS
             Path(stop_file).unlink(missing_ok=True)
         except Exception:
             pass

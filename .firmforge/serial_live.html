@@ -1,78 +1,51 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><title>Serial Live</title>
+<head><meta charset="UTF-8"><title>FirmForge Serial</title>
 <style>
-:root{--bg:#1a1a2e;--panel:#16213e;--text:#e0e0e0;--accent:#00d4aa;--warn:#ff6b6b;--dim:#666;--border:#2a2a4a}
+:root{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#64748b;--acc:#22d3ee;--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748}
 *{margin:0;padding:0;box-sizing:border-box}
-.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;background:var(--accent)}
-body{background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-size:13px;height:100vh;display:flex;flex-direction:column}
-.header{background:var(--panel);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;flex-shrink:0}
-.port{color:var(--accent)}
-.output{flex:1;overflow-y:auto;padding:10px 16px;line-height:1.6;overflow-anchor:auto}
-.line{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:pre-wrap;word-break:break-all;overflow-anchor:none}
-.footer{background:var(--panel);padding:5px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--dim);text-align:center;flex-shrink:0}
-@media(prefers-color-scheme:light){:root{--bg:#f5f5f5;--panel:#e8e8e8;--text:#333;--dim:#888;--border:#ddd;--accent:#007bff;--warn:#d32f2f}}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+.tbar{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(--hdr);border-bottom:1px solid var(--sep);flex-shrink:0;min-height:36px}
+.tbar .l{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.tbar .r{display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--acc);flex-shrink:0}
+.port{color:var(--acc);font-weight:600;font-size:13px}
+.baud{color:var(--dim);font-size:11px}
+.count{color:var(--dim);font-size:11px;white-space:nowrap}
+.sep{width:1px;height:16px;background:var(--sep);margin:0 4px}
+.btn{border:1px solid var(--sep);background:var(--btn-bg);color:var(--txt);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;transition:background .15s}
+.btn:hover{background:var(--btn-hover)}
+.btn.danger{background:var(--warn);border-color:var(--warn);color:#fff}
+.btn.danger:hover{opacity:.85}
+.out{flex:1;overflow-y:auto;padding:8px 14px;font-family:'Cascadia Code',Consolas,monospace;font-size:12.5px;line-height:1.55}
+.line{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.02);white-space:pre-wrap;word-break:break-all}
+.ftr{padding:4px 14px;text-align:center;font-size:10px;color:var(--dim);border-top:1px solid var(--sep);background:var(--hdr);flex-shrink:0}
+@media(prefers-color-scheme:light){:root{--bg:#f1f5f9;--hdr:#e2e8f0;--txt:#1e293b;--dim:#64748b;--acc:#0284c7;--warn:#dc2626;--btn-bg:#cbd5e1;--btn-hover:#94a3b8;--sep:#cbd5e1}}
 </style></head>
 <body>
-<div class="header">
-  <span><span class="dot" id="dot"></span><span class="port">COM4 @ 9600 baud</span></span>
-  <span id="info">44 lines | 20:38:23</span>
-  <button onclick="stopMonitor()" style="background:var(--warn);color:#fff;border:none;padding:2px 12px;border-radius:4px;cursor:pointer;font-size:11px">Stop</button>
+<div class="tbar">
+  <span class="l">
+    <span class="dot" id="dot"></span>
+    <span class="port">{port_name}</span>
+    <span class="baud">{baud}&nbsp;baud</span>
+    <span class="sep"></span>
+    <span class="count" id="info">{cnt}&nbsp;lines&nbsp;|&nbsp;{ts}</span>
+  </span>
+  <span class="r">
+    <button class="btn" onclick="clearOutput()">Clear</button>
+    <button class="btn danger" onclick="stopMonitor()">Stop</button>
+  </span>
 </div>
-<div class="output" id="output"><div class="line">HB=2 OFF</div>
-<div class="line">HB=3 ON</div>
-<div class="line">HB=3 OFF</div>
-<div class="line">HB=4 ON</div>
-<div class="line">HB=4 OFF</div>
-<div class="line">HB=5 ON</div>
-<div class="line">HB=5 OFF</div>
-<div class="line">HB=6 ON</div>
-<div class="line">HB=6 OFF</div>
-<div class="line">HB=7 ON</div>
-<div class="line">HB=7 OFF</div>
-<div class="line">HB=8 ON</div>
-<div class="line">HB=8 OFF</div>
-<div class="line">HB=9 ON</div>
-<div class="line">HB=9 OFF</div>
-<div class="line">HB=10 ON</div>
-<div class="line">HB=10 OFF</div>
-<div class="line">HB=11 ON</div>
-<div class="line">HB=11 OFF</div>
-<div class="line">HB=12 ON</div>
-<div class="line">HB=12 OFF</div>
-<div class="line">HB=13 ON</div>
-<div class="line">HB=13 OFF</div>
-<div class="line">HB=14 ON</div>
-<div class="line">HB=14 OFF</div>
-<div class="line">HB=15 ON</div>
-<div class="line">HB=15 OFF</div>
-<div class="line">HB=16 ON</div>
-<div class="line">HB=16 OFF</div>
-<div class="line">HB=17 ON</div>
-<div class="line">HB=17 OFF</div>
-<div class="line">HB=18 ON</div>
-<div class="line">HB=18 OFF</div>
-<div class="line">HB=19 ON</div>
-<div class="line">HB=19 OFF</div>
-<div class="line">HB=20 ON</div>
-<div class="line">HB=20 OFF</div>
-<div class="line">HB=21 ON</div>
-<div class="line">HB=21 OFF</div>
-<div class="line">HB=22 ON</div>
-<div class="line">HB=22 OFF</div>
-<div class="line">HB=23 ON</div>
-<div class="line">HB=23 OFF</div>
-<div class="line">HB=24 ON</div>
-</div><!--/output-->
-<div class="footer">FirmForge Serial Monitor</div>
+<div class="out" id="out">{rows}</div><!--/output-->
+<div class="ftr">FirmForge Serial Monitor</div>
 <script>
-let cur=0,out=document.getElementById('output'),dot=document.getElementById('dot');
+let cur=0,out=document.getElementById('out'),dot=document.getElementById('dot');
 setInterval(function(){
   var x=new XMLHttpRequest();
   x.open('GET',location.pathname.split('?')[0]+'?t='+Date.now(),true);
   x.onload=function(){
     if(x.status!==200)return;
-    var t=x.responseText,m=t.match(/<div class="output" id="output">([\s\S]*?)<!--\/output-->/);
+    var t=x.responseText,m=t.match(/<div class="out" id="out">([\s\S]*?)<!--\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!==cur){cur=n;out.innerHTML=m[1];var last=out.lastElementChild;if(last)last.scrollIntoView(false);}
@@ -82,13 +55,12 @@ setInterval(function(){
     if(tm){var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
       ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),
       df=Math.min(Math.abs(ns-fs),86400-Math.abs(ns-fs));
-      dot.style.background=df<3?'var(--accent)':'var(--warn)';}
+      dot.style.background=df<3?'var(--acc)':'var(--warn)';}
   };
   x.send();
 },500);
 window.onload=function(){var el=out.lastElementChild;if(el)el.scrollIntoView(false);};
-function stopMonitor(){
-  fetch('/stop',{method:'POST'}).then(function(){document.body.innerHTML='<div style="padding:40px;text-align:center;font-size:16px">Stopped — COM port released. Close this page.</div>';});
-}
+function clearOutput(){out.innerHTML='';cur=0;}
+function stopMonitor(){fetch('/stop',{method:'POST'}).then(function(){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';});}
 </script>
 </body></html>
