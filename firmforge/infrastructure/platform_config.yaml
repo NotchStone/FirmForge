@@ -1,0 +1,30 @@
+# FirmForge Platform Configuration
+# Tracks vendor SDK and toolchain versions for reproducible builds
+# Format: §2.6.4 D类 — YAML (flat single-level keys, human-edited)
+#
+# Path convention (§4.2): all toolchains install to ~/.firmforge/toolchains/
+#   canonical_path: where FirmForge auto-installs
+#   detected_path:  where currently installed (for existing systems)
+
+# Canonical toolchain root (all FirmForge-managed toolchains go here)
+canonical_root: "~/.firmforge/toolchains/"
+
+arduino:
+  avr_gcc: "14.1.0"
+  avr_gcc_canonical_path: "~/.firmforge/toolchains/avr-gcc/"
+  avr_gcc_detected_path: "~/AppData/Local/mcu-tools/avr-gcc/"   # current (manual install)
+  avrdude: "8.1"
+  avrdude_canonical_path: "~/.firmforge/toolchains/avrdude/"
+  avrdude_detected_path: "winget AVRDudes.AVRDUDE"               # current (winget)
+  arduino_avr_core: "1.8.6"
+  arduino_avr_core_canonical_path: "~/.firmforge/packages/arduino/avr/1.8.6/"
+  # ^ B区 packages 路径（按 manifest 约定：<root>/<vendor>/<arch>/<version>/）
+  arduino_avr_core_source: "https://downloads.arduino.cc/packages/package_arduino_index.json"
+  arduino_version: 10607  # -DARDUINO macro value for preprocessing
+  confidence_threshold: 58.0  # below → warning only, no blocking
+  avr_libc: "2.2.1"  # bundled with avr-gcc
+
+firmforge:
+  python: "3.13.14"
+  pyserial: "3.5"
+  pytest: "9.1.1"

@@ -1,0 +1,41 @@
+board_name: Arduino Mega 2560
+platform: arduino
+board_type: arduino_board
+paradigm: arduino
+mcu:
+  series: avr
+  chip: ATmega2560
+  family: avr
+fqbn: arduino:avr:mega
+vendor_ref:
+  core: arduino-cli-managed (arduino:avr:mega)
+  note: Arduino core + mega variant 由 arduino-cli 自带管理，项目内不复制
+pins:
+  led_builtin: 13
+  serial: Serial (USART0, TX=1, RX=0)
+  i2c: Wire (SDA=20, SCL=21)
+  spi: SPI (MOSI=51, MISO=50, SCK=52, SS=53)
+specs:
+  flash: 256 KB
+  ram: 8 KB
+  clock: 16 MHz
+constraints:
+  isr_forbidden:
+  - blocking_calls
+  - malloc
+  pin_avoid:
+  - 0
+  - 1
+  peripheral_rules:
+    i2c: must_open_drain
+    serial: tx_pin_1_rx_pin_0
+features:
+  gpio: true
+  uart: true
+  spi: true
+  i2c: true
+  pwm: true
+  adc: true
+  timer: true
+  interrupt: true
+schematic_source: manual_entry

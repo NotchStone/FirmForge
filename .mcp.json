@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "firmforge": {
+      "command": "C:/Users/radar/.workbuddy/binaries/python/envs/mcu_agent/Scripts/python.exe",
+      "args": [
+        "-m",
+        "firmforge.adapters.mcp_server"
+      ],
+      "env": {
+        "FIRMFORGE_CODEGEN": "agent"
+      },
+      "disabled": false
+    }
+  }
+}

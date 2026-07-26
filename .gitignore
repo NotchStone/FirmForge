@@ -1,0 +1,38 @@
+
+# *.hex  — intentionally NOT ignored (final deliverable)
+# Datasheets (large binaries, download on demand)
+# FirmForge build artifacts
+# FirmForge final artifacts (keep .hex for re-flash)
+# FirmForge workspace intermediate
+# IDE / Editor
+# OS
+# Python
+# Security: API keys and local secrets
+# Test
+*.d
+*.egg-info/
+*.elf
+*.hex
+*.key
+*.o
+*.pyc
+*.pyo
+*.secret
+*.swo
+*.swp
+*_secret.yaml
+.coverage
+.DS_Store
+.eggs/
+.env
+.env.*
+.idea/
+.pytest_cache/
+.vscode/
+__pycache__/
+build/
+config/llm.yaml
+dist/
+docs/datasheets/*.pdf
+htmlcov/
+Thumbs.db

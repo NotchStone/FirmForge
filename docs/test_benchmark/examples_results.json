@@ -1,0 +1,1025 @@
+[
+  {
+    "name": "01_Basics_AnalogReadSerial",
+    "all_pass": true,
+    "ms": 13275,
+    "errors": []
+  },
+  {
+    "name": "01_Basics_BareMinimum",
+    "all_pass": true,
+    "ms": 14849,
+    "errors": []
+  },
+  {
+    "name": "01_Basics_Blink",
+    "all_pass": true,
+    "ms": 14838,
+    "errors": []
+  },
+  {
+    "name": "01_Basics_DigitalReadSerial",
+    "all_pass": true,
+    "ms": 12511,
+    "errors": []
+  },
+  {
+    "name": "01_Basics_Fade",
+    "all_pass": true,
+    "ms": 14937,
+    "errors": []
+  },
+  {
+    "name": "01_Basics_ReadAnalogVoltage",
+    "all_pass": true,
+    "ms": 12921,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_BlinkWithoutDelay",
+    "all_pass": true,
+    "ms": 14853,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_Button",
+    "all_pass": true,
+    "ms": 14739,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_Debounce",
+    "all_pass": true,
+    "ms": 14824,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_DigitalInputPullup",
+    "all_pass": true,
+    "ms": 12356,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_StateChangeDetection",
+    "all_pass": true,
+    "ms": 15192,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_toneKeyboard",
+    "all_pass": false,
+    "ms": 337,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\02_Digital_toneKeyboard\\02_Digital_toneKeyboard.ino:21:10: fatal error: pitches.h: No such file or",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\02_Digital_toneKeyboard\\02_Digital_toneKeyboard.ino:21:10: fatal error: pitches.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "02_Digital_toneMelody",
+    "all_pass": false,
+    "ms": 325,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\02_Digital_toneMelody\\02_Digital_toneMelody.ino:19:10: fatal error: pitches.h: No such file or dire",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\02_Digital_toneMelody\\02_Digital_toneMelody.ino:19:10: fatal error: pitches.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "02_Digital_toneMultiple",
+    "all_pass": true,
+    "ms": 15472,
+    "errors": []
+  },
+  {
+    "name": "02_Digital_tonePitchFollower",
+    "all_pass": true,
+    "ms": 13367,
+    "errors": []
+  },
+  {
+    "name": "03_Analog_AnalogInOutSerial",
+    "all_pass": true,
+    "ms": 14360,
+    "errors": []
+  },
+  {
+    "name": "03_Analog_AnalogInput",
+    "all_pass": true,
+    "ms": 14825,
+    "errors": []
+  },
+  {
+    "name": "03_Analog_AnalogWriteMega",
+    "all_pass": true,
+    "ms": 14847,
+    "errors": []
+  },
+  {
+    "name": "03_Analog_Calibration",
+    "all_pass": true,
+    "ms": 14917,
+    "errors": []
+  },
+  {
+    "name": "03_Analog_Fading",
+    "all_pass": true,
+    "ms": 15167,
+    "errors": []
+  },
+  {
+    "name": "03_Analog_Smoothing",
+    "all_pass": true,
+    "ms": 12682,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_ASCIITable",
+    "all_pass": true,
+    "ms": 13418,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_Dimmer",
+    "all_pass": true,
+    "ms": 15705,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_Graph",
+    "all_pass": false,
+    "ms": 327,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_Graph\\04_Communication_Graph.ino:3:6: error: variable or field 'serialEvent' decla",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_Graph\\04_Communication_Graph.ino:3:6: error: variable or field 'serialEvent' declared void"
+    ]
+  },
+  {
+    "name": "04_Communication_Midi",
+    "all_pass": true,
+    "ms": 12441,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_MultiSerial",
+    "all_pass": false,
+    "ms": 311,
+    "errors": [
+      "Error: s\\examples_ino\\04_Communication_MultiSerial\\04_Communication_MultiSerial.ino:34:7: error: 'Serial1' was not declared in this scope; did you mean 'Seri",
+      "- Stage 3 Build: s\\examples_ino\\04_Communication_MultiSerial\\04_Communication_MultiSerial.ino:34:7: error: 'Serial1' was not declared in this scope; did you mean 'Serial'?",
+      "C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_MultiSerial\\04_Communication_MultiSerial.ino:42:5: error: 'Serial1' was not declared in this scope; did you mean 'Serial'?"
+    ]
+  },
+  {
+    "name": "04_Communication_PhysicalPixel",
+    "all_pass": true,
+    "ms": 15383,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_ReadASCIIString",
+    "all_pass": true,
+    "ms": 15486,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_SerialCallResponse",
+    "all_pass": false,
+    "ms": 340,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_SerialCallResponse\\04_Communication_SerialCallResponse.ino:9:6: error: variable or",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_SerialCallResponse\\04_Communication_SerialCallResponse.ino:9:6: error: variable or field 'draw' declared void",
+      "C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_SerialCallResponse\\04_Communication_SerialCallResponse.ino:10:6: error: variable or field 'serialEvent' declared void"
+    ]
+  },
+  {
+    "name": "04_Communication_SerialCallResponseASCII",
+    "all_pass": false,
+    "ms": 345,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_SerialCallResponseASCII\\04_Communication_SerialCallResponseASCII.ino:9:6: error: v",
+      "C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_SerialCallResponseASCII\\04_Communication_SerialCallResponseASCII.ino:10:6: error: variable or field 'serialEvent' declared void"
+    ]
+  },
+  {
+    "name": "04_Communication_SerialEvent",
+    "all_pass": true,
+    "ms": 15881,
+    "errors": []
+  },
+  {
+    "name": "04_Communication_SerialPassthrough",
+    "all_pass": false,
+    "ms": 443,
+    "errors": [
+      "Error:  this scope; did you mean 'Serial'?"
+    ]
+  },
+  {
+    "name": "04_Communication_VirtualColorMixer",
+    "all_pass": false,
+    "ms": 488,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\04_Communication_VirtualColorMixer\\04_Communication_VirtualColorMixer.ino:3:6: error: variable or f"
+    ]
+  },
+  {
+    "name": "05_Control_Arrays",
+    "all_pass": true,
+    "ms": 18226,
+    "errors": []
+  },
+  {
+    "name": "05_Control_ForLoopIteration",
+    "all_pass": true,
+    "ms": 14815,
+    "errors": []
+  },
+  {
+    "name": "05_Control_IfStatementConditional",
+    "all_pass": true,
+    "ms": 12421,
+    "errors": []
+  },
+  {
+    "name": "05_Control_switchCase",
+    "all_pass": true,
+    "ms": 12391,
+    "errors": []
+  },
+  {
+    "name": "05_Control_switchCase2",
+    "all_pass": true,
+    "ms": 15255,
+    "errors": []
+  },
+  {
+    "name": "05_Control_WhileStatementConditional",
+    "all_pass": true,
+    "ms": 15141,
+    "errors": []
+  },
+  {
+    "name": "06_Sensors_ADXL3xx",
+    "all_pass": true,
+    "ms": 12736,
+    "errors": []
+  },
+  {
+    "name": "06_Sensors_Knock",
+    "all_pass": true,
+    "ms": 12395,
+    "errors": []
+  },
+  {
+    "name": "06_Sensors_Memsic2125",
+    "all_pass": false,
+    "ms": 6054,
+    "errors": [
+      "Error: C:/Users/radar/AppData/Local/mcu-tools/avr-gcc/bin/../lib/gcc/avr/14.1.0/../../../../avr/bin/ld.exe: C:\\Users\\radar\\AppData\\Local\\Temp\\ff_build_6_4r2e",
+      "collect2.exe: error: ld returned 1 exit status"
+    ]
+  },
+  {
+    "name": "06_Sensors_Ping",
+    "all_pass": false,
+    "ms": 199,
+    "errors": [
+      "Error: Code Review: 4 hallucinated register(s)"
+    ]
+  },
+  {
+    "name": "07_Display_barGraph",
+    "all_pass": true,
+    "ms": 16801,
+    "errors": []
+  },
+  {
+    "name": "07_Display_RowColumnScanning",
+    "all_pass": false,
+    "ms": 301,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\07_Display_RowColumnScanning\\07_Display_RowColumnScanning.ino:11:6: error: variable or field 'refre",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\07_Display_RowColumnScanning\\07_Display_RowColumnScanning.ino:11:6: error: variable or field 'refreshScreen' declared void"
+    ]
+  },
+  {
+    "name": "08_Strings_CharacterAnalysis",
+    "all_pass": true,
+    "ms": 13213,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringAdditionOperator",
+    "all_pass": true,
+    "ms": 13739,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringAppendOperator",
+    "all_pass": true,
+    "ms": 13731,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringCaseChanges",
+    "all_pass": true,
+    "ms": 13357,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringCharacters",
+    "all_pass": true,
+    "ms": 14297,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringComparisonOperators",
+    "all_pass": true,
+    "ms": 13900,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringConstructors",
+    "all_pass": true,
+    "ms": 13955,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringIndexOf",
+    "all_pass": true,
+    "ms": 13656,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringLength",
+    "all_pass": true,
+    "ms": 13540,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringLengthTrim",
+    "all_pass": true,
+    "ms": 13361,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringReplace",
+    "all_pass": true,
+    "ms": 13411,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringStartsWithEndsWith",
+    "all_pass": true,
+    "ms": 13539,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringSubstring",
+    "all_pass": true,
+    "ms": 13881,
+    "errors": []
+  },
+  {
+    "name": "08_Strings_StringToInt",
+    "all_pass": true,
+    "ms": 15552,
+    "errors": []
+  },
+  {
+    "name": "09_USB_KeyboardAndMouseControl",
+    "all_pass": false,
+    "ms": 416,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\09_USB_KeyboardAndMouseControl\\09_USB_KeyboardAndMouseControl.ino:25:10: fatal error: Keyboard.h: N",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\09_USB_KeyboardAndMouseControl\\09_USB_KeyboardAndMouseControl.ino:25:10: fatal error: Keyboard.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p02_SpaceshipInterface",
+    "all_pass": true,
+    "ms": 18156,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p03_LoveOMeter",
+    "all_pass": true,
+    "ms": 13295,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p04_ColorMixingLamp",
+    "all_pass": true,
+    "ms": 12777,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p05_ServoMoodIndicator",
+    "all_pass": true,
+    "ms": 12874,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p06_LightTheremin",
+    "all_pass": true,
+    "ms": 15477,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p07_Keyboard",
+    "all_pass": true,
+    "ms": 13075,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p08_DigitalHourglass",
+    "all_pass": true,
+    "ms": 15472,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p09_MotorizedPinwheel",
+    "all_pass": true,
+    "ms": 15799,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p10_Zoetrope",
+    "all_pass": true,
+    "ms": 17943,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p11_CrystalBall",
+    "all_pass": false,
+    "ms": 334,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\10_StarterKit_BasicKit_p11_CrystalBall\\10_StarterKit_BasicKit_p11_CrystalBall.ino:24:10: fatal erro"
+    ]
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p12_KnockLock",
+    "all_pass": true,
+    "ms": 13000,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p13_TouchSensorLamp",
+    "all_pass": false,
+    "ms": 325,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\10_StarterKit_BasicKit_p13_TouchSensorLamp\\10_StarterKit_BasicKit_p13_TouchSensorLamp.ino:27:10: fa"
+    ]
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p14_TweakTheArduinoLogo",
+    "all_pass": true,
+    "ms": 12327,
+    "errors": []
+  },
+  {
+    "name": "10_StarterKit_BasicKit_p15_HackingButtons",
+    "all_pass": true,
+    "ms": 15046,
+    "errors": []
+  },
+  {
+    "name": "11_ArduinoISP_ArduinoISP",
+    "all_pass": false,
+    "ms": 328,
+    "errors": [
+      "Error: ld 'read_page' declared void",
+      "C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\11_ArduinoISP_ArduinoISP\\11_ArduinoISP_ArduinoISP.ino:66:6: error: variable or field 'read_signature' declared void",
+      "C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\11_ArduinoISP_ArduinoISP\\11_ArduinoISP_ArduinoISP.ino:67:6: error: variable or field 'avrisp' declared void"
+    ]
+  },
+  {
+    "name": "lib_EEPROM_eeprom_clear",
+    "all_pass": true,
+    "ms": 14934,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_crc",
+    "all_pass": true,
+    "ms": 12624,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_get",
+    "all_pass": true,
+    "ms": 13495,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_iteration",
+    "all_pass": true,
+    "ms": 17506,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_put",
+    "all_pass": true,
+    "ms": 13220,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_read",
+    "all_pass": true,
+    "ms": 12541,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_update",
+    "all_pass": true,
+    "ms": 15230,
+    "errors": []
+  },
+  {
+    "name": "lib_EEPROM_eeprom_write",
+    "all_pass": true,
+    "ms": 15515,
+    "errors": []
+  },
+  {
+    "name": "lib_Ethernet_AdvancedChatServer",
+    "all_pass": false,
+    "ms": 324,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_AdvancedChatServer\\lib_Ethernet_AdvancedChatServer.ino:24:10: fatal error: Ethernet.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_AdvancedChatServer\\lib_Ethernet_AdvancedChatServer.ino:24:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_BarometricPressureWebServer",
+    "all_pass": false,
+    "ms": 315,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_BarometricPressureWebServer\\lib_Ethernet_BarometricPressureWebServer.ino:38:10: fatal"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_ChatServer",
+    "all_pass": false,
+    "ms": 328,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_ChatServer\\lib_Ethernet_ChatServer.ino:21:10: fatal error: Ethernet.h: No such file or",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_ChatServer\\lib_Ethernet_ChatServer.ino:21:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_DhcpAddressPrinter",
+    "all_pass": false,
+    "ms": 329,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_DhcpAddressPrinter\\lib_Ethernet_DhcpAddressPrinter.ino:21:10: fatal error: Ethernet.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_DhcpAddressPrinter\\lib_Ethernet_DhcpAddressPrinter.ino:21:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_DhcpChatServer",
+    "all_pass": false,
+    "ms": 345,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_DhcpChatServer\\lib_Ethernet_DhcpChatServer.ino:25:10: fatal error: Ethernet.h: No such",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_DhcpChatServer\\lib_Ethernet_DhcpChatServer.ino:25:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_LinkStatus",
+    "all_pass": false,
+    "ms": 347,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_LinkStatus\\lib_Ethernet_LinkStatus.ino:16:10: fatal error: Ethernet.h: No such file or",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_LinkStatus\\lib_Ethernet_LinkStatus.ino:16:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_PagerServer",
+    "all_pass": false,
+    "ms": 355,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_PagerServer\\lib_Ethernet_PagerServer.ino:13:10: fatal error: Ethernet.h: No such file",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_PagerServer\\lib_Ethernet_PagerServer.ino:13:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_TelnetClient",
+    "all_pass": false,
+    "ms": 311,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_TelnetClient\\lib_Ethernet_TelnetClient.ino:22:10: fatal error: Ethernet.h: No such fil",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_TelnetClient\\lib_Ethernet_TelnetClient.ino:22:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_UdpNtpClient",
+    "all_pass": false,
+    "ms": 319,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_UdpNtpClient\\lib_Ethernet_UdpNtpClient.ino:27:10: fatal error: Ethernet.h: No such fil",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_UdpNtpClient\\lib_Ethernet_UdpNtpClient.ino:27:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_UDPSendReceiveString",
+    "all_pass": false,
+    "ms": 339,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_UDPSendReceiveString\\lib_Ethernet_UDPSendReceiveString.ino:22:10: fatal error: Etherne"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_WebClient",
+    "all_pass": false,
+    "ms": 336,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_WebClient\\lib_Ethernet_WebClient.ino:19:10: fatal error: Ethernet.h: No such file or d",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_WebClient\\lib_Ethernet_WebClient.ino:19:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_WebClientRepeating",
+    "all_pass": false,
+    "ms": 356,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_WebClientRepeating\\lib_Ethernet_WebClientRepeating.ino:32:10: fatal error: Ethernet.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_WebClientRepeating\\lib_Ethernet_WebClientRepeating.ino:32:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Ethernet_WebServer",
+    "all_pass": false,
+    "ms": 357,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_WebServer\\lib_Ethernet_WebServer.ino:22:10: fatal error: Ethernet.h: No such file or d",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Ethernet_WebServer\\lib_Ethernet_WebServer.ino:22:10: fatal error: Ethernet.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_AllInputsFirmata",
+    "all_pass": false,
+    "ms": 354,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_AllInputsFirmata\\lib_Firmata_AllInputsFirmata.ino:24:10: fatal error: Firmata.h: No suc",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_AllInputsFirmata\\lib_Firmata_AllInputsFirmata.ino:24:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_AnalogFirmata",
+    "all_pass": false,
+    "ms": 389,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_AnalogFirmata\\lib_Firmata_AnalogFirmata.ino:26:10: fatal error: Firmata.h: No such file",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_AnalogFirmata\\lib_Firmata_AnalogFirmata.ino:26:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_EchoString",
+    "all_pass": false,
+    "ms": 389,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_EchoString\\lib_Firmata_EchoString.ino:24:10: fatal error: Firmata.h: No such file or di",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_EchoString\\lib_Firmata_EchoString.ino:24:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_OldStandardFirmata",
+    "all_pass": false,
+    "ms": 217,
+    "errors": [
+      "Error: Code Review: 2 hallucinated register(s)"
+    ]
+  },
+  {
+    "name": "lib_Firmata_ServoFirmata",
+    "all_pass": false,
+    "ms": 427,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_ServoFirmata\\lib_Firmata_ServoFirmata.ino:27:10: fatal error: Firmata.h: No such file o",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_ServoFirmata\\lib_Firmata_ServoFirmata.ino:27:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_SimpleAnalogFirmata",
+    "all_pass": false,
+    "ms": 417,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_SimpleAnalogFirmata\\lib_Firmata_SimpleAnalogFirmata.ino:22:10: fatal error: Firmata.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_SimpleAnalogFirmata\\lib_Firmata_SimpleAnalogFirmata.ino:22:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_SimpleDigitalFirmata",
+    "all_pass": false,
+    "ms": 215,
+    "errors": [
+      "Error: Code Review: 2 hallucinated register(s)"
+    ]
+  },
+  {
+    "name": "lib_Firmata_StandardFirmata",
+    "all_pass": false,
+    "ms": 423,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmata\\lib_Firmata_StandardFirmata.ino:68:10: fatal error: Firmata.h: No such",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmata\\lib_Firmata_StandardFirmata.ino:68:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_StandardFirmataBLE",
+    "all_pass": false,
+    "ms": 417,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataBLE\\lib_Firmata_StandardFirmataBLE.ino:68:10: fatal error: Firmata.h: No",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataBLE\\lib_Firmata_StandardFirmataBLE.ino:68:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_StandardFirmataChipKIT",
+    "all_pass": false,
+    "ms": 430,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataChipKIT\\lib_Firmata_StandardFirmataChipKIT.ino:69:10: fatal error: SoftP"
+    ]
+  },
+  {
+    "name": "lib_Firmata_StandardFirmataEthernet",
+    "all_pass": false,
+    "ms": 427,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataEthernet\\lib_Firmata_StandardFirmataEthernet.ino:108:10: fatal error: Fi"
+    ]
+  },
+  {
+    "name": "lib_Firmata_StandardFirmataPlus",
+    "all_pass": false,
+    "ms": 386,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataPlus\\lib_Firmata_StandardFirmataPlus.ino:89:10: fatal error: Firmata.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataPlus\\lib_Firmata_StandardFirmataPlus.ino:89:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Firmata_StandardFirmataWiFi",
+    "all_pass": false,
+    "ms": 387,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataWiFi\\lib_Firmata_StandardFirmataWiFi.ino:129:10: fatal error: Firmata.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_Firmata_StandardFirmataWiFi\\lib_Firmata_StandardFirmataWiFi.ino:129:10: fatal error: Firmata.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_Autoscroll",
+    "all_pass": false,
+    "ms": 383,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Autoscroll\\lib_LiquidCrystal_Autoscroll.ino:43:10: fatal error: LiquidCrystal.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Autoscroll\\lib_LiquidCrystal_Autoscroll.ino:43:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_Blink",
+    "all_pass": false,
+    "ms": 378,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Blink\\lib_LiquidCrystal_Blink.ino:43:10: fatal error: LiquidCrystal.h: No such fi",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Blink\\lib_LiquidCrystal_Blink.ino:43:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_Cursor",
+    "all_pass": false,
+    "ms": 391,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Cursor\\lib_LiquidCrystal_Cursor.ino:44:10: fatal error: LiquidCrystal.h: No such",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Cursor\\lib_LiquidCrystal_Cursor.ino:44:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_CustomCharacter",
+    "all_pass": false,
+    "ms": 400,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_CustomCharacter\\lib_LiquidCrystal_CustomCharacter.ino:45:10: fatal error: LiquidC"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_Display",
+    "all_pass": false,
+    "ms": 398,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Display\\lib_LiquidCrystal_Display.ino:44:10: fatal error: LiquidCrystal.h: No suc",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Display\\lib_LiquidCrystal_Display.ino:44:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_HelloWorld",
+    "all_pass": false,
+    "ms": 411,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_HelloWorld\\lib_LiquidCrystal_HelloWorld.ino:45:10: fatal error: LiquidCrystal.h:",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_HelloWorld\\lib_LiquidCrystal_HelloWorld.ino:45:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_Scroll",
+    "all_pass": false,
+    "ms": 388,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Scroll\\lib_LiquidCrystal_Scroll.ino:44:10: fatal error: LiquidCrystal.h: No such",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_Scroll\\lib_LiquidCrystal_Scroll.ino:44:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_SerialDisplay",
+    "all_pass": false,
+    "ms": 379,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_SerialDisplay\\lib_LiquidCrystal_SerialDisplay.ino:43:10: fatal error: LiquidCryst"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_setCursor",
+    "all_pass": false,
+    "ms": 390,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_setCursor\\lib_LiquidCrystal_setCursor.ino:43:10: fatal error: LiquidCrystal.h: No",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_setCursor\\lib_LiquidCrystal_setCursor.ino:43:10: fatal error: LiquidCrystal.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_LiquidCrystal_TextDirection",
+    "all_pass": false,
+    "ms": 391,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_LiquidCrystal_TextDirection\\lib_LiquidCrystal_TextDirection.ino:43:10: fatal error: LiquidCryst"
+    ]
+  },
+  {
+    "name": "lib_SD_CardInfo",
+    "all_pass": false,
+    "ms": 373,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_CardInfo\\lib_SD_CardInfo.ino:24:10: fatal error: SD.h: No such file or directory",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_CardInfo\\lib_SD_CardInfo.ino:24:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_SD_Datalogger",
+    "all_pass": false,
+    "ms": 351,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_Datalogger\\lib_SD_Datalogger.ino:28:10: fatal error: SD.h: No such file or directory",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_Datalogger\\lib_SD_Datalogger.ino:28:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_SD_DumpFile",
+    "all_pass": false,
+    "ms": 369,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_DumpFile\\lib_SD_DumpFile.ino:25:10: fatal error: SD.h: No such file or directory",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_DumpFile\\lib_SD_DumpFile.ino:25:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_SD_Files",
+    "all_pass": false,
+    "ms": 386,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_Files\\lib_SD_Files.ino:23:10: fatal error: SD.h: No such file or directory",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_Files\\lib_SD_Files.ino:23:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_SD_listfiles",
+    "all_pass": false,
+    "ms": 396,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_listfiles\\lib_SD_listfiles.ino:35:10: fatal error: SD.h: No such file or directory",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_listfiles\\lib_SD_listfiles.ino:35:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_SD_NonBlockingWrite",
+    "all_pass": false,
+    "ms": 376,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_NonBlockingWrite\\lib_SD_NonBlockingWrite.ino:35:10: fatal error: SD.h: No such file or direc",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_NonBlockingWrite\\lib_SD_NonBlockingWrite.ino:35:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_SD_ReadWrite",
+    "all_pass": false,
+    "ms": 354,
+    "errors": [
+      "Error: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_ReadWrite\\lib_SD_ReadWrite.ino:22:10: fatal error: SD.h: No such file or directory",
+      "- Stage 3 Build: C:\\MyLab\\MCU\\boards\\arduino_328p\\apps\\examples_ino\\lib_SD_ReadWrite\\lib_SD_ReadWrite.ino:22:10: fatal error: SD.h: No such file or directory"
+    ]
+  },
+  {
+    "name": "lib_Servo_Knob",
+    "all_pass": true,
+    "ms": 16242,
+    "errors": []
+  },
+  {
+    "name": "lib_Servo_Sweep",
+    "all_pass": true,
+    "ms": 15503,
+    "errors": []
+  },
+  {
+    "name": "lib_SoftwareSerial_SoftwareSerialExample",
+    "all_pass": true,
+    "ms": 13576,
+    "errors": []
+  },
+  {
+    "name": "lib_SoftwareSerial_TwoPortReceive",
+    "all_pass": true,
+    "ms": 13125,
+    "errors": []
+  },
+  {
+    "name": "lib_SPI_BarometricPressureSensor",
+    "all_pass": false,
+    "ms": 373,
+    "errors": [
+      "Error:     ^~~~~~~~~~~~~"
+    ]
+  },
+  {
+    "name": "lib_SPI_DigitalPotControl",
+    "all_pass": true,
+    "ms": 18851,
+    "errors": []
+  },
+  {
+    "name": "lib_Stepper_MotorKnob",
+    "all_pass": true,
+    "ms": 16682,
+    "errors": []
+  },
+  {
+    "name": "lib_Stepper_stepper_oneRevolution",
+    "all_pass": true,
+    "ms": 12766,
+    "errors": []
+  },
+  {
+    "name": "lib_Stepper_stepper_oneStepAtATime",
+    "all_pass": true,
+    "ms": 12764,
+    "errors": []
+  },
+  {
+    "name": "lib_Stepper_stepper_speedControl",
+    "all_pass": true,
+    "ms": 15276,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_digital_potentiometer",
+    "all_pass": true,
+    "ms": 15303,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_i2c_scanner",
+    "all_pass": true,
+    "ms": 15643,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_master_reader",
+    "all_pass": true,
+    "ms": 16261,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_master_writer",
+    "all_pass": true,
+    "ms": 14996,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_SFRRanger_reader",
+    "all_pass": true,
+    "ms": 15528,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_slave_receiver",
+    "all_pass": true,
+    "ms": 15756,
+    "errors": []
+  },
+  {
+    "name": "lib_Wire_slave_sender",
+    "all_pass": true,
+    "ms": 15189,
+    "errors": []
+  }
+]

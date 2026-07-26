@@ -1,0 +1,2 @@
+#include <Arduino.h>
+void setup(){Serial.begin(9600);Serial.println("START");DDRB|=(1<<7);TCCR1A=(1<<COM1A1)|(1<<WGM11);TCCR1B=(1<<WGM13)|(1<<WGM12)|(1<<CS10);ICR1=39999;}void loop(){for(int i=0;i<=255;i++){OCR1A=i*156;Serial.println(i*100/255);delay(10);}for(int i=255;i>=0;i--){OCR1A=i*156;Serial.println(i*100/255);delay(10);}}

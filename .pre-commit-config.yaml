@@ -1,0 +1,17 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff lint
+        entry: ruff check firmforge/ --ignore E501,F841
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        entry: python -m pytest tests/ -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
