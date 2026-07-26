@@ -131,7 +131,7 @@ setInterval(function(){{
   x.send();
 }},500);
 window.onload=function(){{out.scrollTop=out.scrollHeight;}};
-function clearOutput(){{out.innerHTML='';}}
+function clearOutput(){{out.innerHTML='';document.getElementById('info').innerHTML='0&nbsp;lines';}}
 function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
 </script>
 </body></html>"""
