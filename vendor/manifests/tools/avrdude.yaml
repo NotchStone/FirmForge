@@ -1,0 +1,18 @@
+# AVRDUDE 烧录工具
+tool: avrdude
+version: "6.3.0-arduino17"
+platforms:
+  windows:
+    url: "https://downloads.arduino.cc/tools/avrdude-6.3.0-arduino17-x86_64-pc-windows.zip"
+    sha256: ""
+  macos:
+    url: "https://downloads.arduino.cc/tools/avrdude-6.3.0-arduino17-x86_64-apple-darwin14.tar.bz2"
+    sha256: ""
+  linux-x86_64:
+    url: "https://downloads.arduino.cc/tools/avrdude-6.3.0-arduino17-x86_64-pc-linux-gnu.tar.bz2"
+    sha256: ""
+
+install:
+  root: "~/.firmforge/toolchains/avrdude/"
+  bin: "avrdude"
+  conf: "avrdude.conf"

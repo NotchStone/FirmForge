@@ -1,0 +1,17 @@
+# AVR GCC 编译器工具链
+tool: avr-gcc
+version: "7.3.0-atmel3.6.1-arduino5"
+platforms:
+  windows:
+    url: "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-pc-windows.zip"
+    sha256: ""
+  macos:
+    url: "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-apple-darwin14.tar.bz2"
+    sha256: ""
+  linux-x86_64:
+    url: "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-pc-linux-gnu.tar.bz2"
+    sha256: ""
+
+install:
+  root: "~/.firmforge/toolchains/avr-gcc/"
+  bin: "bin/avr-gcc"

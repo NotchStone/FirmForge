@@ -1,0 +1,987 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge/api/avr/api.json",
+  "platform": "arduino",
+  "mcu_series": "avr",
+  "version": "1.8.6",
+  "description": "Arduino AVR core API contract library - Core functions for Arduino Mega 2560 and compatible boards",
+  "source": "Arduino.h + AVR-LibC (LGPL 2.1 + Modified BSD)",
+  "exports": [
+    "Arduino.h",
+    "avr/io.h",
+    "avr/interrupt.h",
+    "util/delay.h"
+  ],
+  "apis": {
+    "gpio": [
+      {
+        "name": "pinMode",
+        "signature": "void pinMode(uint8_t pin, uint8_t mode)",
+        "source": "Arduino.h",
+        "category": "gpio",
+        "description": "Configure the specified pin to behave as INPUT or OUTPUT",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t",
+            "constraint": "0-53 for Mega2560 (digital pins); 0-13 for Uno; board-specific, see board.json pins"
+          },
+          {
+            "name": "mode",
+            "type": "uint8_t",
+            "values": [
+              "INPUT",
+              "OUTPUT",
+              "INPUT_PULLUP"
+            ],
+            "note": "INPUT_PULLUP enables internal ~20k pull-up resistor"
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "pinMode(LED_BUILTIN, OUTPUT);  // set built-in LED pin as output\npinMode(2, INPUT_PULLUP);         // enable pull-up on pin 2",
+        "safety_level": "strict",
+        "side_effects": "Changes DDRx register (hardware)",
+        "preconditions": [
+          "pin must be valid (0-53 for Mega)",
+          "mode must be INPUT/OUTPUT/INPUT_PULLUP"
+        ],
+        "common_errors": [
+          {
+            "pattern": "setPinMode",
+            "fix": "Use pinMode(pin, mode) instead of setPinMode"
+          },
+          {
+            "pattern": "pinMode(13, 1)",
+            "fix": "Use symbolic constants: pinMode(13, OUTPUT) or pinMode(LED_BUILTIN, OUTPUT)"
+          }
+        ]
+      },
+      {
+        "name": "digitalWrite",
+        "signature": "void digitalWrite(uint8_t pin, uint8_t val)",
+        "source": "Arduino.h",
+        "category": "gpio",
+        "description": "Write HIGH or LOW to a digital pin",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t",
+            "constraint": "0-53 for Mega2560"
+          },
+          {
+            "name": "val",
+            "type": "uint8_t",
+            "values": [
+              "HIGH",
+              "LOW"
+            ],
+            "note": "HIGH = 1, LOW = 0"
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "digitalWrite(LED_BUILTIN, HIGH);  // turn LED on\ndigitalWrite(13, LOW);            // turn pin 13 off",
+        "safety_level": "fast_path",
+        "side_effects": "Modifies PORTx register (hardware)",
+        "preconditions": [
+          "pinMode must be set to OUTPUT first",
+          "pin number valid"
+        ],
+        "common_errors": [
+          {
+            "pattern": "digitalWrite without pinMode",
+            "fix": "Call pinMode(pin, OUTPUT) before digitalWrite"
+          }
+        ]
+      },
+      {
+        "name": "digitalRead",
+        "signature": "int digitalRead(uint8_t pin)",
+        "source": "Arduino.h",
+        "category": "gpio",
+        "description": "Read the state of a digital pin (HIGH or LOW)",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t",
+            "constraint": "0-53 for Mega2560"
+          }
+        ],
+        "returns": {
+          "type": "int",
+          "values": [
+            "HIGH",
+            "LOW"
+          ],
+          "note": "HIGH=1, LOW=0"
+        },
+        "usage_example": "int button = digitalRead(2);  // read button state on pin 2",
+        "safety_level": "fast_path",
+        "preconditions": [
+          "pinMode should be set to INPUT or INPUT_PULLUP"
+        ]
+      }
+    ],
+    "time": [
+      {
+        "name": "delay",
+        "signature": "void delay(unsigned long ms)",
+        "source": "Arduino.h",
+        "category": "time",
+        "description": "Pause the program for the specified number of milliseconds",
+        "params": [
+          {
+            "name": "ms",
+            "type": "unsigned long",
+            "constraint": ">= 0, max ~49 days (unsigned long overflow)"
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "delay(1000);  // wait for 1 second",
+        "safety_level": "fast_path",
+        "side_effects": "Blocking call - pauses all execution",
+        "constraints": [
+          "NEVER use delay() inside ISR (interrupt service routine)",
+          "NEVER use delay() with long durations in loop() if responsiveness matters"
+        ],
+        "alternatives": [
+          "millis() for non-blocking timing",
+          "delayMicroseconds() for microsecond precision"
+        ]
+      },
+      {
+        "name": "delayMicroseconds",
+        "signature": "void delayMicroseconds(unsigned int us)",
+        "source": "Arduino.h",
+        "category": "time",
+        "description": "Pause for the specified number of microseconds",
+        "params": [
+          {
+            "name": "us",
+            "type": "unsigned int",
+            "constraint": "0-16383 on 16MHz AVR (max ~16ms)"
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "delayMicroseconds(100);  // 100us pause for sensor timing",
+        "safety_level": "fast_path",
+        "side_effects": "Blocking call"
+      },
+      {
+        "name": "millis",
+        "signature": "unsigned long millis()",
+        "source": "Arduino.h",
+        "category": "time",
+        "description": "Returns the number of milliseconds since the program started",
+        "returns": {
+          "type": "unsigned long",
+          "constraint": "overflows after ~49 days, wraps to 0"
+        },
+        "usage_example": "unsigned long now = millis();\nif (now - lastTime >= 1000) { /* 1 second elapsed */ }",
+        "safety_level": "fast_path",
+        "note": "Non-blocking timing - preferred over delay() for responsive code",
+        "common_errors": [
+          {
+            "pattern": "millis() in ISR",
+            "fix": "millis() does not increment inside ISR - use hardware timer instead"
+          }
+        ]
+      },
+      {
+        "name": "micros",
+        "signature": "unsigned long micros()",
+        "source": "Arduino.h",
+        "category": "time",
+        "description": "Returns the number of microseconds since the program started",
+        "returns": {
+          "type": "unsigned long",
+          "constraint": "overflows after ~70 minutes on 16MHz AVR"
+        },
+        "usage_example": "unsigned long t = micros();  // high-resolution timestamp",
+        "safety_level": "fast_path"
+      }
+    ],
+    "serial": [
+      {
+        "name": "Serial.begin",
+        "signature": "void Serial.begin(unsigned long baud)",
+        "source": "HardwareSerial.h",
+        "category": "serial",
+        "description": "Initialize USART0 with specified baud rate (8N1 format)",
+        "params": [
+          {
+            "name": "baud",
+            "type": "unsigned long",
+            "values": [
+              300,
+              1200,
+              2400,
+              4800,
+              9600,
+              14400,
+              19200,
+              38400,
+              57600,
+              115200
+            ],
+            "note": "Default 9600 for most applications"
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "Serial.begin(9600);  // start serial at 9600 baud",
+        "safety_level": "strict",
+        "preconditions": [
+          "Must be called in setup() before any Serial.print/read",
+          "Pins 0(RX) and 1(TX) become unavailable for GPIO"
+        ],
+        "board_specific": {
+          "arduino_mega": "USART0 on pins 0(RX), 1(TX); also has Serial1/Serial2/Serial3 for additional UARTs"
+        }
+      },
+      {
+        "name": "Serial.print",
+        "signature": "size_t Serial.print(val)",
+        "source": "Print.h",
+        "category": "serial",
+        "description": "Print data to the serial port as human-readable ASCII text",
+        "params": [
+          {
+            "name": "val",
+            "type": "any (int/float/char/string)",
+            "constraint": "int/float/char/char*/String"
+          }
+        ],
+        "returns": {
+          "type": "size_t",
+          "note": "Number of bytes written"
+        },
+        "usage_example": "Serial.print(\"Hello World\\n\");\nSerial.print(42);\nSerial.print(3.14, 2);  // print float with 2 decimal places",
+        "safety_level": "fast_path",
+        "variants": [
+          {
+            "name": "Serial.println",
+            "signature": "size_t Serial.println(val)",
+            "description": "Same as print() but appends \\r\\n newline"
+          }
+        ]
+      },
+      {
+        "name": "Serial.read",
+        "signature": "int Serial.read()",
+        "source": "HardwareSerial.h",
+        "category": "serial",
+        "description": "Read incoming serial data (first byte available, or -1 if none)",
+        "returns": {
+          "type": "int",
+          "constraint": "0-255 for valid byte, -1 if buffer empty"
+        },
+        "usage_example": "if (Serial.available()) {\n  int c = Serial.read();\n  Serial.write(toupper(c));  // echo uppercase\n}",
+        "safety_level": "fast_path",
+        "preconditions": [
+          "Serial.begin() must be called first",
+          "Check Serial.available() before reading"
+        ]
+      },
+      {
+        "name": "Serial.available",
+        "signature": "int Serial.available()",
+        "source": "HardwareSerial.h",
+        "category": "serial",
+        "description": "Get the number of bytes available for reading from serial buffer",
+        "returns": {
+          "type": "int",
+          "constraint": ">= 0, 0 means no data"
+        },
+        "usage_example": "while (Serial.available()) { char c = Serial.read(); }",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "Serial.write",
+        "signature": "size_t Serial.write(uint8_t val)",
+        "source": "HardwareSerial.h",
+        "category": "serial",
+        "description": "Write binary data to serial port (single byte)",
+        "params": [
+          {
+            "name": "val",
+            "type": "uint8_t",
+            "constraint": "0-255"
+          }
+        ],
+        "returns": {
+          "type": "size_t",
+          "note": "Number of bytes written (always 1 for single byte)"
+        },
+        "usage_example": "Serial.write(0x41);  // send byte 0x41 (ASCII 'A')",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "Serial.flush",
+        "signature": "void Serial.flush()",
+        "source": "HardwareSerial.h",
+        "category": "serial",
+        "description": "Wait for all outgoing serial data to be transmitted",
+        "usage_example": "Serial.flush();  // ensure all data sent before doing something else",
+        "safety_level": "fast_path",
+        "side_effects": "Blocking - waits until TX buffer empty"
+      },
+      {
+        "name": "Serial.parseInt",
+        "signature": "Serial.parseInt()",
+        "source": "Arduino.h",
+        "description": "Read integer value from serial input"
+      },
+      {
+        "name": "Serial.readString",
+        "signature": "Serial.readString()",
+        "source": "Arduino.h",
+        "description": "Read characters into a String"
+      },
+      {
+        "name": "Serial.println",
+        "signature": "void Serial.println()",
+        "source": "Arduino.h",
+        "category": "serial",
+        "description": "Print data followed by a newline character"
+      },
+      {
+        "name": "Serial.print",
+        "signature": "void Serial.print(...)",
+        "source": "Arduino.h",
+        "category": "serial",
+        "description": "Print data without a newline character"
+      },
+      {
+        "name": "Serial.write",
+        "signature": "size_t Serial.write(uint8_t val)",
+        "source": "Arduino.h",
+        "category": "serial",
+        "description": "Write binary data to serial port"
+      },
+      {
+        "name": "Serial.flush",
+        "signature": "void Serial.flush()",
+        "source": "Arduino.h",
+        "category": "serial",
+        "description": "Wait for outgoing serial data to complete"
+      }
+    ],
+    "interrupt": [
+      {
+        "name": "attachInterrupt",
+        "signature": "void attachInterrupt(uint8_t interruptNum, void (*userFunc)(), int mode)",
+        "source": "Arduino.h",
+        "category": "interrupt",
+        "description": "Attach a function to an external interrupt pin",
+        "params": [
+          {
+            "name": "interruptNum",
+            "type": "uint8_t",
+            "constraint": "digitalPinToInterrupt(pin); Mega: INT0(pin21)/INT1(pin20)/INT2(pin19)/INT3(pin18)/INT4(pin2)/INT5(pin3)"
+          },
+          {
+            "name": "userFunc",
+            "type": "void(*)(void)",
+            "constraint": "ISR function: must be void return, no params, no blocking calls, no malloc"
+          },
+          {
+            "name": "mode",
+            "type": "int",
+            "values": [
+              "LOW",
+              "CHANGE",
+              "RISING",
+              "FALLING"
+            ]
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "attachInterrupt(digitalPinToInterrupt(2), myISR, RISING);",
+        "safety_level": "strict",
+        "constraints": [
+          "ISR function must NOT use delay(), Serial.print(), or malloc()",
+          "Keep ISR as short as possible",
+          "Use volatile for variables shared with ISR"
+        ]
+      },
+      {
+        "name": "detachInterrupt",
+        "signature": "void detachInterrupt(uint8_t interruptNum)",
+        "source": "Arduino.h",
+        "category": "interrupt",
+        "description": "Disable an external interrupt",
+        "params": [
+          {
+            "name": "interruptNum",
+            "type": "uint8_t",
+            "constraint": "digitalPinToInterrupt(pin)"
+          }
+        ],
+        "usage_example": "detachInterrupt(digitalPinToInterrupt(2));",
+        "safety_level": "strict"
+      },
+      {
+        "name": "noInterrupts",
+        "signature": "void noInterrupts()",
+        "source": "Arduino.h",
+        "category": "interrupt",
+        "description": "Disable all interrupts globally (cli instruction on AVR)",
+        "usage_example": "noInterrupts(); /* critical section */ interrupts();",
+        "safety_level": "strict",
+        "constraints": [
+          "Do not keep interrupts disabled for long periods",
+          "Affects millis()/micros() timing"
+        ]
+      },
+      {
+        "name": "interrupts",
+        "signature": "void interrupts()",
+        "source": "Arduino.h",
+        "category": "interrupt",
+        "description": "Re-enable interrupts after noInterrupts()",
+        "usage_example": "interrupts();  // re-enable after noInterrupts()",
+        "safety_level": "strict"
+      },
+      {
+        "name": "digitalPinToInterrupt",
+        "signature": "digitalPinToInterrupt(pin)",
+        "source": "Arduino.h",
+        "description": "Convert a digital pin number to interrupt number",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t"
+          }
+        ]
+      }
+    ],
+    "analog": [
+      {
+        "name": "analogRead",
+        "signature": "int analogRead(uint8_t pin)",
+        "source": "Arduino.h",
+        "category": "analog",
+        "description": "Read analog voltage from ADC pin (10-bit resolution, 0-1023)",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t",
+            "constraint": "A0-A15 on Mega2560 (16 analog inputs). Use A0/A1/... constants not pin numbers"
+          }
+        ],
+        "returns": {
+          "type": "int",
+          "constraint": "0-1023 (10-bit). 0=0V, 1023=5V (or Vref)"
+        },
+        "usage_example": "int sensorValue = analogRead(A0);\nfloat voltage = sensorValue * (5.0 / 1023.0);",
+        "safety_level": "fast_path",
+        "note": "Default 10-bit resolution, ~100us conversion time on 16MHz"
+      },
+      {
+        "name": "analogWrite",
+        "signature": "void analogWrite(uint8_t pin, int value)",
+        "source": "Arduino.h",
+        "category": "analog",
+        "description": "Output PWM signal on supported pins (hardware PWM, not DAC)",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t",
+            "constraint": "PWM-capable pins only: 2-13, 44-46 on Mega2560"
+          },
+          {
+            "name": "value",
+            "type": "int",
+            "constraint": "0-255 (8-bit). 0=always off, 255=always on"
+          }
+        ],
+        "returns": {
+          "type": "void"
+        },
+        "usage_example": "analogWrite(9, 128);  // 50% duty cycle PWM on pin 9 (LED dim)",
+        "safety_level": "fast_path",
+        "preconditions": [
+          "pinMode is not required (analogWrite sets it automatically)",
+          "Pin must be PWM-capable"
+        ],
+        "board_specific": {
+          "arduino_mega": "PWM pins: 2-13, 44-46 (15 channels, 4 timers at 490/980Hz)"
+        },
+        "common_errors": [
+          {
+            "pattern": "analogWrite on non-PWM pin",
+            "fix": "Check pin supports PWM; use digitalWrite if on/off only needed"
+          }
+        ]
+      },
+      {
+        "name": "analogReference",
+        "signature": "void analogReference(uint8_t type)",
+        "source": "Arduino.h",
+        "category": "analog",
+        "description": "Configure the reference voltage for analog input",
+        "params": [
+          {
+            "name": "type",
+            "type": "uint8_t",
+            "values": [
+              "DEFAULT",
+              "INTERNAL",
+              "INTERNAL1V1",
+              "INTERNAL2V56",
+              "EXTERNAL"
+            ],
+            "note": "DEFAULT=5V; INTERNAL1V1=1.1V internal ref; EXTERNAL=AREF pin"
+          }
+        ],
+        "usage_example": "analogReference(INTERNAL);  // use internal 1.1V reference for precise readings",
+        "safety_level": "strict",
+        "constraints": [
+          "Must call before analogRead()",
+          "Do not exceed Vref voltage on any analog pin"
+        ]
+      }
+    ],
+    "i2c": [
+      {
+        "name": "Wire.begin",
+        "signature": "void Wire.begin()",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "Initialize I2C (Wire) library as master. Joins I2C bus.",
+        "usage_example": "Wire.begin();  // join I2C bus as master (Mega: SDA=20, SCL=21)",
+        "safety_level": "strict",
+        "board_specific": {
+          "arduino_mega": "SDA pin 20, SCL pin 21"
+        },
+        "preconditions": [
+          "SDA/SCL pins must have pull-up resistors (typically 4.7k to VCC)",
+          "Pin mode must be open-drain (handled by Wire library)"
+        ]
+      },
+      {
+        "name": "Wire.beginTransmission",
+        "signature": "void Wire.beginTransmission(uint8_t address)",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "Begin transmission to I2C device at specified address",
+        "params": [
+          {
+            "name": "address",
+            "type": "uint8_t",
+            "constraint": "7-bit I2C address (0-127). Do NOT include R/W bit"
+          }
+        ],
+        "usage_example": "Wire.beginTransmission(0x3C);  // start talking to OLED at 0x3C",
+        "safety_level": "strict"
+      },
+      {
+        "name": "Wire.write",
+        "signature": "size_t Wire.write(uint8_t data)",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "Queue a byte for I2C transmission",
+        "params": [
+          {
+            "name": "data",
+            "type": "uint8_t",
+            "constraint": "0-255"
+          }
+        ],
+        "returns": {
+          "type": "size_t",
+          "note": "Number of bytes queued"
+        },
+        "usage_example": "Wire.write(0x00);  // send command byte",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "Wire.endTransmission",
+        "signature": "uint8_t Wire.endTransmission()",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "End transmission and send queued bytes to I2C device",
+        "returns": {
+          "type": "uint8_t",
+          "values": [
+            "0: success",
+            "1: data too long",
+            "2: NACK on address",
+            "3: NACK on data",
+            "4: other error"
+          ]
+        },
+        "usage_example": "byte result = Wire.endTransmission();\nif (result != 0) { /* handle error */ }",
+        "safety_level": "strict"
+      },
+      {
+        "name": "Wire.requestFrom",
+        "signature": "uint8_t Wire.requestFrom(uint8_t address, uint8_t quantity)",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "Request bytes from I2C slave device",
+        "params": [
+          {
+            "name": "address",
+            "type": "uint8_t",
+            "constraint": "7-bit I2C address"
+          },
+          {
+            "name": "quantity",
+            "type": "uint8_t",
+            "constraint": "Number of bytes to request"
+          }
+        ],
+        "returns": {
+          "type": "uint8_t",
+          "note": "Number of bytes returned from slave"
+        },
+        "usage_example": "Wire.requestFrom(0x68, 6);  // request 6 bytes from RTC",
+        "safety_level": "strict"
+      },
+      {
+        "name": "Wire.available",
+        "signature": "int Wire.available()",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "Returns number of bytes available for reading after requestFrom",
+        "returns": {
+          "type": "int",
+          "constraint": ">= 0"
+        },
+        "usage_example": "while (Wire.available()) { byte b = Wire.read(); }",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "Wire.read",
+        "signature": "int Wire.read()",
+        "source": "Wire.h",
+        "category": "i2c",
+        "description": "Read a byte from I2C buffer",
+        "returns": {
+          "type": "int",
+          "constraint": "0-255 for valid byte, -1 if no data"
+        },
+        "usage_example": "byte data = Wire.read();",
+        "safety_level": "fast_path"
+      }
+    ],
+    "spi": [
+      {
+        "name": "SPI.begin",
+        "signature": "void SPI.begin()",
+        "source": "SPI.h",
+        "category": "spi",
+        "description": "Initialize SPI bus as master",
+        "usage_example": "SPI.begin();  // init SPI (Mega: MOSI=51, MISO=50, SCK=52, SS=53)",
+        "safety_level": "strict",
+        "board_specific": {
+          "arduino_mega": "MOSI pin 51, MISO pin 50, SCK pin 52, SS pin 53 (hardware CS)"
+        }
+      },
+      {
+        "name": "SPI.transfer",
+        "signature": "byte SPI.transfer(byte data)",
+        "source": "SPI.h",
+        "category": "spi",
+        "description": "Send and receive one byte over SPI simultaneously",
+        "params": [
+          {
+            "name": "data",
+            "type": "byte",
+            "constraint": "0-255"
+          }
+        ],
+        "returns": {
+          "type": "byte",
+          "note": "Byte received from slave simultaneously with transmission"
+        },
+        "usage_example": "byte received = SPI.transfer(0x42);  // send 0x42, receive slave response",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "SPI.beginTransaction",
+        "signature": "void SPI.beginTransaction(SPISettings settings)",
+        "source": "SPI.h",
+        "category": "spi",
+        "description": "Begin SPI transaction with specified settings (speed, bit order, mode)",
+        "params": [
+          {
+            "name": "settings",
+            "type": "SPISettings",
+            "constraint": "SPISettings(speedMaximum, dataOrder, dataMode)"
+          }
+        ],
+        "usage_example": "SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));",
+        "safety_level": "strict"
+      },
+      {
+        "name": "SPI.endTransaction",
+        "signature": "void SPI.endTransaction()",
+        "source": "SPI.h",
+        "category": "spi",
+        "description": "End SPI transaction (allows other SPI devices to use bus)",
+        "usage_example": "SPI.endTransaction();",
+        "safety_level": "strict"
+      }
+    ],
+    "math": [
+      {
+        "name": "constrain",
+        "signature": "x_type constrain(x_type x, x_type a, x_type b)",
+        "source": "Arduino.h",
+        "category": "math",
+        "description": "Constrain a value to be within a range: returns x if a <= x <= b, else a if x < a, b if x > b",
+        "returns": {
+          "type": "x_type",
+          "note": "Same type as input, value clamped to [a, b]"
+        },
+        "usage_example": "int val = constrain(sensorValue, 0, 255);",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "map",
+        "signature": "long map(long x, long in_min, long in_max, long out_min, long out_max)",
+        "source": "Arduino.h",
+        "category": "math",
+        "description": "Re-map a number from one range to another (linear interpolation with integer math)",
+        "note": "Uses integer math - may lose precision. Does NOT constrain output to [out_min, out_max].",
+        "usage_example": "int pwm = map(analogRead(A0), 0, 1023, 0, 255);",
+        "safety_level": "fast_path",
+        "common_errors": [
+          {
+            "pattern": "map with float",
+            "fix": "Use float version: (x-in_min)*(out_max-out_min)/(in_max-in_min)+out_min"
+          }
+        ]
+      },
+      {
+        "name": "abs",
+        "signature": "type abs(type x)",
+        "source": "Arduino.h",
+        "category": "math",
+        "description": "Absolute value",
+        "usage_example": "int dist = abs(target - current);",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "max",
+        "signature": "max(a, b)",
+        "source": "Arduino.h",
+        "description": "Return the larger of two values",
+        "params": [
+          {
+            "name": "a",
+            "type": "any"
+          },
+          {
+            "name": "b",
+            "type": "any"
+          }
+        ]
+      },
+      {
+        "name": "min",
+        "signature": "min(a, b)",
+        "source": "Arduino.h",
+        "description": "Return the smaller of two values",
+        "params": [
+          {
+            "name": "a",
+            "type": "any"
+          },
+          {
+            "name": "b",
+            "type": "any"
+          }
+        ]
+      },
+      {
+        "name": "pow",
+        "signature": "pow(base, exponent)",
+        "source": "Arduino.h",
+        "description": "Return base raised to the power of exponent"
+      },
+      {
+        "name": "sq",
+        "signature": "sq(x)",
+        "source": "Arduino.h",
+        "description": "Return x squared"
+      },
+      {
+        "name": "sqrt",
+        "signature": "sqrt(x)",
+        "source": "Arduino.h",
+        "description": "Return the square root of x"
+      }
+    ],
+    "board_constants": [
+      {
+        "name": "LED_BUILTIN",
+        "value": 13,
+        "source": "pins_arduino.h (mega variant)",
+        "category": "board_constants",
+        "description": "Built-in LED pin number for Arduino Mega 2560",
+        "board_specific": {
+          "arduino_mega": 13,
+          "arduino_uno": 13
+        }
+      },
+      {
+        "name": "HIGH",
+        "value": 1,
+        "source": "Arduino.h",
+        "category": "board_constants",
+        "description": "Logic HIGH (1, ~5V on 5V boards)"
+      },
+      {
+        "name": "LOW",
+        "value": 0,
+        "source": "Arduino.h",
+        "category": "board_constants",
+        "description": "Logic LOW (0, ~0V)"
+      },
+      {
+        "name": "INPUT",
+        "value": 0,
+        "source": "Arduino.h",
+        "category": "board_constants",
+        "description": "Pin mode: input (high impedance)"
+      },
+      {
+        "name": "OUTPUT",
+        "value": 1,
+        "source": "Arduino.h",
+        "category": "board_constants",
+        "description": "Pin mode: output (low impedance)"
+      },
+      {
+        "name": "INPUT_PULLUP",
+        "value": 2,
+        "source": "Arduino.h",
+        "category": "board_constants",
+        "description": "Pin mode: input with internal pull-up resistor enabled (~20k to VCC)"
+      }
+    ],
+    "bit_operations": [
+      {
+        "name": "bitRead",
+        "signature": "uint8_t bitRead(uint8_t x, uint8_t n)",
+        "source": "Arduino.h",
+        "category": "bit_operations",
+        "description": "Read bit n of byte x",
+        "usage_example": "if (bitRead(PORTB, 7)) { /* bit 7 is HIGH */ }",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "bitSet",
+        "signature": "void bitSet(uint8_t &x, uint8_t n)",
+        "source": "Arduino.h",
+        "category": "bit_operations",
+        "description": "Set bit n of byte x (x |= 1<<n)",
+        "usage_example": "bitSet(PORTB, 7);  // set PB7 HIGH",
+        "safety_level": "fast_path",
+        "side_effects": "Modifies hardware register if x is PORTx/DDRx"
+      },
+      {
+        "name": "bitClear",
+        "signature": "void bitClear(uint8_t &x, uint8_t n)",
+        "source": "Arduino.h",
+        "category": "bit_operations",
+        "description": "Clear bit n of byte x (x &= ~(1<<n))",
+        "usage_example": "bitClear(PORTB, 7);  // set PB7 LOW",
+        "safety_level": "fast_path"
+      },
+      {
+        "name": "bitWrite",
+        "signature": "void bitWrite(uint8_t &x, uint8_t n, uint8_t b)",
+        "source": "Arduino.h",
+        "category": "bit_operations",
+        "description": "Write bit b (0 or 1) to bit n of byte x",
+        "usage_example": "bitWrite(PORTB, 7, HIGH);  // set PB7 to HIGH",
+        "safety_level": "fast_path"
+      }
+    ],
+    "random": [
+      {
+        "name": "random",
+        "signature": "random(min, max)",
+        "source": "Arduino.h",
+        "description": "Generate a pseudo-random number between min and max-1"
+      },
+      {
+        "name": "randomSeed",
+        "signature": "randomSeed(seed)",
+        "source": "Arduino.h",
+        "description": "Initialize the pseudo-random number generator"
+      }
+    ],
+    "advanced_io": [
+      {
+        "name": "tone",
+        "signature": "tone(pin, frequency, duration)",
+        "source": "Arduino.h",
+        "description": "Generate a square wave of the specified frequency on a pin",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t"
+          },
+          {
+            "name": "frequency",
+            "type": "unsigned int"
+          },
+          {
+            "name": "duration",
+            "type": "unsigned long",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "name": "noTone",
+        "signature": "noTone(pin)",
+        "source": "Arduino.h",
+        "description": "Stop generating a tone on the specified pin"
+      },
+      {
+        "name": "pulseIn",
+        "signature": "pulseIn(pin, value, timeout)",
+        "source": "Arduino.h",
+        "description": "Read a pulse (HIGH or LOW) on a pin",
+        "params": [
+          {
+            "name": "pin",
+            "type": "uint8_t"
+          },
+          {
+            "name": "value",
+            "type": "uint8_t"
+          },
+          {
+            "name": "timeout",
+            "type": "unsigned long",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "name": "shiftOut",
+        "signature": "shiftOut(dataPin, clockPin, bitOrder, value)",
+        "source": "Arduino.h",
+        "description": "Shift out a byte of data one bit at a time"
+      }
+    ]
+  }
+}

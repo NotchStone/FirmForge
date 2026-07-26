@@ -1,0 +1,32 @@
+# Arduino AVR Core — L1 核心捆绑包
+# 包含: Arduino.h API 头文件、内置库（SPI/Wire/EEPROM 等）、板型变体
+package: arduino-avr-core
+vendor: arduino
+arch: avr
+version: "1.8.6"
+type: core
+
+source:
+  url: "https://downloads.arduino.cc/packages/package_arduino_index.json"
+  archive: "arduino-1.8.6-avr.zip"
+  sha256: ""
+
+install:
+  root: "~/.firmforge/packages/arduino/avr/1.8.6/"
+  structure:
+    cores: "cores/arduino/"
+    libraries: "libraries/"
+    variants: "variants/"
+
+libraries:
+  - EEPROM
+  - HID
+  - SoftwareSerial
+  - SPI
+  - Wire
+  - Servo
+  - Stepper
+  - Ethernet
+  - Firmata
+  - LiquidCrystal
+  - SD

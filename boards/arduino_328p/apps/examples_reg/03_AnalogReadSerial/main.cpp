@@ -1,0 +1,2 @@
+#include <Arduino.h>
+void setup(){Serial.begin(9600);Serial.println("START");ADMUX=(1<<REFS0);ADCSRA=(1<<ADEN)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0);}void loop(){ADCSRA|=(1<<ADSC);while(ADCSRA&(1<<ADSC));int v=ADC;Serial.print("ADC=");Serial.println(v);delay(1000);}

@@ -1,0 +1,4405 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge/reference/avr/atmega2560/registers.json",
+  "platform": "arduino",
+  "mcu": "ATmega2560",
+  "mcu_series": "avr",
+  "version": "2.0.0",
+  "source": "ATmega2560 datasheet (Microchip DS40002591B)",
+  "description": "ATmega2560 complete register map — all 11 ports, 6 timers, 4 USARTs, SPI, TWI, ADC",
+  "license": "Fair use - datasheet reference data",
+  "register_groups": {
+    "gpio": {
+      "description": "General Purpose I/O — 11 ports (A-L, no port I)",
+      "registers": [
+        {
+          "name": "PINA",
+          "address": "0x20",
+          "size": 8,
+          "description": "Port A Input Pins"
+        },
+        {
+          "name": "DDRA",
+          "address": "0x21",
+          "size": 8,
+          "description": "Port A Data Direction"
+        },
+        {
+          "name": "PORTA",
+          "address": "0x22",
+          "size": 8,
+          "description": "Port A Data"
+        },
+        {
+          "name": "PINB",
+          "address": "0x23",
+          "size": 8,
+          "description": "Port B Input Pins"
+        },
+        {
+          "name": "DDRB",
+          "address": "0x24",
+          "size": 8,
+          "description": "Port B Data Direction"
+        },
+        {
+          "name": "PORTB",
+          "address": "0x25",
+          "size": 8,
+          "description": "Port B Data"
+        },
+        {
+          "name": "PINC",
+          "address": "0x26",
+          "size": 8,
+          "description": "Port C Input Pins"
+        },
+        {
+          "name": "DDRC",
+          "address": "0x27",
+          "size": 8,
+          "description": "Port C Data Direction"
+        },
+        {
+          "name": "PORTC",
+          "address": "0x28",
+          "size": 8,
+          "description": "Port C Data"
+        },
+        {
+          "name": "PIND",
+          "address": "0x29",
+          "size": 8,
+          "description": "Port D Input Pins"
+        },
+        {
+          "name": "DDRD",
+          "address": "0x2A",
+          "size": 8,
+          "description": "Port D Data Direction"
+        },
+        {
+          "name": "PORTD",
+          "address": "0x2B",
+          "size": 8,
+          "description": "Port D Data"
+        },
+        {
+          "name": "PINE",
+          "address": "0x2C",
+          "size": 8,
+          "description": "Port E Input Pins"
+        },
+        {
+          "name": "DDRE",
+          "address": "0x2D",
+          "size": 8,
+          "description": "Port E Data Direction"
+        },
+        {
+          "name": "PORTE",
+          "address": "0x2E",
+          "size": 8,
+          "description": "Port E Data"
+        },
+        {
+          "name": "PINF",
+          "address": "0x2F",
+          "size": 8,
+          "description": "Port F Input Pins"
+        },
+        {
+          "name": "DDRF",
+          "address": "0x30",
+          "size": 8,
+          "description": "Port F Data Direction"
+        },
+        {
+          "name": "PORTF",
+          "address": "0x31",
+          "size": 8,
+          "description": "Port F Data"
+        },
+        {
+          "name": "PING",
+          "address": "0x32",
+          "size": 8,
+          "description": "Port G Input Pins"
+        },
+        {
+          "name": "DDRG",
+          "address": "0x33",
+          "size": 8,
+          "description": "Port G Data Direction"
+        },
+        {
+          "name": "PORTG",
+          "address": "0x34",
+          "size": 8,
+          "description": "Port G Data"
+        },
+        {
+          "name": "PINH",
+          "address": "0x35",
+          "size": 8,
+          "description": "Port H Input Pins"
+        },
+        {
+          "name": "DDRH",
+          "address": "0x36",
+          "size": 8,
+          "description": "Port H Data Direction"
+        },
+        {
+          "name": "PORTH",
+          "address": "0x37",
+          "size": 8,
+          "description": "Port H Data"
+        },
+        {
+          "name": "PINJ",
+          "address": "0x3B",
+          "size": 8,
+          "description": "Port J Input Pins"
+        },
+        {
+          "name": "DDRJ",
+          "address": "0x3C",
+          "size": 8,
+          "description": "Port J Data Direction"
+        },
+        {
+          "name": "PORTJ",
+          "address": "0x3D",
+          "size": 8,
+          "description": "Port J Data"
+        },
+        {
+          "name": "PINK",
+          "address": "0x3E",
+          "size": 8,
+          "description": "Port K Input Pins"
+        },
+        {
+          "name": "DDRK",
+          "address": "0x3F",
+          "size": 8,
+          "description": "Port K Data Direction"
+        },
+        {
+          "name": "PORTK",
+          "address": "0x40",
+          "size": 8,
+          "description": "Port K Data"
+        },
+        {
+          "name": "PINL",
+          "address": "0x41",
+          "size": 8,
+          "description": "Port L Input Pins"
+        },
+        {
+          "name": "DDRL",
+          "address": "0x42",
+          "size": 8,
+          "description": "Port L Data Direction"
+        },
+        {
+          "name": "PORTL",
+          "address": "0x43",
+          "size": 8,
+          "description": "Port L Data"
+        }
+      ]
+    },
+    "tc0": {
+      "description": "Timer/Counter0 — 8-bit",
+      "registers": [
+        {
+          "name": "TCCR0A",
+          "address": "0x44",
+          "size": 8,
+          "description": "TC0 Control Register A",
+          "fields": [
+            {
+              "name": "WGM00",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 0"
+            },
+            {
+              "name": "WGM01",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 1"
+            },
+            {
+              "name": "COM0B0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 0"
+            },
+            {
+              "name": "COM0B1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 1"
+            },
+            {
+              "name": "COM0A0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 0"
+            },
+            {
+              "name": "COM0A1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 1"
+            }
+          ]
+        },
+        {
+          "name": "TCCR0B",
+          "address": "0x45",
+          "size": 8,
+          "description": "TC0 Control Register B",
+          "fields": [
+            {
+              "name": "CS00",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 0"
+            },
+            {
+              "name": "CS01",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 1"
+            },
+            {
+              "name": "CS02",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 2"
+            },
+            {
+              "name": "WGM02",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 2"
+            },
+            {
+              "name": "FOC0B",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare B"
+            },
+            {
+              "name": "FOC0A",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare A"
+            }
+          ]
+        },
+        {
+          "name": "TCNT0",
+          "address": "0x46",
+          "size": 8,
+          "description": "TC0 Counter"
+        },
+        {
+          "name": "OCR0A",
+          "address": "0x47",
+          "size": 8,
+          "description": "Output Compare A"
+        },
+        {
+          "name": "OCR0B",
+          "address": "0x48",
+          "size": 8,
+          "description": "Output Compare B"
+        }
+      ]
+    },
+    "tc1": {
+      "description": "Timer/Counter1 — 16-bit",
+      "registers": [
+        {
+          "name": "TCCR1A",
+          "address": "0x80",
+          "size": 8,
+          "description": "TC1 Control Register A",
+          "fields": [
+            {
+              "name": "WGM10",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 0"
+            },
+            {
+              "name": "WGM11",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 1"
+            },
+            {
+              "name": "COM1B0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 0"
+            },
+            {
+              "name": "COM1B1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 1"
+            },
+            {
+              "name": "COM1A0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 0"
+            },
+            {
+              "name": "COM1A1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 1"
+            }
+          ]
+        },
+        {
+          "name": "TCCR1B",
+          "address": "0x81",
+          "size": 8,
+          "description": "TC1 Control Register B",
+          "fields": [
+            {
+              "name": "CS10",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 0"
+            },
+            {
+              "name": "CS11",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 1"
+            },
+            {
+              "name": "CS12",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 2"
+            },
+            {
+              "name": "WGM12",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 2"
+            },
+            {
+              "name": "WGM13",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 3"
+            },
+            {
+              "name": "ICES1",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Edge Select"
+            },
+            {
+              "name": "ICNC1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Noise Canceler"
+            }
+          ]
+        },
+        {
+          "name": "TCCR1C",
+          "address": "0x82",
+          "size": 8,
+          "description": "TC1 Control Register C",
+          "fields": [
+            {
+              "name": "FOC1B",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare B"
+            },
+            {
+              "name": "FOC1A",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare A"
+            }
+          ]
+        },
+        {
+          "name": "TCNT1L",
+          "address": "0x84",
+          "size": 8,
+          "description": "TC1 Counter Low"
+        },
+        {
+          "name": "TCNT1H",
+          "address": "0x85",
+          "size": 8,
+          "description": "TC1 Counter High"
+        },
+        {
+          "name": "ICR1L",
+          "address": "0x86",
+          "size": 8,
+          "description": "Input Capture 1 Low"
+        },
+        {
+          "name": "ICR1H",
+          "address": "0x87",
+          "size": 8,
+          "description": "Input Capture 1 High"
+        },
+        {
+          "name": "OCR1AL",
+          "address": "0x88",
+          "size": 8,
+          "description": "Output Compare 1A Low"
+        },
+        {
+          "name": "OCR1AH",
+          "address": "0x89",
+          "size": 8,
+          "description": "Output Compare 1A High"
+        },
+        {
+          "name": "OCR1BL",
+          "address": "0x8A",
+          "size": 8,
+          "description": "Output Compare 1B Low"
+        },
+        {
+          "name": "OCR1BH",
+          "address": "0x8B",
+          "size": 8,
+          "description": "Output Compare 1B High"
+        },
+        {
+          "name": "OCR1CL",
+          "address": "0x8C",
+          "size": 8,
+          "description": "Output Compare 1C Low"
+        },
+        {
+          "name": "OCR1CH",
+          "address": "0x8D",
+          "size": 8,
+          "description": "Output Compare 1C High"
+        },
+        {
+          "name": "OCR1A",
+          "address": "0x88",
+          "size": 16,
+          "description": "TC1 Output Compare A (16-bit)"
+        },
+        {
+          "name": "OCR1B",
+          "address": "0x8A",
+          "size": 16,
+          "description": "TC1 Output Compare B (16-bit)"
+        },
+        {
+          "name": "OCR1C",
+          "address": "0x8C",
+          "size": 16,
+          "description": "TC1 Output Compare C (16-bit)"
+        },
+        {
+          "name": "TCNT1",
+          "address": "0x84",
+          "size": 16,
+          "description": "TC1 Counter (16-bit)"
+        },
+        {
+          "name": "ICR1",
+          "address": "0x86",
+          "size": 16,
+          "description": "TC1 Input Capture (16-bit)"
+        }
+      ]
+    },
+    "tc2": {
+      "description": "Timer/Counter2 — 8-bit async",
+      "registers": [
+        {
+          "name": "TCCR2A",
+          "address": "0xB0",
+          "size": 8,
+          "description": "TC2 Control Register A",
+          "fields": [
+            {
+              "name": "WGM20",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 0"
+            },
+            {
+              "name": "WGM21",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 1"
+            },
+            {
+              "name": "COM2B0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 0"
+            },
+            {
+              "name": "COM2B1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 1"
+            },
+            {
+              "name": "COM2A0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 0"
+            },
+            {
+              "name": "COM2A1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 1"
+            }
+          ]
+        },
+        {
+          "name": "TCCR2B",
+          "address": "0xB1",
+          "size": 8,
+          "description": "TC2 Control Register B",
+          "fields": [
+            {
+              "name": "CS20",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 0"
+            },
+            {
+              "name": "CS21",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 1"
+            },
+            {
+              "name": "CS22",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 2"
+            },
+            {
+              "name": "WGM22",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 2"
+            },
+            {
+              "name": "FOC2B",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare B"
+            },
+            {
+              "name": "FOC2A",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare A"
+            }
+          ]
+        },
+        {
+          "name": "TCNT2",
+          "address": "0xB2",
+          "size": 8,
+          "description": "TC2 Counter"
+        },
+        {
+          "name": "OCR2A",
+          "address": "0xB3",
+          "size": 8,
+          "description": "Output Compare A"
+        },
+        {
+          "name": "OCR2B",
+          "address": "0xB4",
+          "size": 8,
+          "description": "Output Compare B"
+        }
+      ]
+    },
+    "tc3": {
+      "description": "Timer/Counter3 — 16-bit",
+      "registers": [
+        {
+          "name": "TCCR3A",
+          "address": "0x90",
+          "size": 8,
+          "description": "TC3 Control Register A",
+          "fields": [
+            {
+              "name": "WGM30",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 0"
+            },
+            {
+              "name": "WGM31",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 1"
+            },
+            {
+              "name": "COM3B0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 0"
+            },
+            {
+              "name": "COM3B1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 1"
+            },
+            {
+              "name": "COM3A0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 0"
+            },
+            {
+              "name": "COM3A1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 1"
+            }
+          ]
+        },
+        {
+          "name": "TCCR3B",
+          "address": "0x91",
+          "size": 8,
+          "description": "TC3 Control Register B",
+          "fields": [
+            {
+              "name": "CS30",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 0"
+            },
+            {
+              "name": "CS31",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 1"
+            },
+            {
+              "name": "CS32",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 2"
+            },
+            {
+              "name": "WGM32",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 2"
+            },
+            {
+              "name": "WGM33",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 3"
+            },
+            {
+              "name": "ICES3",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Edge Select"
+            },
+            {
+              "name": "ICNC3",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Noise Canceler"
+            }
+          ]
+        },
+        {
+          "name": "TCCR3C",
+          "address": "0x92",
+          "size": 8,
+          "description": "TC3 Control Register C",
+          "fields": [
+            {
+              "name": "FOC3B",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare B"
+            },
+            {
+              "name": "FOC3A",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare A"
+            }
+          ]
+        },
+        {
+          "name": "TCNT3L",
+          "address": "0x94",
+          "size": 8,
+          "description": "TC3 Counter Low"
+        },
+        {
+          "name": "TCNT3H",
+          "address": "0x95",
+          "size": 8,
+          "description": "TC3 Counter High"
+        },
+        {
+          "name": "ICR3L",
+          "address": "0x96",
+          "size": 8,
+          "description": "Input Capture 3 Low"
+        },
+        {
+          "name": "ICR3H",
+          "address": "0x97",
+          "size": 8,
+          "description": "Input Capture 3 High"
+        },
+        {
+          "name": "OCR3AL",
+          "address": "0x98",
+          "size": 8,
+          "description": "Output Compare 3A Low"
+        },
+        {
+          "name": "OCR3AH",
+          "address": "0x99",
+          "size": 8,
+          "description": "Output Compare 3A High"
+        },
+        {
+          "name": "OCR3BL",
+          "address": "0x9A",
+          "size": 8,
+          "description": "Output Compare 3B Low"
+        },
+        {
+          "name": "OCR3BH",
+          "address": "0x9B",
+          "size": 8,
+          "description": "Output Compare 3B High"
+        },
+        {
+          "name": "OCR3CL",
+          "address": "0x9C",
+          "size": 8,
+          "description": "Output Compare 3C Low"
+        },
+        {
+          "name": "OCR3CH",
+          "address": "0x9D",
+          "size": 8,
+          "description": "Output Compare 3C High"
+        },
+        {
+          "name": "OCR3A",
+          "address": "0x98",
+          "size": 16,
+          "description": "TC3 Output Compare A (16-bit)"
+        },
+        {
+          "name": "OCR3B",
+          "address": "0x9A",
+          "size": 16,
+          "description": "TC3 Output Compare B (16-bit)"
+        },
+        {
+          "name": "OCR3C",
+          "address": "0x9C",
+          "size": 16,
+          "description": "TC3 Output Compare C (16-bit)"
+        },
+        {
+          "name": "TCNT3",
+          "address": "0x94",
+          "size": 16,
+          "description": "TC3 Counter (16-bit)"
+        },
+        {
+          "name": "ICR3",
+          "address": "0x96",
+          "size": 16,
+          "description": "TC3 Input Capture (16-bit)"
+        }
+      ]
+    },
+    "tc4": {
+      "description": "Timer/Counter4 — 16-bit",
+      "registers": [
+        {
+          "name": "TCCR4A",
+          "address": "0xA0",
+          "size": 8,
+          "description": "TC4 Control Register A",
+          "fields": [
+            {
+              "name": "WGM40",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 0"
+            },
+            {
+              "name": "WGM41",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 1"
+            },
+            {
+              "name": "COM4B0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 0"
+            },
+            {
+              "name": "COM4B1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 1"
+            },
+            {
+              "name": "COM4A0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 0"
+            },
+            {
+              "name": "COM4A1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 1"
+            }
+          ]
+        },
+        {
+          "name": "TCCR4B",
+          "address": "0xA1",
+          "size": 8,
+          "description": "TC4 Control Register B",
+          "fields": [
+            {
+              "name": "CS40",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 0"
+            },
+            {
+              "name": "CS41",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 1"
+            },
+            {
+              "name": "CS42",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 2"
+            },
+            {
+              "name": "WGM42",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 2"
+            },
+            {
+              "name": "WGM43",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 3"
+            },
+            {
+              "name": "ICES4",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Edge Select"
+            },
+            {
+              "name": "ICNC4",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Noise Canceler"
+            }
+          ]
+        },
+        {
+          "name": "TCCR4C",
+          "address": "0xA2",
+          "size": 8,
+          "description": "TC4 Control Register C",
+          "fields": [
+            {
+              "name": "FOC4B",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare B"
+            },
+            {
+              "name": "FOC4A",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare A"
+            }
+          ]
+        },
+        {
+          "name": "TCNT4L",
+          "address": "0xA4",
+          "size": 8,
+          "description": "TC4 Counter Low"
+        },
+        {
+          "name": "TCNT4H",
+          "address": "0xA5",
+          "size": 8,
+          "description": "TC4 Counter High"
+        },
+        {
+          "name": "ICR4L",
+          "address": "0xA6",
+          "size": 8,
+          "description": "Input Capture 4 Low"
+        },
+        {
+          "name": "ICR4H",
+          "address": "0xA7",
+          "size": 8,
+          "description": "Input Capture 4 High"
+        },
+        {
+          "name": "OCR4AL",
+          "address": "0xA8",
+          "size": 8,
+          "description": "Output Compare 4A Low"
+        },
+        {
+          "name": "OCR4AH",
+          "address": "0xA9",
+          "size": 8,
+          "description": "Output Compare 4A High"
+        },
+        {
+          "name": "OCR4BL",
+          "address": "0xAA",
+          "size": 8,
+          "description": "Output Compare 4B Low"
+        },
+        {
+          "name": "OCR4BH",
+          "address": "0xAB",
+          "size": 8,
+          "description": "Output Compare 4B High"
+        },
+        {
+          "name": "OCR4CL",
+          "address": "0xAC",
+          "size": 8,
+          "description": "Output Compare 4C Low"
+        },
+        {
+          "name": "OCR4CH",
+          "address": "0xAD",
+          "size": 8,
+          "description": "Output Compare 4C High"
+        },
+        {
+          "name": "OCR4A",
+          "address": "0xA8",
+          "size": 16,
+          "description": "TC4 Output Compare A (16-bit)"
+        },
+        {
+          "name": "OCR4B",
+          "address": "0xAA",
+          "size": 16,
+          "description": "TC4 Output Compare B (16-bit)"
+        },
+        {
+          "name": "OCR4C",
+          "address": "0xAC",
+          "size": 16,
+          "description": "TC4 Output Compare C (16-bit)"
+        },
+        {
+          "name": "TCNT4",
+          "address": "0xA4",
+          "size": 16,
+          "description": "TC4 Counter (16-bit)"
+        },
+        {
+          "name": "ICR4",
+          "address": "0xA6",
+          "size": 16,
+          "description": "TC4 Input Capture (16-bit)"
+        }
+      ]
+    },
+    "tc5": {
+      "description": "Timer/Counter5 — 16-bit (shared OCR3C/OCR5CL)",
+      "registers": [
+        {
+          "name": "TCCR5A",
+          "address": "0x120",
+          "size": 8,
+          "description": "TC5 Control Register A",
+          "fields": [
+            {
+              "name": "WGM50",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 0"
+            },
+            {
+              "name": "WGM51",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 1"
+            },
+            {
+              "name": "COM5B0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 0"
+            },
+            {
+              "name": "COM5B1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode B bit 1"
+            },
+            {
+              "name": "COM5A0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 0"
+            },
+            {
+              "name": "COM5A1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Compare Output Mode A bit 1"
+            }
+          ]
+        },
+        {
+          "name": "TCCR5B",
+          "address": "0x121",
+          "size": 8,
+          "description": "TC5 Control Register B",
+          "fields": [
+            {
+              "name": "CS50",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 0"
+            },
+            {
+              "name": "CS51",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 1"
+            },
+            {
+              "name": "CS52",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Select bit 2"
+            },
+            {
+              "name": "WGM52",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 2"
+            },
+            {
+              "name": "WGM53",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Waveform Generation Mode bit 3"
+            },
+            {
+              "name": "ICES5",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Edge Select"
+            },
+            {
+              "name": "ICNC5",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Noise Canceler"
+            }
+          ]
+        },
+        {
+          "name": "TCCR5C",
+          "address": "0x122",
+          "size": 8,
+          "description": "TC5 Control Register C",
+          "fields": [
+            {
+              "name": "FOC5B",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare B"
+            },
+            {
+              "name": "FOC5A",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Force Output Compare A"
+            }
+          ]
+        },
+        {
+          "name": "TCNT5L",
+          "address": "0x124",
+          "size": 8,
+          "description": "TC5 Counter Low"
+        },
+        {
+          "name": "TCNT5H",
+          "address": "0x125",
+          "size": 8,
+          "description": "TC5 Counter High"
+        },
+        {
+          "name": "ICR5L",
+          "address": "0x126",
+          "size": 8,
+          "description": "Input Capture 5 Low"
+        },
+        {
+          "name": "ICR5H",
+          "address": "0x127",
+          "size": 8,
+          "description": "Input Capture 5 High"
+        },
+        {
+          "name": "OCR5AL",
+          "address": "0x128",
+          "size": 8,
+          "description": "Output Compare 5A Low"
+        },
+        {
+          "name": "OCR5AH",
+          "address": "0x129",
+          "size": 8,
+          "description": "Output Compare 5A High"
+        },
+        {
+          "name": "OCR5BL",
+          "address": "0x12A",
+          "size": 8,
+          "description": "Output Compare 5B Low"
+        },
+        {
+          "name": "OCR5BH",
+          "address": "0x12B",
+          "size": 8,
+          "description": "Output Compare 5B High"
+        },
+        {
+          "name": "OCR5CL",
+          "address": "0x12C",
+          "size": 8,
+          "description": "Output Compare 5C Low"
+        },
+        {
+          "name": "OCR5CH",
+          "address": "0x12D",
+          "size": 8,
+          "description": "Output Compare 5C High"
+        },
+        {
+          "name": "OCR5A",
+          "address": "0x128",
+          "size": 16,
+          "description": "TC5 Output Compare A (16-bit)"
+        },
+        {
+          "name": "OCR5B",
+          "address": "0x12A",
+          "size": 16,
+          "description": "TC5 Output Compare B (16-bit)"
+        },
+        {
+          "name": "OCR5C",
+          "address": "0x12C",
+          "size": 16,
+          "description": "TC5 Output Compare C (16-bit)"
+        },
+        {
+          "name": "TCNT5",
+          "address": "0x124",
+          "size": 16,
+          "description": "TC5 Counter (16-bit)"
+        },
+        {
+          "name": "ICR5",
+          "address": "0x126",
+          "size": 16,
+          "description": "TC5 Input Capture (16-bit)"
+        }
+      ]
+    },
+    "timer_int": {
+      "description": "Timer Interrupt Mask & Flag Registers",
+      "registers": [
+        {
+          "name": "TIMSK0",
+          "address": "0x6E",
+          "size": 8,
+          "description": "TC0 Interrupt Mask",
+          "fields": [
+            {
+              "name": "TOIE0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0 Overflow Int Enable"
+            },
+            {
+              "name": "OCIE0A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0 Match A Int Enable"
+            },
+            {
+              "name": "OCIE0B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0 Match B Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "TIMSK1",
+          "address": "0x6F",
+          "size": 8,
+          "description": "TC1 Interrupt Mask",
+          "fields": [
+            {
+              "name": "TOIE1",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Overflow Int Enable"
+            },
+            {
+              "name": "OCIE1A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Match A Int Enable"
+            },
+            {
+              "name": "OCIE1B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Match B Int Enable"
+            },
+            {
+              "name": "OCIE1C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Match C Int Enable"
+            },
+            {
+              "name": "ICIE1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Input Capture Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "TIMSK2",
+          "address": "0x70",
+          "size": 8,
+          "description": "TC2 Interrupt Mask",
+          "fields": [
+            {
+              "name": "TOIE2",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Overflow Int Enable"
+            },
+            {
+              "name": "OCIE2A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Match A Int Enable"
+            },
+            {
+              "name": "OCIE2B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Match B Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "TIMSK3",
+          "address": "0x71",
+          "size": 8,
+          "description": "TC3 Interrupt Mask",
+          "fields": [
+            {
+              "name": "TOIE3",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Overflow Int Enable"
+            },
+            {
+              "name": "OCIE3A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Match A Int Enable"
+            },
+            {
+              "name": "OCIE3B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Match B Int Enable"
+            },
+            {
+              "name": "OCIE3C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Match C Int Enable"
+            },
+            {
+              "name": "ICIE3",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Input Capture Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "TIMSK4",
+          "address": "0x72",
+          "size": 8,
+          "description": "TC4 Interrupt Mask",
+          "fields": [
+            {
+              "name": "TOIE4",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Overflow Int Enable"
+            },
+            {
+              "name": "OCIE4A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Match A Int Enable"
+            },
+            {
+              "name": "OCIE4B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Match B Int Enable"
+            },
+            {
+              "name": "OCIE4C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Match C Int Enable"
+            },
+            {
+              "name": "ICIE4",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Input Capture Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "TIMSK5",
+          "address": "0x73",
+          "size": 8,
+          "description": "TC5 Interrupt Mask",
+          "fields": [
+            {
+              "name": "TOIE5",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Overflow Int Enable"
+            },
+            {
+              "name": "OCIE5A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Match A Int Enable"
+            },
+            {
+              "name": "OCIE5B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Match B Int Enable"
+            },
+            {
+              "name": "OCIE5C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Match C Int Enable"
+            },
+            {
+              "name": "ICIE5",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Input Capture Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "TIFR0",
+          "address": "0x35",
+          "size": 8,
+          "description": "TC0 Interrupt Flag",
+          "fields": [
+            {
+              "name": "TOV0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0 Overflow Flag"
+            },
+            {
+              "name": "OCF0A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0 Match A Flag"
+            },
+            {
+              "name": "OCF0B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0 Match B Flag"
+            }
+          ]
+        },
+        {
+          "name": "TIFR1",
+          "address": "0x36",
+          "size": 8,
+          "description": "TC1 Interrupt Flag",
+          "fields": [
+            {
+              "name": "TOV1",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Overflow Flag"
+            },
+            {
+              "name": "OCF1A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Match A Flag"
+            },
+            {
+              "name": "OCF1B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Match B Flag"
+            },
+            {
+              "name": "OCF1C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Match C Flag"
+            },
+            {
+              "name": "ICF1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1 Input Capture Flag"
+            }
+          ]
+        },
+        {
+          "name": "TIFR2",
+          "address": "0x37",
+          "size": 8,
+          "description": "TC2 Interrupt Flag",
+          "fields": [
+            {
+              "name": "TOV2",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Overflow Flag"
+            },
+            {
+              "name": "OCF2A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Match A Flag"
+            },
+            {
+              "name": "OCF2B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Match B Flag"
+            }
+          ]
+        },
+        {
+          "name": "TIFR3",
+          "address": "0x38",
+          "size": 8,
+          "description": "TC3 Interrupt Flag",
+          "fields": [
+            {
+              "name": "TOV3",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Overflow Flag"
+            },
+            {
+              "name": "OCF3A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Match A Flag"
+            },
+            {
+              "name": "OCF3B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Match B Flag"
+            },
+            {
+              "name": "OCF3C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Match C Flag"
+            },
+            {
+              "name": "ICF3",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3 Input Capture Flag"
+            }
+          ]
+        },
+        {
+          "name": "TIFR4",
+          "address": "0x39",
+          "size": 8,
+          "description": "TC4 Interrupt Flag",
+          "fields": [
+            {
+              "name": "TOV4",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Overflow Flag"
+            },
+            {
+              "name": "OCF4A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Match A Flag"
+            },
+            {
+              "name": "OCF4B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Match B Flag"
+            },
+            {
+              "name": "OCF4C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Match C Flag"
+            },
+            {
+              "name": "ICF4",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4 Input Capture Flag"
+            }
+          ]
+        },
+        {
+          "name": "TIFR5",
+          "address": "0x3A",
+          "size": 8,
+          "description": "TC5 Interrupt Flag",
+          "fields": [
+            {
+              "name": "TOV5",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Overflow Flag"
+            },
+            {
+              "name": "OCF5A",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Match A Flag"
+            },
+            {
+              "name": "OCF5B",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Match B Flag"
+            },
+            {
+              "name": "OCF5C",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Match C Flag"
+            },
+            {
+              "name": "ICF5",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5 Input Capture Flag"
+            }
+          ]
+        },
+        {
+          "name": "GTCCR",
+          "address": "0x43",
+          "size": 8,
+          "description": "General Timer Control",
+          "fields": [
+            {
+              "name": "PSRSYNC",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler Reset TC2"
+            },
+            {
+              "name": "PSRASY",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler Reset TC2 Async"
+            },
+            {
+              "name": "TSM",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Timer Synchronization Mode"
+            }
+          ]
+        },
+        {
+          "name": "ASSR",
+          "address": "0xB6",
+          "size": 8,
+          "description": "Asynchronous Status Register",
+          "fields": [
+            {
+              "name": "TCR2AUB",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Control A Update Busy"
+            },
+            {
+              "name": "TCR2BUB",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Control B Update Busy"
+            },
+            {
+              "name": "OCR2AUB",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Output Compare 2A Update Busy"
+            },
+            {
+              "name": "OCR2BUB",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Output Compare 2B Update Busy"
+            },
+            {
+              "name": "TCN2UB",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Update Busy"
+            },
+            {
+              "name": "AS2",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Asynchronous TC2"
+            },
+            {
+              "name": "EXCLK",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Enable External Clock"
+            }
+          ]
+        }
+      ]
+    },
+    "spi": {
+      "description": "Serial Peripheral Interface",
+      "registers": [
+        {
+          "name": "SPCR",
+          "address": "0x4C",
+          "size": 8,
+          "description": "SPI Control Register",
+          "fields": [
+            {
+              "name": "SPR0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Rate bit 0"
+            },
+            {
+              "name": "SPR1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Rate bit 1"
+            },
+            {
+              "name": "CPHA",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Phase"
+            },
+            {
+              "name": "CPOL",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Polarity"
+            },
+            {
+              "name": "MSTR",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Master/Slave Select"
+            },
+            {
+              "name": "DORD",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Order"
+            },
+            {
+              "name": "SPE",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "SPI Enable"
+            },
+            {
+              "name": "SPIE",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "SPI Interrupt Enable"
+            }
+          ]
+        },
+        {
+          "name": "SPSR",
+          "address": "0x4D",
+          "size": 8,
+          "description": "SPI Status Register",
+          "fields": [
+            {
+              "name": "SPI2X",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Double SPI Speed"
+            },
+            {
+              "name": "WCOL",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Write Collision Flag"
+            },
+            {
+              "name": "SPIF",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "SPI Interrupt Flag"
+            }
+          ]
+        },
+        {
+          "name": "SPDR",
+          "address": "0x4E",
+          "size": 8,
+          "description": "SPI Data Register"
+        }
+      ]
+    },
+    "twi": {
+      "description": "Two-Wire Interface",
+      "registers": [
+        {
+          "name": "TWBR",
+          "address": "0xB8",
+          "size": 8,
+          "description": "TWI Bit Rate"
+        },
+        {
+          "name": "TWSR",
+          "address": "0xB9",
+          "size": 8,
+          "description": "TWI Status Register",
+          "fields": [
+            {
+              "name": "TWPS0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 0"
+            },
+            {
+              "name": "TWPS1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 1"
+            },
+            {
+              "name": "TWS3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Status bit 3"
+            },
+            {
+              "name": "TWS4",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Status bit 4"
+            },
+            {
+              "name": "TWS5",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Status bit 5"
+            },
+            {
+              "name": "TWS6",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Status bit 6"
+            },
+            {
+              "name": "TWS7",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Status bit 7"
+            }
+          ]
+        },
+        {
+          "name": "TWAR",
+          "address": "0xBA",
+          "size": 8,
+          "description": "TWI Address",
+          "fields": [
+            {
+              "name": "TWGCE",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "General Call Recognition Enable"
+            }
+          ]
+        },
+        {
+          "name": "TWDR",
+          "address": "0xBB",
+          "size": 8,
+          "description": "TWI Data"
+        },
+        {
+          "name": "TWCR",
+          "address": "0xBC",
+          "size": 8,
+          "description": "TWI Control",
+          "fields": [
+            {
+              "name": "TWIE",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Enable"
+            },
+            {
+              "name": "TWEN",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "TWI Enable"
+            },
+            {
+              "name": "TWWC",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Write Collision Flag"
+            },
+            {
+              "name": "TWSTO",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "STOP Condition"
+            },
+            {
+              "name": "TWSTA",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "START Condition"
+            },
+            {
+              "name": "TWEA",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Enable Acknowledge"
+            },
+            {
+              "name": "TWINT",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Flag"
+            }
+          ]
+        },
+        {
+          "name": "TWAMR",
+          "address": "0xBD",
+          "size": 8,
+          "description": "TWI Address Mask"
+        }
+      ]
+    },
+    "usart": {
+      "description": "USART0-3 — 4 UARTs on Mega2560",
+      "registers": [
+        {
+          "name": "UDR0",
+          "address": "0xC6",
+          "size": 8,
+          "description": "USART0 I/O Data"
+        },
+        {
+          "name": "UCSR0A",
+          "address": "0xC0",
+          "size": 8,
+          "description": "USART0 Control & Status A",
+          "fields": [
+            {
+              "name": "MPCM0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Multi-processor Communication Mode"
+            },
+            {
+              "name": "U2X0",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Double Speed"
+            },
+            {
+              "name": "UPE0",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Error"
+            },
+            {
+              "name": "DOR0",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data OverRun"
+            },
+            {
+              "name": "FE0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Frame Error"
+            },
+            {
+              "name": "UDRE0",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty"
+            },
+            {
+              "name": "TXC0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Complete"
+            },
+            {
+              "name": "RXC0",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Complete"
+            }
+          ]
+        },
+        {
+          "name": "UCSR0B",
+          "address": "0xC1",
+          "size": 8,
+          "description": "USART0 Control & Status B",
+          "fields": [
+            {
+              "name": "TXB08",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Data Bit 8"
+            },
+            {
+              "name": "RXB08",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Data Bit 8"
+            },
+            {
+              "name": "UCSZ02",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 2"
+            },
+            {
+              "name": "TXEN0",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmitter Enable"
+            },
+            {
+              "name": "RXEN0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receiver Enable"
+            },
+            {
+              "name": "UDRIE0",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty Int Enable"
+            },
+            {
+              "name": "TXCIE0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "TX Complete Int Enable"
+            },
+            {
+              "name": "RXCIE0",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "RX Complete Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "UCSR0C",
+          "address": "0xC2",
+          "size": 8,
+          "description": "USART0 Control & Status C",
+          "fields": [
+            {
+              "name": "UCPOL0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Polarity"
+            },
+            {
+              "name": "UCSZ00",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 0"
+            },
+            {
+              "name": "UCSZ01",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 1"
+            },
+            {
+              "name": "USBS0",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Stop Bit Select"
+            },
+            {
+              "name": "UPM00",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 0"
+            },
+            {
+              "name": "UPM01",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 1"
+            },
+            {
+              "name": "UMSEL00",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 0"
+            },
+            {
+              "name": "UMSEL01",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 1"
+            }
+          ]
+        },
+        {
+          "name": "UBRR0H",
+          "address": "0xC5",
+          "size": 8,
+          "description": "USART0 Baud Rate High"
+        },
+        {
+          "name": "UBRR0L",
+          "address": "0xC4",
+          "size": 8,
+          "description": "USART0 Baud Rate Low"
+        },
+        {
+          "name": "UDR1",
+          "address": "0xCE",
+          "size": 8,
+          "description": "USART1 I/O Data"
+        },
+        {
+          "name": "UCSR1A",
+          "address": "0xC8",
+          "size": 8,
+          "description": "USART1 Control & Status A",
+          "fields": [
+            {
+              "name": "MPCM1",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Multi-processor Communication Mode"
+            },
+            {
+              "name": "U2X1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Double Speed"
+            },
+            {
+              "name": "UPE1",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Error"
+            },
+            {
+              "name": "DOR1",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data OverRun"
+            },
+            {
+              "name": "FE1",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Frame Error"
+            },
+            {
+              "name": "UDRE1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty"
+            },
+            {
+              "name": "TXC1",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Complete"
+            },
+            {
+              "name": "RXC1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Complete"
+            }
+          ]
+        },
+        {
+          "name": "UCSR1B",
+          "address": "0xC9",
+          "size": 8,
+          "description": "USART1 Control & Status B",
+          "fields": [
+            {
+              "name": "TXB18",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Data Bit 8"
+            },
+            {
+              "name": "RXB18",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Data Bit 8"
+            },
+            {
+              "name": "UCSZ12",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 2"
+            },
+            {
+              "name": "TXEN1",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmitter Enable"
+            },
+            {
+              "name": "RXEN1",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receiver Enable"
+            },
+            {
+              "name": "UDRIE1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty Int Enable"
+            },
+            {
+              "name": "TXCIE1",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "TX Complete Int Enable"
+            },
+            {
+              "name": "RXCIE1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "RX Complete Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "UCSR1C",
+          "address": "0xCA",
+          "size": 8,
+          "description": "USART1 Control & Status C",
+          "fields": [
+            {
+              "name": "UCPOL1",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Polarity"
+            },
+            {
+              "name": "UCSZ10",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 0"
+            },
+            {
+              "name": "UCSZ11",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 1"
+            },
+            {
+              "name": "USBS1",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Stop Bit Select"
+            },
+            {
+              "name": "UPM10",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 0"
+            },
+            {
+              "name": "UPM11",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 1"
+            },
+            {
+              "name": "UMSEL10",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 0"
+            },
+            {
+              "name": "UMSEL11",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 1"
+            }
+          ]
+        },
+        {
+          "name": "UBRR1H",
+          "address": "0xCD",
+          "size": 8,
+          "description": "USART1 Baud Rate High"
+        },
+        {
+          "name": "UBRR1L",
+          "address": "0xCC",
+          "size": 8,
+          "description": "USART1 Baud Rate Low"
+        },
+        {
+          "name": "UDR2",
+          "address": "0xD6",
+          "size": 8,
+          "description": "USART2 I/O Data"
+        },
+        {
+          "name": "UCSR2A",
+          "address": "0xD0",
+          "size": 8,
+          "description": "USART2 Control & Status A",
+          "fields": [
+            {
+              "name": "MPCM2",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Multi-processor Communication Mode"
+            },
+            {
+              "name": "U2X2",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Double Speed"
+            },
+            {
+              "name": "UPE2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Error"
+            },
+            {
+              "name": "DOR2",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data OverRun"
+            },
+            {
+              "name": "FE2",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Frame Error"
+            },
+            {
+              "name": "UDRE2",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty"
+            },
+            {
+              "name": "TXC2",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Complete"
+            },
+            {
+              "name": "RXC2",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Complete"
+            }
+          ]
+        },
+        {
+          "name": "UCSR2B",
+          "address": "0xD1",
+          "size": 8,
+          "description": "USART2 Control & Status B",
+          "fields": [
+            {
+              "name": "TXB28",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Data Bit 8"
+            },
+            {
+              "name": "RXB28",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Data Bit 8"
+            },
+            {
+              "name": "UCSZ22",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 2"
+            },
+            {
+              "name": "TXEN2",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmitter Enable"
+            },
+            {
+              "name": "RXEN2",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receiver Enable"
+            },
+            {
+              "name": "UDRIE2",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty Int Enable"
+            },
+            {
+              "name": "TXCIE2",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "TX Complete Int Enable"
+            },
+            {
+              "name": "RXCIE2",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "RX Complete Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "UCSR2C",
+          "address": "0xD2",
+          "size": 8,
+          "description": "USART2 Control & Status C",
+          "fields": [
+            {
+              "name": "UCPOL2",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Polarity"
+            },
+            {
+              "name": "UCSZ20",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 0"
+            },
+            {
+              "name": "UCSZ21",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 1"
+            },
+            {
+              "name": "USBS2",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Stop Bit Select"
+            },
+            {
+              "name": "UPM20",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 0"
+            },
+            {
+              "name": "UPM21",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 1"
+            },
+            {
+              "name": "UMSEL20",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 0"
+            },
+            {
+              "name": "UMSEL21",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 1"
+            }
+          ]
+        },
+        {
+          "name": "UBRR2H",
+          "address": "0xD5",
+          "size": 8,
+          "description": "USART2 Baud Rate High"
+        },
+        {
+          "name": "UBRR2L",
+          "address": "0xD4",
+          "size": 8,
+          "description": "USART2 Baud Rate Low"
+        },
+        {
+          "name": "UDR3",
+          "address": "0x136",
+          "size": 8,
+          "description": "USART3 I/O Data"
+        },
+        {
+          "name": "UCSR3A",
+          "address": "0x130",
+          "size": 8,
+          "description": "USART3 Control & Status A",
+          "fields": [
+            {
+              "name": "MPCM3",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Multi-processor Communication Mode"
+            },
+            {
+              "name": "U2X3",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Double Speed"
+            },
+            {
+              "name": "UPE3",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Error"
+            },
+            {
+              "name": "DOR3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data OverRun"
+            },
+            {
+              "name": "FE3",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Frame Error"
+            },
+            {
+              "name": "UDRE3",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty"
+            },
+            {
+              "name": "TXC3",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Complete"
+            },
+            {
+              "name": "RXC3",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Complete"
+            }
+          ]
+        },
+        {
+          "name": "UCSR3B",
+          "address": "0x131",
+          "size": 8,
+          "description": "USART3 Control & Status B",
+          "fields": [
+            {
+              "name": "TXB38",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmit Data Bit 8"
+            },
+            {
+              "name": "RXB38",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receive Data Bit 8"
+            },
+            {
+              "name": "UCSZ32",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 2"
+            },
+            {
+              "name": "TXEN3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Transmitter Enable"
+            },
+            {
+              "name": "RXEN3",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Receiver Enable"
+            },
+            {
+              "name": "UDRIE3",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Data Register Empty Int Enable"
+            },
+            {
+              "name": "TXCIE3",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "TX Complete Int Enable"
+            },
+            {
+              "name": "RXCIE3",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "RX Complete Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "UCSR3C",
+          "address": "0x132",
+          "size": 8,
+          "description": "USART3 Control & Status C",
+          "fields": [
+            {
+              "name": "UCPOL3",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Clock Polarity"
+            },
+            {
+              "name": "UCSZ30",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 0"
+            },
+            {
+              "name": "UCSZ31",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Character Size bit 1"
+            },
+            {
+              "name": "USBS3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Stop Bit Select"
+            },
+            {
+              "name": "UPM30",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 0"
+            },
+            {
+              "name": "UPM31",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Parity Mode bit 1"
+            },
+            {
+              "name": "UMSEL30",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 0"
+            },
+            {
+              "name": "UMSEL31",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART Mode Select bit 1"
+            }
+          ]
+        },
+        {
+          "name": "UBRR3H",
+          "address": "0x135",
+          "size": 8,
+          "description": "USART3 Baud Rate High"
+        },
+        {
+          "name": "UBRR3L",
+          "address": "0x134",
+          "size": 8,
+          "description": "USART3 Baud Rate Low"
+        },
+        {
+          "name": "UBRR0",
+          "address": "0xC4",
+          "size": 16,
+          "description": "USART0 Baud Rate (16-bit alias)",
+          "source": "avr-gcc <iomxx0_1.h>"
+        },
+        {
+          "name": "UBRR1",
+          "address": "0xCC",
+          "size": 16,
+          "description": "USART1 Baud Rate (16-bit alias)",
+          "source": "avr-gcc <iomxx0_1.h>"
+        }
+      ]
+    },
+    "adc": {
+      "description": "ADC — 10-bit, 16-ch (Mega2560)",
+      "registers": [
+        {
+          "name": "ADMUX",
+          "address": "0x7C",
+          "size": 8,
+          "description": "ADC Multiplexer Selection",
+          "fields": [
+            {
+              "name": "MUX0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Channel Select bit 0"
+            },
+            {
+              "name": "MUX1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Channel Select bit 1"
+            },
+            {
+              "name": "MUX2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Channel Select bit 2"
+            },
+            {
+              "name": "MUX3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Channel Select bit 3"
+            },
+            {
+              "name": "MUX4",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Channel Select bit 4"
+            },
+            {
+              "name": "ADLAR",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Left Adjust Result"
+            },
+            {
+              "name": "REFS0",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Reference bit 0"
+            },
+            {
+              "name": "REFS1",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Reference bit 1"
+            }
+          ]
+        },
+        {
+          "name": "ADCSRA",
+          "address": "0x7A",
+          "size": 8,
+          "description": "ADC Control & Status A",
+          "fields": [
+            {
+              "name": "ADPS0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 0"
+            },
+            {
+              "name": "ADPS1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 1"
+            },
+            {
+              "name": "ADPS2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 2"
+            },
+            {
+              "name": "ADIE",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Enable"
+            },
+            {
+              "name": "ADIF",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Flag"
+            },
+            {
+              "name": "ADATE",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Auto Trigger Enable"
+            },
+            {
+              "name": "ADSC",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Start Conversion"
+            },
+            {
+              "name": "ADEN",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC Enable"
+            }
+          ]
+        },
+        {
+          "name": "ADCSRB",
+          "address": "0x7B",
+          "size": 8,
+          "description": "ADC Control & Status B",
+          "fields": [
+            {
+              "name": "ADTS0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Trigger Source bit 0"
+            },
+            {
+              "name": "ADTS1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Trigger Source bit 1"
+            },
+            {
+              "name": "ADTS2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Trigger Source bit 2"
+            },
+            {
+              "name": "MUX5",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Channel Select bit 5"
+            },
+            {
+              "name": "ACME",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Analog Comp Mux Enable"
+            }
+          ]
+        },
+        {
+          "name": "ADCL",
+          "address": "0x78",
+          "size": 8,
+          "description": "ADC Data Low"
+        },
+        {
+          "name": "ADCH",
+          "address": "0x79",
+          "size": 8,
+          "description": "ADC Data High"
+        },
+        {
+          "name": "DIDR0",
+          "address": "0x7E",
+          "size": 8,
+          "description": "Digital Input Disable 0",
+          "fields": [
+            {
+              "name": "ADC0D",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC0 Input Disable"
+            },
+            {
+              "name": "ADC1D",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC1 Input Disable"
+            },
+            {
+              "name": "ADC2D",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC2 Input Disable"
+            },
+            {
+              "name": "ADC3D",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC3 Input Disable"
+            },
+            {
+              "name": "ADC4D",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC4 Input Disable"
+            },
+            {
+              "name": "ADC5D",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC5 Input Disable"
+            },
+            {
+              "name": "ADC6D",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC6 Input Disable"
+            },
+            {
+              "name": "ADC7D",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC7 Input Disable"
+            }
+          ]
+        },
+        {
+          "name": "DIDR2",
+          "address": "0x7D",
+          "size": 8,
+          "description": "Digital Input Disable 2",
+          "fields": [
+            {
+              "name": "ADC8D",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC8 Input Disable"
+            },
+            {
+              "name": "ADC9D",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC9 Input Disable"
+            },
+            {
+              "name": "ADC10D",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC10 Input Disable"
+            },
+            {
+              "name": "ADC11D",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC11 Input Disable"
+            },
+            {
+              "name": "ADC12D",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC12 Input Disable"
+            },
+            {
+              "name": "ADC13D",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC13 Input Disable"
+            },
+            {
+              "name": "ADC14D",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC14 Input Disable"
+            },
+            {
+              "name": "ADC15D",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC15 Input Disable"
+            }
+          ]
+        },
+        {
+          "name": "ADC",
+          "address": "0x78",
+          "size": 16,
+          "description": "ADC Data Register (16-bit alias)",
+          "source": "avr-gcc <iomxx0_1.h>"
+        },
+        {
+          "name": "ADCW",
+          "address": "0x78",
+          "size": 16,
+          "description": "ADC Data Register (16-bit alias, same as ADC)",
+          "source": "avr-gcc <iomxx0_1.h>"
+        }
+      ]
+    },
+    "analog_comp": {
+      "description": "Analog Comparator",
+      "registers": [
+        {
+          "name": "ACSR",
+          "address": "0x50",
+          "size": 8,
+          "description": "Analog Comparator Control & Status",
+          "fields": [
+            {
+              "name": "ACIS0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Mode bit 0"
+            },
+            {
+              "name": "ACIS1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Mode bit 1"
+            },
+            {
+              "name": "ACIC",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Input Capture Enable"
+            },
+            {
+              "name": "ACIE",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Enable"
+            },
+            {
+              "name": "ACI",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Flag"
+            },
+            {
+              "name": "ACO",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Output"
+            },
+            {
+              "name": "ACBG",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Bandgap Select"
+            },
+            {
+              "name": "ACD",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Disable"
+            }
+          ]
+        },
+        {
+          "name": "DIDR1",
+          "address": "0x7F",
+          "size": 8,
+          "description": "Digital Input Disable 1",
+          "fields": [
+            {
+              "name": "AIN0D",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "AIN0 Input Disable"
+            },
+            {
+              "name": "AIN1D",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "AIN1 Input Disable"
+            }
+          ]
+        }
+      ]
+    },
+    "eeprom": {
+      "description": "EEPROM Control — 4KB",
+      "registers": [
+        {
+          "name": "EEARL",
+          "address": "0x41",
+          "size": 8,
+          "description": "EEPROM Address Low"
+        },
+        {
+          "name": "EEARH",
+          "address": "0x42",
+          "size": 8,
+          "description": "EEPROM Address High"
+        },
+        {
+          "name": "EEDR",
+          "address": "0x40",
+          "size": 8,
+          "description": "EEPROM Data"
+        },
+        {
+          "name": "EECR",
+          "address": "0x3F",
+          "size": 8,
+          "description": "EEPROM Control",
+          "fields": [
+            {
+              "name": "EERE",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Read Enable"
+            },
+            {
+              "name": "EEPE",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Program Enable"
+            },
+            {
+              "name": "EEMPE",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Master Program Enable"
+            },
+            {
+              "name": "EERIE",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Ready Interrupt Enable"
+            },
+            {
+              "name": "EEPM0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Programming Mode bit 0"
+            },
+            {
+              "name": "EEPM1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Programming Mode bit 1"
+            }
+          ]
+        },
+        {
+          "name": "EEAR",
+          "address": "0x21",
+          "size": 16,
+          "description": "EEPROM Address Register (16-bit alias)",
+          "source": "avr-gcc <iomxx0_1.h>"
+        }
+      ]
+    },
+    "watchdog": {
+      "description": "Watchdog Timer",
+      "registers": [
+        {
+          "name": "WDTCSR",
+          "address": "0x60",
+          "size": 8,
+          "description": "Watchdog Timer Control",
+          "fields": [
+            {
+              "name": "WDP0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 0"
+            },
+            {
+              "name": "WDP1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 1"
+            },
+            {
+              "name": "WDP2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 2"
+            },
+            {
+              "name": "WDE",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Watchdog Enable"
+            },
+            {
+              "name": "WDCE",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Change Enable"
+            },
+            {
+              "name": "WDP3",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 3"
+            },
+            {
+              "name": "WDIE",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Enable"
+            },
+            {
+              "name": "WDIF",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Interrupt Flag"
+            }
+          ]
+        }
+      ]
+    },
+    "system": {
+      "description": "System Control & Status (Mega2560 extended)",
+      "registers": [
+        {
+          "name": "SREG",
+          "address": "0x5F",
+          "size": 8,
+          "description": "Status Register",
+          "fields": [
+            {
+              "name": "C",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Carry"
+            },
+            {
+              "name": "Z",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Zero"
+            },
+            {
+              "name": "N",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Negative"
+            },
+            {
+              "name": "V",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Overflow"
+            },
+            {
+              "name": "S",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Sign"
+            },
+            {
+              "name": "H",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Half Carry"
+            },
+            {
+              "name": "T",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Bit Copy"
+            },
+            {
+              "name": "I",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Global Int Enable"
+            }
+          ]
+        },
+        {
+          "name": "SPL",
+          "address": "0x5D",
+          "size": 8,
+          "description": "Stack Pointer Low"
+        },
+        {
+          "name": "SPH",
+          "address": "0x5E",
+          "size": 8,
+          "description": "Stack Pointer High"
+        },
+        {
+          "name": "MCUCR",
+          "address": "0x55",
+          "size": 8,
+          "description": "MCU Control",
+          "fields": [
+            {
+              "name": "IVCE",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Int Vector Change Enable"
+            },
+            {
+              "name": "IVSEL",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Int Vector Select"
+            },
+            {
+              "name": "PUD",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pull-up Disable"
+            },
+            {
+              "name": "JTD",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "JTAG Disable"
+            }
+          ]
+        },
+        {
+          "name": "MCUSR",
+          "address": "0x54",
+          "size": 8,
+          "description": "MCU Status",
+          "fields": [
+            {
+              "name": "PORF",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Power-on Reset Flag"
+            },
+            {
+              "name": "EXTRF",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "External Reset Flag"
+            },
+            {
+              "name": "BORF",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Brown-out Reset Flag"
+            },
+            {
+              "name": "WDRF",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Watchdog Reset Flag"
+            },
+            {
+              "name": "JTRF",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "JTAG Reset Flag"
+            }
+          ]
+        },
+        {
+          "name": "XMCRA",
+          "address": "0x74",
+          "size": 8,
+          "description": "External Memory Control A",
+          "fields": [
+            {
+              "name": "SRW00",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Wait State bit 0"
+            },
+            {
+              "name": "SRW01",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Wait State bit 1"
+            },
+            {
+              "name": "SRW10",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Wait State Upper bit 0"
+            },
+            {
+              "name": "SRW11",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Wait State Upper bit 1"
+            },
+            {
+              "name": "SRL0",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "Limit Upper Address"
+            },
+            {
+              "name": "SRL1",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "Limit Upper Address"
+            },
+            {
+              "name": "SRL2",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "Limit Upper Address"
+            },
+            {
+              "name": "SRE",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "External SRAM Enable"
+            }
+          ]
+        },
+        {
+          "name": "XMCRB",
+          "address": "0x75",
+          "size": 8,
+          "description": "External Memory Control B",
+          "fields": [
+            {
+              "name": "XMM0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "External Memory Mode bit 0"
+            },
+            {
+              "name": "XMM1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "External Memory Mode bit 1"
+            },
+            {
+              "name": "XMM2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "External Memory Mode bit 2"
+            },
+            {
+              "name": "XMBK",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Bus Keeper Enable"
+            }
+          ]
+        },
+        {
+          "name": "SMCR",
+          "address": "0x53",
+          "size": 8,
+          "description": "Sleep Mode Control",
+          "fields": [
+            {
+              "name": "SE",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Sleep Enable"
+            },
+            {
+              "name": "SM0",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Sleep Mode bit 0"
+            },
+            {
+              "name": "SM1",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Sleep Mode bit 1"
+            },
+            {
+              "name": "SM2",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Sleep Mode bit 2"
+            }
+          ]
+        },
+        {
+          "name": "PRR0",
+          "address": "0x64",
+          "size": 8,
+          "description": "Power Reduction 0",
+          "fields": [
+            {
+              "name": "PRADC",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "ADC"
+            },
+            {
+              "name": "PRUSART0",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART0"
+            },
+            {
+              "name": "PRSPI",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "SPI"
+            },
+            {
+              "name": "PRTIM1",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC1"
+            },
+            {
+              "name": "PRTIM0",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC0"
+            },
+            {
+              "name": "PRTIM2",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2"
+            },
+            {
+              "name": "PRTWI",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "TWI"
+            }
+          ]
+        },
+        {
+          "name": "PRR1",
+          "address": "0x65",
+          "size": 8,
+          "description": "Power Reduction 1",
+          "fields": [
+            {
+              "name": "PRUSART1",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART1"
+            },
+            {
+              "name": "PRUSART2",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART2"
+            },
+            {
+              "name": "PRUSART3",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "USART3"
+            },
+            {
+              "name": "PRTIM3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC3"
+            },
+            {
+              "name": "PRTIM4",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC4"
+            },
+            {
+              "name": "PRTIM5",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC5"
+            }
+          ]
+        },
+        {
+          "name": "OSCCAL",
+          "address": "0x66",
+          "size": 8,
+          "description": "Oscillator Calibration"
+        },
+        {
+          "name": "CLKPR",
+          "address": "0x61",
+          "size": 8,
+          "description": "Clock Prescale",
+          "fields": [
+            {
+              "name": "CLKPS0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 0"
+            },
+            {
+              "name": "CLKPS1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 1"
+            },
+            {
+              "name": "CLKPS2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 2"
+            },
+            {
+              "name": "CLKPS3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "Prescaler bit 3"
+            },
+            {
+              "name": "CLKPCE",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "Change Enable"
+            }
+          ]
+        }
+      ]
+    },
+    "interrupt": {
+      "description": "External Interrupts — INT0-7 + Pin Change",
+      "registers": [
+        {
+          "name": "EICRA",
+          "address": "0x69",
+          "size": 8,
+          "description": "External Interrupt Control A",
+          "fields": [
+            {
+              "name": "ISC00",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT0 Sense bit 0"
+            },
+            {
+              "name": "ISC01",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT0 Sense bit 1"
+            },
+            {
+              "name": "ISC10",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT1 Sense bit 0"
+            },
+            {
+              "name": "ISC11",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT1 Sense bit 1"
+            },
+            {
+              "name": "ISC20",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT2 Sense bit 0"
+            },
+            {
+              "name": "ISC21",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT2 Sense bit 1"
+            },
+            {
+              "name": "ISC30",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT3 Sense bit 0"
+            },
+            {
+              "name": "ISC31",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT3 Sense bit 1"
+            }
+          ]
+        },
+        {
+          "name": "EICRB",
+          "address": "0x6A",
+          "size": 8,
+          "description": "External Interrupt Control B",
+          "fields": [
+            {
+              "name": "ISC40",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT4 Sense bit 0"
+            },
+            {
+              "name": "ISC41",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT4 Sense bit 1"
+            },
+            {
+              "name": "ISC50",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT5 Sense bit 0"
+            },
+            {
+              "name": "ISC51",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT5 Sense bit 1"
+            },
+            {
+              "name": "ISC60",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT6 Sense bit 0"
+            },
+            {
+              "name": "ISC61",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT6 Sense bit 1"
+            },
+            {
+              "name": "ISC70",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT7 Sense bit 0"
+            },
+            {
+              "name": "ISC71",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT7 Sense bit 1"
+            }
+          ]
+        },
+        {
+          "name": "EIMSK",
+          "address": "0x3D",
+          "size": 8,
+          "description": "External Interrupt Mask",
+          "fields": [
+            {
+              "name": "INT0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT0 Enable"
+            },
+            {
+              "name": "INT1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT1 Enable"
+            },
+            {
+              "name": "INT2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT2 Enable"
+            },
+            {
+              "name": "INT3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT3 Enable"
+            },
+            {
+              "name": "INT4",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT4 Enable"
+            },
+            {
+              "name": "INT5",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT5 Enable"
+            },
+            {
+              "name": "INT6",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT6 Enable"
+            },
+            {
+              "name": "INT7",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT7 Enable"
+            }
+          ]
+        },
+        {
+          "name": "EIFR",
+          "address": "0x3C",
+          "size": 8,
+          "description": "External Interrupt Flag",
+          "fields": [
+            {
+              "name": "INTF0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT0 Flag"
+            },
+            {
+              "name": "INTF1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT1 Flag"
+            },
+            {
+              "name": "INTF2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT2 Flag"
+            },
+            {
+              "name": "INTF3",
+              "bit": 3,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT3 Flag"
+            },
+            {
+              "name": "INTF4",
+              "bit": 4,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT4 Flag"
+            },
+            {
+              "name": "INTF5",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT5 Flag"
+            },
+            {
+              "name": "INTF6",
+              "bit": 6,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT6 Flag"
+            },
+            {
+              "name": "INTF7",
+              "bit": 7,
+              "access": "rw",
+              "reset": 0,
+              "description": "INT7 Flag"
+            }
+          ]
+        },
+        {
+          "name": "PCICR",
+          "address": "0x68",
+          "size": 8,
+          "description": "Pin Change Interrupt Control",
+          "fields": [
+            {
+              "name": "PCIE0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pin Change Int Enable 0"
+            },
+            {
+              "name": "PCIE1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pin Change Int Enable 1"
+            },
+            {
+              "name": "PCIE2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pin Change Int Enable 2"
+            }
+          ]
+        },
+        {
+          "name": "PCIFR",
+          "address": "0x3B",
+          "size": 8,
+          "description": "Pin Change Interrupt Flag",
+          "fields": [
+            {
+              "name": "PCIF0",
+              "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pin Change Int Flag 0"
+            },
+            {
+              "name": "PCIF1",
+              "bit": 1,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pin Change Int Flag 1"
+            },
+            {
+              "name": "PCIF2",
+              "bit": 2,
+              "access": "rw",
+              "reset": 0,
+              "description": "Pin Change Int Flag 2"
+            }
+          ]
+        },
+        {
+          "name": "PCMSK0",
+          "address": "0x6B",
+          "size": 8,
+          "description": "Pin Change Mask 0"
+        },
+        {
+          "name": "PCMSK1",
+          "address": "0x6C",
+          "size": 8,
+          "description": "Pin Change Mask 1"
+        },
+        {
+          "name": "PCMSK2",
+          "address": "0x6D",
+          "size": 8,
+          "description": "Pin Change Mask 2"
+        }
+      ]
+    }
+  },
+  "_schema_rules": {
+    "register_ordering": "datasheet registers first (sorted by address), then GCC aliases",
+    "datasheet_register": {
+      "size": "8 (unless noted in datasheet)",
+      "fields": "bit-field definitions with access/reset/description",
+      "source": "implied from top-level 'source' field"
+    },
+    "gcc_alias": {
+      "size": "16",
+      "fields": "not present (alias has no bit fields)",
+      "source": "avr-gcc <iomxx0_1.h> or <iom328p.h>",
+      "description_format": "'Register Name (16-bit alias)'"
+    },
+    "address_format": "0xHH — memory-mapped (I/O addr + 0x20)",
+    "field_format": {
+      "name": "bit-field name (uppercase)",
+      "bit": "bit position 0-7",
+      "access": "r / rw",
+      "reset": "power-on reset value (0 or 1)",
+      "description": "English description from datasheet"
+    }
+  }
+}

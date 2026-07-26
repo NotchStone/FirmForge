@@ -1,0 +1,239 @@
+{
+  "board": "arduino_uno",
+  "chip": "ATmega328P",
+  "total_pins": 20,
+  "pins": {
+    "0": {
+      "arduino_pin": 0,
+      "port": "PORTD",
+      "bit": 0,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {
+        "serial": "RX"
+      }
+    },
+    "1": {
+      "arduino_pin": 1,
+      "port": "PORTD",
+      "bit": 1,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {
+        "serial": "TX"
+      }
+    },
+    "2": {
+      "arduino_pin": 2,
+      "port": "PORTD",
+      "bit": 2,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {
+        "interrupt": "INT0"
+      }
+    },
+    "3": {
+      "arduino_pin": 3,
+      "port": "PORTD",
+      "bit": 3,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {
+        "interrupt": "INT1",
+        "pwm": true
+      }
+    },
+    "4": {
+      "arduino_pin": 4,
+      "port": "PORTD",
+      "bit": 4,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {}
+    },
+    "5": {
+      "arduino_pin": 5,
+      "port": "PORTD",
+      "bit": 5,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {
+        "pwm": true
+      }
+    },
+    "6": {
+      "arduino_pin": 6,
+      "port": "PORTD",
+      "bit": 6,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {
+        "pwm": true
+      }
+    },
+    "7": {
+      "arduino_pin": 7,
+      "port": "PORTD",
+      "bit": 7,
+      "ddr": "DDRD",
+      "pin_reg": "PIND",
+      "functions": {}
+    },
+    "8": {
+      "arduino_pin": 8,
+      "port": "PORTB",
+      "bit": 0,
+      "ddr": "DDRB",
+      "pin_reg": "PINB",
+      "functions": {}
+    },
+    "9": {
+      "arduino_pin": 9,
+      "port": "PORTB",
+      "bit": 1,
+      "ddr": "DDRB",
+      "pin_reg": "PINB",
+      "functions": {
+        "pwm": true
+      }
+    },
+    "10": {
+      "arduino_pin": 10,
+      "port": "PORTB",
+      "bit": 2,
+      "ddr": "DDRB",
+      "pin_reg": "PINB",
+      "functions": {
+        "spi": "SS",
+        "pwm": true
+      }
+    },
+    "11": {
+      "arduino_pin": 11,
+      "port": "PORTB",
+      "bit": 3,
+      "ddr": "DDRB",
+      "pin_reg": "PINB",
+      "functions": {
+        "spi": "MOSI",
+        "pwm": true
+      }
+    },
+    "12": {
+      "arduino_pin": 12,
+      "port": "PORTB",
+      "bit": 4,
+      "ddr": "DDRB",
+      "pin_reg": "PINB",
+      "functions": {
+        "spi": "MISO"
+      }
+    },
+    "13": {
+      "arduino_pin": 13,
+      "port": "PORTB",
+      "bit": 5,
+      "ddr": "DDRB",
+      "pin_reg": "PINB",
+      "functions": {
+        "led": "LED_BUILTIN",
+        "spi": "SCK"
+      }
+    },
+    "A0": {
+      "arduino_pin": 14,
+      "port": "PORTC",
+      "bit": 0,
+      "ddr": "DDRC",
+      "pin_reg": "PINC",
+      "analog_channel": 0,
+      "functions": {}
+    },
+    "A1": {
+      "arduino_pin": 15,
+      "port": "PORTC",
+      "bit": 1,
+      "ddr": "DDRC",
+      "pin_reg": "PINC",
+      "analog_channel": 1,
+      "functions": {}
+    },
+    "A2": {
+      "arduino_pin": 16,
+      "port": "PORTC",
+      "bit": 2,
+      "ddr": "DDRC",
+      "pin_reg": "PINC",
+      "analog_channel": 2,
+      "functions": {}
+    },
+    "A3": {
+      "arduino_pin": 17,
+      "port": "PORTC",
+      "bit": 3,
+      "ddr": "DDRC",
+      "pin_reg": "PINC",
+      "analog_channel": 3,
+      "functions": {}
+    },
+    "A4": {
+      "arduino_pin": 18,
+      "port": "PORTC",
+      "bit": 4,
+      "ddr": "DDRC",
+      "pin_reg": "PINC",
+      "analog_channel": 4,
+      "functions": {
+        "i2c": "SDA"
+      }
+    },
+    "A5": {
+      "arduino_pin": 19,
+      "port": "PORTC",
+      "bit": 5,
+      "ddr": "DDRC",
+      "pin_reg": "PINC",
+      "analog_channel": 5,
+      "functions": {
+        "i2c": "SCL"
+      }
+    }
+  },
+  "baud_rate_presets": {
+    "9600": {
+      "ubrr": 103,
+      "ubrr_hex": "0x0067",
+      "error_pct": 0.2,
+      "$ref": "Atmel-7810.pdf Table 20-7"
+    },
+    "19200": {
+      "ubrr": 51,
+      "ubrr_hex": "0x0033",
+      "error_pct": 0.2
+    },
+    "38400": {
+      "ubrr": 25,
+      "ubrr_hex": "0x0019",
+      "error_pct": 0.2
+    },
+    "57600": {
+      "ubrr": 16,
+      "ubrr_hex": "0x0010",
+      "error_pct": 2.1
+    },
+    "115200": {
+      "ubrr": 8,
+      "ubrr_hex": "0x0008",
+      "error_pct": -3.5
+    }
+  },
+  "serial_ports": {
+    "serial0": {
+      "tx": 1,
+      "rx": 0,
+      "usart": "USART0",
+      "baud": 9600
+    }
+  }
+}

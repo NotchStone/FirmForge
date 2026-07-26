@@ -1,0 +1,61 @@
+# Arduino UNO / Nano (ATmega328P)
+board_name: "Arduino UNO / Nano (ATmega328P)"
+platform: arduino
+board_type: arduino_board
+paradigm: arduino
+
+mcu:
+  series: avr
+  chip: ATmega328P
+  family: avr
+
+fqbn: "arduino:avr:uno"
+variant: standard
+
+# Aliases allow the board to be referenced by multiple names
+# (e.g. ff build --board arduino_uno or --board arduino_nano)
+aliases:
+  - arduino_uno
+  - arduino_nano
+
+vendor_ref:
+  core: "arduino:avr:uno"
+  note: "Arduino AVR core, UNO R3 and Nano share the same ATmega328P"
+
+pins:
+  led_builtin: 13
+  digital: "0-13 (pins 0-1 reserved for serial)"
+  analog: "A0-A5 (pins 14-19)"
+  serial: "Serial (USART0, TX=1, RX=0)"
+  i2c: "Wire (SDA=A4, SCL=A5)"
+  spi: "SPI (MOSI=11, MISO=12, SCK=13, SS=10)"
+  pwm: "3, 5, 6, 9, 10, 11"
+  interrupt: "2, 3 (INT0, INT1)"
+
+specs:
+  flash: "32 KB (0.5 KB bootloader)"
+  ram: "2 KB"
+  eeprom: "1 KB"
+  clock: "16 MHz"
+
+features:
+  gpio: true
+  uart: true
+  spi: true
+  i2c: true
+  pwm: true
+  adc: true
+  timer: true
+  interrupt: true
+
+# Hardware constraints to warn about during source review
+constraints:
+  isr_forbidden:
+    - blocking_calls
+    - malloc
+  pin_avoid: [0, 1]
+  peripheral_rules:
+    i2c: must_open_drain
+    serial: tx_pin_1_rx_pin_0
+
+schematic_source: manual_entry
