@@ -447,6 +447,21 @@ def _do_monitor(port: str = "", baud: int = 9600,
         return {"status": "stopped"}
 
     if not port:
+        # Auto-detect via BoardDetector (same as S1)
+        try:
+            from firmforge.core.board_detector import BoardDetector
+            from pathlib import PurePath
+            bd = BoardDetector(boards_dir=str(root / "boards"))
+            result = bd.detect()
+            for c in (result.candidates or []):
+                p = c.details.get("port", "")
+                if p and p.upper().startswith("COM"):
+                    port = p
+                    logger.info("ff_monitor auto-detected port: %s", port)
+                    break
+        except Exception as e:
+            logger.warning("ff_monitor auto-detect failed: %s", e)
+    if not port:
         return {"status": "error", "message": "port required for start action"}
 
     collector = str(root / "firmforge" / "tools" / "serial_collector.py")
