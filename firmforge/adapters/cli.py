@@ -88,7 +88,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
     return 1
 
 
-def cmd_verify(args: argparse.Namespace) -> int:
+def cmd_run(args: argparse.Namespace) -> int:
     """ff verify: Review → Build → Flash → Test pipeline.
 
     Usage: ff verify <board> --app <source_dir>
@@ -250,9 +250,9 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_init = subparsers.add_parser("detect", help="Scan USB and identify board")
     p_init.add_argument("intent", nargs="?", help="Optional: user intent description")
 
-    # ff verify
+    # ff run
     p_run = subparsers.add_parser(
-        "verify", help="Execute verification pipeline (Review → Build → Flash → Test)",
+        "run", help="Execute hardware pipeline (Detect → Review → Build → Flash → Verify)",
     )
     p_run.add_argument("board", nargs="?", help="Board ID (e.g. arduino_328p)")
     p_run.add_argument("--app", help="Source code directory (REQUIRED)")
@@ -283,8 +283,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "detect":
         return cmd_detect(args)
-    elif args.command == "verify":
-        return cmd_verify(args)
+    elif args.command == "run":
+        return cmd_run(args)
     elif args.command == "build":
         return cmd_build(args)
     elif args.command == "flash":

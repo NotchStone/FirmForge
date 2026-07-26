@@ -15,7 +15,7 @@ def run_one(rid, paradigm):
     if state.exists(): state.write_text("{}")
     
     t0 = time.time()
-    r = subprocess.run([PYTHON, "-m", "firmforge", "verify", "arduino_mega", "--app", str(d)],
+    r = subprocess.run([PYTHON, "-m", "firmforge", "run", "arduino_mega", "--app", str(d)],
                        capture_output=True, text=True, timeout=60, cwd=str(ROOT))
     out = r.stdout + r.stderr
     elapsed = int((time.time()-t0)*1000)

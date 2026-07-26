@@ -105,7 +105,7 @@ def run_build(example_path: Path, board: str) -> dict:
 def run_flash(example_path: Path, expected: str, board: str) -> dict:
     """Run ff verify with expected serial pattern."""
     t0 = time.time()
-    cmd = [sys.executable, "-m", "firmforge", "verify", board,
+    cmd = [sys.executable, "-m", "firmforge", "run", board,
            "--app", str(example_path)]
     if expected:
         cmd.extend(["--expected", expected])

@@ -21,7 +21,7 @@ FirmForge 不是 Agent。它是被 Agent 调用的**验证工具链**。
 用户 → CodeBuddy / Cursor（Agent，负责理解意图、规划任务、编写代码）
               │
               ├─ 写代码前 → ff_detect / ff_context（获取板级硬件参考）
-              ├─ 写代码后 → ff_verify（门禁 → 编译 → 烧录 → 测试）
+              ├─ 写代码后 → ff_run（门禁 → 编译 → 烧录 → 测试）
               └─ 任何阶段 → ff_detect（探索硬件环境）
 ```
 
@@ -41,7 +41,7 @@ FirmForge 不是 Agent。它是被 Agent 调用的**验证工具链**。
 
 ```
 触 点 1（编码前）              触 点 2（编码后）
-ff_context(board, topic?)      ff_verify(board?, app, expected?)
+ff_context(board, topic?)      ff_run(board?, app, expected?)
                                ff_build(board?, app)   ← 仅编译，无需硬件
 
 返回：寄存器列表                 流程：Detect → Review → Build → Flash → Test
@@ -59,7 +59,7 @@ ff_context(board, topic?)      ff_verify(board?, app, expected?)
 
 ```
 入口层 (Adapters)       CLI: ff detect | ff verify | ff build | ff flash
-                        MCP: ff_detect | ff_context | ff_build | ff_verify | ff_flash | ff_monitor
+                        MCP: ff_detect | ff_context | ff_build | ff_run | ff_flash | ff_monitor
                               │
 编排层 (Orchestrator)   pipeline_runner.py  5 阶段调度 + 指纹增量跳过
                         pipeline_state.py   state.json 状态管理
@@ -123,7 +123,7 @@ Agent 写代码前调用，确保所有寄存器名/引脚号来自合法集合�
 返回：overall_success, board, stages[]
 ```
 
-### `ff_verify`
+### `ff_run`
 ```
 审查 → 编译 → 烧录 → 测试。Agent 写完代码后调用的全流程验证。
 
@@ -156,7 +156,7 @@ Agent 写代码前调用，确保所有寄存器名/引脚号来自合法集合�
 |------|---------|------|
 | `ff detect` | ff_detect | 扫描板子 |
 | `ff build <board> --app <dir>` | ff_build | 审查+编译 |
-| `ff verify <board> --app <dir> [--expected <pat>]` | ff_verify | 全流程验证 |
+| `ff verify <board> --app <dir> [--expected <pat>]` | ff_run | 全流程验证 |
 | `ff flash <board> --firmware <hex>` | ff_flash | 独立烧录 |
 | `ff monitor <port> <baud> start/stop` | ff_monitor | 实时串口面板 |
 
@@ -264,7 +264,7 @@ S1 为自动阶段——有 board_id 直接解析，无则 BoardDetector 扫描�
 
 | 机制 | 文件/工具 | 用途 |
 |------|------|------|
-| ff_verify 快照 | `_write_serial_summary()` → `serial_live.html` | 流程结束展示首帧数据（静态） |
+| ff_run 快照 | `_write_serial_summary()` → `serial_live.html` | 流程结束展示首帧数据（静态） |
 | ff_monitor 实时面板 | `serial_collector.py` → 独立子进程 | 持续读串口 → 实时轮询 HTML 面板 |
 
 **ff_monitor 实时面板方案**：
@@ -618,7 +618,7 @@ docs/test_benchmark/
 |------|------|
 | 项目定位 | MCU 代码验证工具链 |
 | 功能描述 | 寄存器门禁 / 引用验证 / 编译烧录测试 |
-| MCP 工具 | ff_detect / ff_context / ff_build / ff_verify / ff_flash / ff_monitor |
+| MCP 工具 | ff_detect / ff_context / ff_build / ff_run / ff_flash / ff_monitor |
 | CLI 命令 | ff detect / ff build / ff verify / ff flash |
 | 管道阶段 | Detect → Review → Build → Flash → Test |
 | 禁止使用 | kb (→ knowledge_base), _sm, 端到端, 全流程, 自然语言编程, Agent, 7-Stage Pipeline |

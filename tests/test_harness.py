@@ -15,7 +15,7 @@ def run_verify(app_dir):
     state = ROOT / ".firmforge" / "state.json"
     if state.exists(): state.write_text("{}")
     try:
-        r = subprocess.run([PYTHON, "-m", "firmforge", "verify", "arduino_mega", "--app", app_dir],
+        r = subprocess.run([PYTHON, "-m", "firmforge", "run", "arduino_mega", "--app", app_dir],
                            capture_output=True, text=True, timeout=60, cwd=str(ROOT))
     except Exception as e:
         return {"error": str(e), "all_pass": False, "elapsed_ms": int((time.time()-t0)*1000)}

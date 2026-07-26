@@ -2,7 +2,7 @@
   "meta": {
     "version": "1.0.0",
     "purpose": "FirmForge 标准测试基准 — 50 项自然语言 MCU 功能需求",
-    "usage": "Agent 接收需求 → 编写代码 → ff_verify 验证 → 记录结果",
+    "usage": "Agent 接收需求 → 编写代码 → ff_run 验证 → 记录结果",
     "target_mcus": ["ATmega2560", "ATmega328P", "STM32F103", "ESP32"],
     "generated": "2026-07-19"
   },
