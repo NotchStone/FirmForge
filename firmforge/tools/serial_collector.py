@@ -132,7 +132,7 @@ setInterval(function(){{
 }},500);
 window.onload=function(){{out.scrollTop=out.scrollHeight;}};
 function clearOutput(){{out.innerHTML='';}}
-function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{setTimeout(function(){{fetch('/quit',{{method:'POST'}})}},500);document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
+function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)\">Serial closed. You may close this page.</div>';}});navigator.sendBeacon('/quit');}}
 </script>
 </body></html>"""
 

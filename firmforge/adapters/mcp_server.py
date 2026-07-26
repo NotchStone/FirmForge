@@ -452,8 +452,7 @@ def _start_monitor_httpd(root: str) -> int:
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"BYE")
-                # Shutdown after response is sent
-                threading.Thread(target=lambda: (time.sleep(0.1), os._exit(0))).start()
+                os._exit(0)
 
         def end_headers(self):
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")

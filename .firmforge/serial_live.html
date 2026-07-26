@@ -29,7 +29,7 @@ body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans
     <span class="port">COM4</span>
     <span class="baud">9600&nbsp;baud</span>
     <span class="sep"></span>
-    <span class="count" id="info">990&nbsp;lines&nbsp;|&nbsp;22:15:01</span>
+    <span class="count" id="info">930&nbsp;lines&nbsp;|&nbsp;22:25:55</span>
   </span>
   <span class="r">
     <button class="btn" onclick="clearOutput()">Clear</button>
@@ -966,66 +966,6 @@ body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans
 <div class="line">    *****    </div>
 <div class="line">     ***     </div>
 <div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #94</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #95</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #96</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #97</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #98</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
-<div class="line">--- HEARTBEAT #99</div>
-<div class="line">  **     **  </div>
-<div class="line"> ****   **** </div>
-<div class="line">****** ******</div>
-<div class="line"> *********** </div>
-<div class="line">  *********  </div>
-<div class="line">   *******   </div>
-<div class="line">    *****    </div>
-<div class="line">     ***     </div>
-<div class="line">      *      </div>
 </div><!--/output-->
 <div class="ftr">FirmForge Serial Monitor</div>
 <script>
@@ -1040,7 +980,7 @@ setInterval(function(){
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!==cur){var all=(m[1].match(/<div class="line">[\s\S]*?<\/div>/g)||[]);for(var i=cur;i<all.length;i++)out.insertAdjacentHTML('beforeend',all[i]);cur=n;var last=out.lastElementChild;if(last)last.scrollIntoView(false);}
     var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\/span>/);
-    if(info){var tx=info[1],base=window._clearBase||0;if(base){var ct=parseInt(tx)||0;tx=(ct-base)+'&nbsp;lines&nbsp;|&nbsp;'+tx.match(/\| (\d{2}:\d{2}:\d{2})/)[1];}document.getElementById('info').innerHTML=tx;}
+    if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\d{2}:\d{2}:\d{2})<\/span>/);
     if(tm){var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
       ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),
@@ -1050,7 +990,7 @@ setInterval(function(){
   x.send();
 },500);
 window.onload=function(){out.scrollTop=out.scrollHeight;};
-function clearOutput(){window._clearBase=cur;out.innerHTML='';document.getElementById('info').innerHTML='0&nbsp;lines';}
-function stopMonitor(){fetch('/stop',{method:'POST'}).then(function(){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';});}
+function clearOutput(){out.innerHTML='';}
+function stopMonitor(){fetch('/stop',{method:'POST'}).then(function(){setTimeout(function(){fetch('/quit',{method:'POST'})},500);document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';});}
 </script>
 </body></html>
