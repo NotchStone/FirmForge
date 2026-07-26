@@ -455,6 +455,9 @@ def _start_monitor_httpd(root: str) -> int:
         def log_message(self, *a):
             pass
 
+        def log_error(self, *a):
+            pass
+
     for p in range(9878, 9888):
         try:
             _monitor_httpd = HTTPServer(("127.0.0.1", p), _H)
@@ -491,7 +494,7 @@ def _do_monitor(port: str = "", baud: int = 9600,
         stop_file = html_path + ".stop"
         try:
             Path(stop_file).touch()
-            time.sleep(3)
+            time.sleep(3)  # let collector detect .stop and exit naturally
             try:
                 from firmforge.providers.com_port import com_port_clean_close
                 if port:
@@ -533,10 +536,14 @@ def _do_monitor(port: str = "", baud: int = 9600,
             collector = str(root / "firmforge" / "tools" / "serial_collector.py")
             DETACHED = 0x00000008
             CREATE_NO_WINDOW = 0x08000000
+            # Use pythonw.exe for zero console window
+            pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+            if not os.path.exists(pyw):
+                pyw = sys.executable
             subprocess.Popen(
-                [sys.executable, collector, html_path, port, str(baud), str(timeout)],
-                creationflags=DETACHED | CREATE_NO_WINDOW,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+                [pyw, collector, html_path, port, str(baud), str(timeout)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, close_fds=True,
             )
             time.sleep(1)
 
@@ -547,7 +554,7 @@ def _do_monitor(port: str = "", baud: int = 9600,
         if http_port:
             try:
                 with open(goto_path, "w", encoding="utf-8") as f:
-                    f.write(f'<meta http-equiv="refresh" content="0;url=http://127.0.0.1:{http_port}/serial_live.html">')
+                    f.write(f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>')
             except Exception:
                 pass
 

@@ -186,8 +186,6 @@ class Win32Serial:
             return
         try:
             _k.PurgeComm(self._handle, PURGE_RXCLEAR | PURGE_TXCLEAR)
-            _k.EscapeCommFunction(self._handle, CLRDTR)
-            _k.EscapeCommFunction(self._handle, CLRRTS)
         except Exception:
             pass
         _k.CloseHandle(self._handle)

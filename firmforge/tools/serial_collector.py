@@ -13,7 +13,6 @@ Same proven pattern as pipeline S5 test stage.
 import sys
 import time
 import os
-import signal
 import atexit
 
 html_path = sys.argv[1]
@@ -37,6 +36,14 @@ while idx < len(sys.argv):
 stop_file = html_path + ".stop"
 _start_time = time.time()
 data_dir = os.path.dirname(os.path.abspath(html_path))
+pid_file = os.path.join(data_dir, "collector.pid")
+
+# Write PID for process management
+try:
+    with open(pid_file, "w") as f:
+        f.write(str(os.getpid()))
+except Exception:
+    pass
 
 lines = []
 
@@ -46,10 +53,12 @@ def cleanup():
         os.unlink(stop_file)
     except Exception:
         pass
+    try:
+        os.unlink(pid_file)
+    except Exception:
+        pass
 
 
-signal.signal(signal.SIGINT, lambda *_: (cleanup(), os._exit(0)))
-signal.signal(signal.SIGTERM, lambda *_: (cleanup(), os._exit(0)))
 atexit.register(cleanup)
 
 
@@ -148,11 +157,11 @@ try:
 
     write_html()
 
-    while True:
-        if os.path.exists(stop_file):
-            break
-        if timeout_s > 0 and time.time() - _start_time > timeout_s:
-            break
+        while True:
+            if os.path.exists(stop_file):
+                os._exit(0)
+            if timeout_s > 0 and time.time() - _start_time > timeout_s:
+                break
 
         # Write sample JSON when 3 lines collected or timeout
         if sample_path and not _sample_written:
@@ -192,12 +201,13 @@ try:
         time.sleep(0.05)
 
     ser_wrapper.__exit__(None, None, None)
+    cleanup()
 
 except Exception as e:
     try:
         import traceback
-        with open(os.path.join(data_dir, "collector.log"), "a") as f:
-            f.write(f"[{time.strftime('%H:%M:%S')}] {type(e).__name__}: {e}\n")
+        with open(os.path.join(data_dir, "exit_trace.log"), "a") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] EXIT: CRASH {type(e).__name__}: {e}\n")
             f.write(traceback.format_exc())
     except Exception:
         pass
