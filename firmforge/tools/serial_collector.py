@@ -121,7 +121,7 @@ setInterval(function(){{
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!==cur){{var all=(m[1].match(/<div class="line">[\\s\\S]*?<\\/div>/g)||[]);for(var i=cur;i<all.length;i++)out.insertAdjacentHTML('beforeend',all[i]);cur=n;var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}
     var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);
-    if(info){{var ct=parseInt(info[1])||0,base=window._clearBase||0;document.getElementById('info').innerHTML=(ct>base?info[1].replace(/^[0-9]+/,ct-base):ct-base)+'&nbsp;lines';}}
+    if(info){{var tx=info[1],base=window._clearBase||0;if(base){{var ct=parseInt(tx)||0;tx=(ct-base)+'&nbsp;lines&nbsp;|&nbsp;'+tx.match(/\| (\d{{2}}:\d{{2}}:\d{{2}})/)[1];}}document.getElementById('info').innerHTML=tx;}}
     var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
     if(tm){{var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
       ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),
