@@ -1,1 +1,1 @@
-{"sample_lines": ["HB=201 LUX=140 PWM=7", "HB=146 LUX=133 PWM=4", "HB=91 LUX=133 PWM=4"], "total": 3}
+{"sample_lines": ["HEARTBEAT #0 adc1=476 (2326 mV)", "HEARTBEAT #1 adc1=377 (1842 mV)", "HEARTBEAT #2 adc1=317 (1549 mV)"], "total": 3}

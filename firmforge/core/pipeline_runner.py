@@ -782,8 +782,20 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 "sample_lines": sample_lines,
                 "sample_count": len(sample_lines),
                 "total_lines": total,
-                "panel_file": ".firmforge/serial_live.html",
             }
+
+            # Start HTTP server + write redirect (MCP persistent — panel lives)
+            try:
+                from firmforge.adapters.mcp_server import _start_monitor_httpd
+                http_port = _start_monitor_httpd(str(root))
+                if http_port:
+                    goto_panel = str(root / ".firmforge" / "goto_panel.html")
+                    with open(goto_panel, "w", encoding="utf-8") as f:
+                        f.write(f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>')
+                    stage.details["panel_url"] = f"http://127.0.0.1:{http_port}/serial_live.html"
+                    stage.details["panel_file"] = ".firmforge/goto_panel.html"
+            except Exception:
+                pass
 
             # Pattern match if expected provided
             if expected and sample_lines:
