@@ -1,0 +1,67 @@
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>FirmForge Serial</title>
+<style>
+:root{{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#64748b;--acc:#22d3ee;--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748}}
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}}
+.tbar{{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(--hdr);border-bottom:1px solid var(--sep);flex-shrink:0;min-height:36px}}
+.tbar .l{{display:flex;align-items:center;gap:8px;flex:1;min-width:0}}
+.tbar .r{{display:flex;align-items:center;gap:6px}}
+.dot{{width:8px;height:8px;border-radius:50%;background:var(--acc);flex-shrink:0}}
+.port{{color:var(--acc);font-weight:600;font-size:13px}}
+.baud{{color:var(--dim);font-size:11px}}
+.count{{color:var(--dim);font-size:11px;white-space:nowrap}}
+.sep{{width:1px;height:16px;background:var(--sep);margin:0 4px}}
+.btn{{border:1px solid var(--sep);background:var(--btn-bg);color:var(--txt);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;transition:background .15s}}
+.btn:hover{{background:var(--btn-hover)}}
+.btn.danger{{background:var(--warn);border-color:var(--warn);color:#fff}}
+.btn.danger:hover{{opacity:.85}}
+.out{{flex:1;overflow-y:auto;padding:8px 14px;font-family:'Cascadia Code',Consolas,monospace;font-size:12.5px;line-height:1.55}}
+.line{{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.02);white-space:pre-wrap;word-break:break-all}}
+.ftr{{padding:4px 14px;text-align:center;font-size:10px;color:var(--dim);border-top:1px solid var(--sep);background:var(--hdr);flex-shrink:0}}
+@media(prefers-color-scheme:light){{:root{{--bg:#f1f5f9;--hdr:#e2e8f0;--txt:#1e293b;--dim:#64748b;--acc:#0284c7;--warn:#dc2626;--btn-bg:#cbd5e1;--btn-hover:#94a3b8;--sep:#cbd5e1}}}}
+</style></head>
+<body>
+<div class="tbar">
+  <span class="l">
+    <span class="dot" id="dot"></span>
+    <span class="port">{{port_name}}</span>
+    <span class="baud">{{baud}}&nbsp;baud</span>
+    <span class="sep"></span>
+    <span class="count" id="info">{{cnt}}&nbsp;lines&nbsp;|&nbsp;{{ts}}</span>
+  </span>
+  <span class="r">
+    <button class="btn" onclick="clearOutput()">Clear</button>
+    <button class="btn danger" onclick="stopMonitor()">Stop</button>
+  </span>
+</div>
+<div class="out" id="out">{{rows}}</div><!--/output-->
+<div class="ftr">FirmForge Serial Monitor</div>
+<script>
+let cur=0,out=document.getElementById('out'),dot=document.getElementById('dot');
+setInterval(function(){{
+  var x=new XMLHttpRequest();
+  x.open('GET',location.pathname.split('?')[0]+'?t='+Date.now(),true);
+  x.onload=function(){{
+    if(x.status!==200)return;
+    var t=x.responseText,m=t.match(/<div class="out" id="out">([\\s\\S]*?)<!--\\/output-->/);
+    if(!m)return;
+    var n=(m[1].match(/<div class="line">/g)||[]).length;
+    if(n!==cur){{cur=n;out.innerHTML=m[1];var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}
+    var info=t.match(/<span id="info">([^<]+)<\\/span>/);
+    if(info)document.getElementById('info').innerHTML=info[1];
+    var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
+    if(tm){{var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
+      ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),
+      df=Math.min(Math.abs(ns-fs),86400-Math.abs(ns-fs));
+      dot.style.background=df<3?'var(--acc)':'var(--warn)';}}
+  }};
+  x.send();
+}},500);
+window.onload=function(){{var el=out.lastElementChild;if(el)el.scrollIntoView(false);}};
+function clearOutput(){{out.innerHTML='';cur=0;}}
+function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
+</script>
+</body></html>"""

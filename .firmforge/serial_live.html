@@ -16,109 +16,53 @@ body{background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-
 <body>
 <div class="header">
   <span><span class="dot" id="dot"></span><span class="port">COM4 @ 9600 baud</span></span>
-  <span id="info">192 lines | 19:38:28</span>
+  <span id="info">44 lines | 20:38:23</span>
   <button onclick="stopMonitor()" style="background:var(--warn);color:#fff;border:none;padding:2px 12px;border-radius:4px;cursor:pointer;font-size:11px">Stop</button>
 </div>
-<div class="output" id="output"><div class="line">    ****************************   </div>
-<div class="line">      ************************     </div>
-<div class="line">        ********************       </div>
-<div class="line">          ****************         </div>
-<div class="line">            ************           </div>
-<div class="line">              ********             </div>
-<div class="line">                ****               </div>
-<div class="line">                 **                </div>
-<div class="line">  >> ASCII Code: 0x6 (DEC: 6) [Control Char]</div>
-<div class="line">==============================================</div>
-<div class="line">==============================================</div>
-<div class="line">  Heartbeat #7  |  Period: 1.0s</div>
-<div class="line">       *********       *********</div>
-<div class="line">    **************   **************</div>
-<div class="line">  ***************** *****************</div>
-<div class="line"> *************************************</div>
-<div class="line">  ********************************** </div>
-<div class="line">   *******************************  </div>
-<div class="line">    ****************************   </div>
-<div class="line">      ************************     </div>
-<div class="line">        ********************       </div>
-<div class="line">          ****************         </div>
-<div class="line">            ************           </div>
-<div class="line">              ********             </div>
-<div class="line">                ****               </div>
-<div class="line">                 **                </div>
-<div class="line">  >> ASCII Code: 0x7 (DEC: 7) [Control Char]</div>
-<div class="line">==============================================</div>
-<div class="line">==============================================</div>
-<div class="line">  Heartbeat #8  |  Period: 3.0s</div>
-<div class="line">       *********       *********</div>
-<div class="line">    **************   **************</div>
-<div class="line">  ***************** *****************</div>
-<div class="line"> *************************************</div>
-<div class="line">  ********************************** </div>
-<div class="line">   *******************************  </div>
-<div class="line">    ****************************   </div>
-<div class="line">      ************************     </div>
-<div class="line">        ********************       </div>
-<div class="line">          ****************         </div>
-<div class="line">            ************           </div>
-<div class="line">              ********             </div>
-<div class="line">                ****               </div>
-<div class="line">                 **                </div>
-<div class="line">  >> ASCII Code: 0x8 (DEC: 8) [Control Char]</div>
-<div class="line">==============================================</div>
-<div class="line">==============================================</div>
-<div class="line">  Heartbeat #9  |  Period: 5.0s</div>
-<div class="line">       *********       *********</div>
-<div class="line">    **************   **************</div>
-<div class="line">  ***************** *****************</div>
-<div class="line"> *************************************</div>
-<div class="line">  ********************************** </div>
-<div class="line">   *******************************  </div>
-<div class="line">    ****************************   </div>
-<div class="line">      ************************     </div>
-<div class="line">        ********************       </div>
-<div class="line">          ****************         </div>
-<div class="line">            ************           </div>
-<div class="line">              ********             </div>
-<div class="line">                ****               </div>
-<div class="line">                 **                </div>
-<div class="line">  >> ASCII Code: 0x9 (DEC: 9) [Control Char]</div>
-<div class="line">==============================================</div>
-<div class="line">==============================================</div>
-<div class="line">  Heartbeat #10  |  Period: 1.0s</div>
-<div class="line">       *********       *********</div>
-<div class="line">    **************   **************</div>
-<div class="line">  ***************** *****************</div>
-<div class="line"> *************************************</div>
-<div class="line">  ********************************** </div>
-<div class="line">   *******************************  </div>
-<div class="line">    ****************************   </div>
-<div class="line">      ************************     </div>
-<div class="line">        ********************       </div>
-<div class="line">          ****************         </div>
-<div class="line">            ************           </div>
-<div class="line">              ********             </div>
-<div class="line">                ****               </div>
-<div class="line">                 **                </div>
-<div class="line">  >> ASCII Code: 0xA (DEC: 10) [Control Char]</div>
-<div class="line">==============================================</div>
-<div class="line">==============================================</div>
-<div class="line">  Heartbeat #11  |  Period: 3.0s</div>
-<div class="line">       *********       *********</div>
-<div class="line">    **************   **************</div>
-<div class="line">  ***************** *****************</div>
-<div class="line"> *************************************</div>
-<div class="line">  ********************************** </div>
-<div class="line">   *******************************  </div>
-<div class="line">    ****************************   </div>
-<div class="line">      ************************     </div>
-<div class="line">        ********************       </div>
-<div class="line">          ****************         </div>
-<div class="line">            ************           </div>
-<div class="line">              ********             </div>
-<div class="line">                ****               </div>
-<div class="line">                 **                </div>
-<div class="line">  >> ASCII Code: 0xB (DEC: 11) [Control Char]</div>
-<div class="line">==============================================</div>
+<div class="output" id="output"><div class="line">HB=2 OFF</div>
+<div class="line">HB=3 ON</div>
+<div class="line">HB=3 OFF</div>
+<div class="line">HB=4 ON</div>
+<div class="line">HB=4 OFF</div>
+<div class="line">HB=5 ON</div>
+<div class="line">HB=5 OFF</div>
+<div class="line">HB=6 ON</div>
+<div class="line">HB=6 OFF</div>
+<div class="line">HB=7 ON</div>
+<div class="line">HB=7 OFF</div>
+<div class="line">HB=8 ON</div>
+<div class="line">HB=8 OFF</div>
+<div class="line">HB=9 ON</div>
+<div class="line">HB=9 OFF</div>
+<div class="line">HB=10 ON</div>
+<div class="line">HB=10 OFF</div>
+<div class="line">HB=11 ON</div>
+<div class="line">HB=11 OFF</div>
+<div class="line">HB=12 ON</div>
+<div class="line">HB=12 OFF</div>
+<div class="line">HB=13 ON</div>
+<div class="line">HB=13 OFF</div>
+<div class="line">HB=14 ON</div>
+<div class="line">HB=14 OFF</div>
+<div class="line">HB=15 ON</div>
+<div class="line">HB=15 OFF</div>
+<div class="line">HB=16 ON</div>
+<div class="line">HB=16 OFF</div>
+<div class="line">HB=17 ON</div>
+<div class="line">HB=17 OFF</div>
+<div class="line">HB=18 ON</div>
+<div class="line">HB=18 OFF</div>
+<div class="line">HB=19 ON</div>
+<div class="line">HB=19 OFF</div>
+<div class="line">HB=20 ON</div>
+<div class="line">HB=20 OFF</div>
+<div class="line">HB=21 ON</div>
+<div class="line">HB=21 OFF</div>
+<div class="line">HB=22 ON</div>
+<div class="line">HB=22 OFF</div>
+<div class="line">HB=23 ON</div>
+<div class="line">HB=23 OFF</div>
+<div class="line">HB=24 ON</div>
 </div><!--/output-->
 <div class="footer">FirmForge Serial Monitor</div>
 <script>
