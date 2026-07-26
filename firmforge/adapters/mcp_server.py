@@ -501,7 +501,7 @@ def _do_monitor(port: str = "", baud: int = 9600,
         return {"status": "stopped"}
 
     if action in ("start", "panel"):
-        # Auto-detect port if needed
+        # Auto-detect port if needed (for stop/status, port is optional)
         if not port:
             try:
                 from firmforge.core.board_detector import BoardDetector
@@ -511,36 +511,16 @@ def _do_monitor(port: str = "", baud: int = 9600,
                     p = c.details.get("port", "")
                     if p and p.upper().startswith("COM"):
                         port = p
-                        logger.info("ff_monitor auto-detected port: %s", port)
                         break
-            except Exception as e:
-                logger.warning("ff_monitor auto-detect failed: %s", e)
+            except Exception:
+                pass
         if not port:
             return {"status": "error", "message": "port required"}
 
-        # Start collector (skip if already running — .stop file absent = running)
-        collector_already_running = not Path(stop_file).exists() if hasattr(Path(''), '__iter__') else False
-        try:
-            collector_already_running = not Path(stop_file).exists()
-        except Exception:
-            pass
-        
-        if action == "start":
-            collector = str(root / "firmforge" / "tools" / "serial_collector.py")
-            DETACHED = 0x00000008
-            CREATE_NO_WINDOW = 0x08000000
-            # Use pythonw.exe for zero console window
-            pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
-            if not os.path.exists(pyw):
-                pyw = sys.executable
-            subprocess.Popen(
-                [pyw, collector, html_path, port, str(baud), str(timeout)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL, close_fds=True,
-            )
-            time.sleep(1)
+        # Collector is ALWAYS started by S5 Verify — never by ff_monitor.
+        # ff_monitor only provides: HTTP server + stop signal + redirect page.
 
-        # Start HTTP server (singleton)
+        # Start HTTP server (singleton, MCP-persistent)
         http_port = _start_monitor_httpd(str(root))
 
         # Write redirect page
