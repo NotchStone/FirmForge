@@ -120,7 +120,7 @@ setInterval(function(){{
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!==cur){{cur=n;if(n>cleared){{out.innerHTML=m[1];var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}}}
-    var info=t.match(/<span id="info">([^<]+)<\\/span>/);
+    var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);
     if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
     if(tm){{var p=tm[1].split(':').map(Number),fs=p[0]*3600+p[1]*60+p[2],
@@ -131,7 +131,7 @@ setInterval(function(){{
   x.send();
 }},500);
 window.onload=function(){{var el=out.lastElementChild;if(el)el.scrollIntoView(false);}};
-function clearOutput(){{out.innerHTML='';cur=0;cleared=cur;}}
+function clearOutput(){{cleared=cur;out.innerHTML='';cur=0;}}
 function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
 </script>
 </body></html>"""
