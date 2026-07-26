@@ -110,7 +110,7 @@ body{{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,san
 <div class="out" id="out">{rows}</div><!--/output-->
 <div class="ftr">FirmForge Serial Monitor</div>
 <script>
-let cur=0,cleared=0,out=document.getElementById('out'),dot=document.getElementById('dot');
+let cur=0,out=document.getElementById('out'),dot=document.getElementById('dot');
 setInterval(function(){{
   var x=new XMLHttpRequest();
   x.open('GET',location.pathname.split('?')[0]+'?t='+Date.now(),true);
@@ -119,7 +119,7 @@ setInterval(function(){{
     var t=x.responseText,m=t.match(/<div class="out" id="out">([\\s\\S]*?)<!--\\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
-    if(n!==cur){{var all=(m[1].match(/<div class="line">[\\s\\S]*?<\\/div>/g)||[]);for(var i=cur;i<all.length;i++){{out.insertAdjacentHTML('beforeend',all[i]);}}cur=all.length;var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}
+    if(n!==cur){{cur=n;out.innerHTML=m[1];out.scrollTop=out.scrollHeight;}}
     var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);
     if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
@@ -130,8 +130,8 @@ setInterval(function(){{
   }};
   x.send();
 }},500);
-window.onload=function(){{var el=out.lastElementChild;if(el)el.scrollIntoView(false);}};
-function clearOutput(){{cleared=cur;out.innerHTML='';}}
+window.onload=function(){{out.scrollTop=out.scrollHeight;}};
+function clearOutput(){{out.innerHTML='';cur=0;}}
 function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>';}});}}
 </script>
 </body></html>"""
