@@ -422,8 +422,13 @@ def _start_monitor_httpd(root: str) -> int:
     Server has /stop endpoint for Stop button on panel.
     """
     global _monitor_httpd
-    if _monitor_httpd is not None:
-        return _monitor_httpd.server_address[1]
+    # Always create fresh (in-process singleton: only for stopping old server)
+    try:
+        if _monitor_httpd is not None:
+            _monitor_httpd.shutdown()
+    except Exception:
+        pass
+    _monitor_httpd = None
 
     import os as _os
     import threading
