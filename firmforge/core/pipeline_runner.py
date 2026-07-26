@@ -762,6 +762,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             stage.details = {
                 "port": port, "matched_baud": matched_baud, "serial_output": output,
             }
+            # Clean close to restore CH340 driver state
+            try:
+                from firmforge.providers.com_port import com_port_clean_close
+                com_port_clean_close(port)
+            except Exception:
+                pass
 
             # Pattern match if expected is provided
             if expected:
