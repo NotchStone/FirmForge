@@ -416,8 +416,11 @@ if MCP_AVAILABLE and mcp is not None:
 # -- Main entry point --
 
 def _do_monitor(port: str = "", baud: int = 9600,
-                action: str = "start") -> dict[str, Any]:
-    """Start/stop serial monitor — independent process writes live HTML."""
+                action: str = "start", timeout: int = 0) -> dict[str, Any]:
+    """Start/stop serial monitor — independent process writes live HTML.
+
+    timeout: auto-stop after N seconds (0 = run indefinitely)
+    """
     import subprocess
     import os
     import sys
@@ -430,7 +433,14 @@ def _do_monitor(port: str = "", baud: int = 9600,
         stop_file = html_path + ".stop"
         try:
             Path(stop_file).touch()
-            time.sleep(1)  # let collector detect and exit
+            time.sleep(3)  # let collector detect, exit, and release port
+            try:
+                from firmforge.providers.com_port import com_port_clean_close
+                if port:
+                    com_port_clean_close(port)
+                    time.sleep(1)
+            except Exception:
+                pass
             Path(stop_file).unlink(missing_ok=True)
         except Exception:
             pass
@@ -444,11 +454,12 @@ def _do_monitor(port: str = "", baud: int = 9600,
     DETACHED = 0x00000008
     CREATE_NO_WINDOW = 0x08000000
     subprocess.Popen(
-        [sys.executable, collector, html_path, port, str(baud)],
+        [sys.executable, collector, html_path, port, str(baud), str(timeout)],
         creationflags=DETACHED | CREATE_NO_WINDOW,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
     )
-    return {"status": "started", "port": port, "baud": baud}
+    return {"status": "started", "port": port, "baud": baud,
+            "file": ".firmforge/serial_live.html"}
 
 
 def main() -> None:

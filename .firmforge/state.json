@@ -8,20 +8,13 @@
       "status": "done"
     },
     "build": {
-      "status": "done",
-      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\hello_ino\\firmware.hex"
-    },
-    "flash": {
-      "status": "done"
-    },
-    "test": {
-      "status": "done"
+      "compile_rounds": 1,
+      "status": "failed",
+      "error": "No source files (.c/.cpp/.ino) found"
     }
   },
-  "fingerprints": {
-    "board_id": "arduino_328p",
-    "port": "COM4",
-    "source": "a597ce115915b483",
-    "hex": "fdb9fbece8fb9b1c"
+  "last_error": {
+    "stage": "build",
+    "message": "No source files (.c/.cpp/.ino) found"
   }
 }
