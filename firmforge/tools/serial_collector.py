@@ -69,8 +69,8 @@ def write_html():
 body{{background:var(--bg);color:var(--text);font-family:Consolas,monospace;font-size:13px;height:100vh;display:flex;flex-direction:column}}
 .header{{background:var(--panel);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;flex-shrink:0}}
 .port{{color:var(--accent)}}
-.output{{flex:1;overflow-y:auto;padding:10px 16px;line-height:1.6}}
-.line{{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:pre-wrap;word-break:break-all}}
+.output{{flex:1;overflow-y:auto;padding:10px 16px;line-height:1.6;overflow-anchor:auto}}
+.line{{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:pre-wrap;word-break:break-all;overflow-anchor:none}}
 .footer{{background:var(--panel);padding:5px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--dim);text-align:center;flex-shrink:0}}
 @media(prefers-color-scheme:light){{:root{{--bg:#f5f5f5;--panel:#e8e8e8;--text:#333;--dim:#888;--border:#ddd;--accent:#007bff;--warn:#d32f2f}}}}
 </style></head>
@@ -80,7 +80,7 @@ body{{background:var(--bg);color:var(--text);font-family:Consolas,monospace;font
   <span id="info">{cnt} lines | {ts}</span>
   <button onclick="stopMonitor()" style="background:var(--warn);color:#fff;border:none;padding:2px 12px;border-radius:4px;cursor:pointer;font-size:11px">Stop</button>
 </div>
-<div class="output" id="output">{rows}</div>
+<div class="output" id="output">{rows}</div><!--/output-->
 <div class="footer">FirmForge Serial Monitor</div>
 <script>
 let cur=0,out=document.getElementById('output'),dot=document.getElementById('dot');
@@ -89,10 +89,10 @@ setInterval(function(){{
   x.open('GET',location.pathname.split('?')[0]+'?t='+Date.now(),true);
   x.onload=function(){{
     if(x.status!==200)return;
-    var t=x.responseText,m=t.match(/<div class="output" id="output">([\\s\\S]*?)<\\/div>/);
+    var t=x.responseText,m=t.match(/<div class="output" id="output">([\\s\\S]*?)<!--\\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
-    if(n!==cur){{cur=n;out.innerHTML=m[1];void out.offsetHeight;out.scrollTop=out.scrollHeight;}}
+    if(n!==cur){{cur=n;out.innerHTML=m[1];var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}
     var info=t.match(/<span id="info">([^<]+)<\\/span>/);
     if(info)document.getElementById('info').innerHTML=info[1];
     var tm=t.match(/\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);
@@ -103,7 +103,7 @@ setInterval(function(){{
   }};
   x.send();
 }},500);
-window.onload=function(){{out.scrollTop=out.scrollHeight;}};
+window.onload=function(){{var el=out.lastElementChild;if(el)el.scrollIntoView(false);}};
 function stopMonitor(){{
   fetch('/stop',{{method:'POST'}}).then(function(){{document.body.innerHTML='<div style=\"padding:40px;text-align:center;font-size:16px\">Stopped — COM port released. Close this page.</div>';}});
 }}
