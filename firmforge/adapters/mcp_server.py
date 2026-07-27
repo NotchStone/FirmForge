@@ -451,22 +451,38 @@ def _start_monitor_httpd(root: str) -> int:
             super().do_GET()
 
         def do_POST(self):
-            if self.path == "/stop":
+            if self.path == "/stop" or self.path == "/close":
                 try:
-                    with open(stop_file, "w") as f:
-                        f.write("x")
+                    with open(stop_file, "w") as f: f.write("x")
                 except Exception:
                     pass
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"STOPPED")
-
+                self._json({"ok": True})
+            elif self.path == "/open":
+                try: os.remove(stop_file)
+                except OSError: pass
+                self._json({"ok": True, "reload": True})
+            elif self.path == "/send":
+                self._save_body(os.path.join(data_dir, "send_cmd.json"))
+                self._json({"ok": True})
+            elif self.path == "/modbus":
+                self._save_body(os.path.join(data_dir, "modbus_cmd.json"))
+                self._json({"ok": True})
             elif self.path == "/quit":
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"BYE")
-                os._exit(0)
+                self.send_response(200); self.end_headers()
+                self.wfile.write(b"BYE"); os._exit(0)
+
+        def _json(self, data):
+            import json as _j_http
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(_j_http.dumps(data).encode())
+
+        def _save_body(self, path):
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                with open(path, "wb") as f: f.write(self.rfile.read(length))
+            except Exception: pass
 
         def end_headers(self):
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
