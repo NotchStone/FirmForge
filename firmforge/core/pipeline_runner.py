@@ -938,6 +938,17 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 if os.path.exists(stop_path):
                     break
 
+                # Heartbeat: auto-stop if no panel poll for 6s
+                _hb_path = os.path.join(data_dir, "heartbeat.txt")
+                try:
+                    if os.path.exists(_hb_path):
+                        with open(_hb_path) as f:
+                            _hb = float(f.read().strip() or "0")
+                        if time.time() - _hb > 6.0:
+                            break
+                except Exception:
+                    pass
+
                 # Sample handoff — write first 3+ lines to shared list, signal parent
                 if not _sample_written:
                     if len(lines) >= 3 or (time.time() - _start_time > _sample_timeout):
