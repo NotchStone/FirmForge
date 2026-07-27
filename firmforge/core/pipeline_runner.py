@@ -820,79 +820,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             data_dir = str(Path(html_path).parent)
             stop_path = html_path + ".stop"
 
-            # Inline HTML template (no cross-file import)
-            _HTML_TMPL = (
-                '<!DOCTYPE html>\n<html lang="zh-CN">\n<head><meta charset="UTF-8"><title>FirmForge Serial</title>\n'
-                '<style>\n:root{{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#94a3b8;--acc:#22d3ee;'
-                '--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748}}'
-                '\n*{{margin:0;padding:0;box-sizing:border-box}}\n'
-                'body{{background:var(--bg);color:var(--txt);font-family:\'Segoe UI\',system-ui,sans-serif;'
-                'font-size:13px;height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}}\n'
-                '.tbar{{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(--hdr);'
-                'border-bottom:1px solid var(--sep);flex-shrink:0;min-height:36px}}\n'
-                '.tbar .l{{display:flex;align-items:center;gap:8px;flex:1;min-width:0}}\n'
-                '.tbar .r{{display:flex;align-items:center;gap:6px}}\n'
-                '.dot{{width:8px;height:8px;border-radius:50%;background:var(--acc);flex-shrink:0}}\n'
-                '.port{{color:var(--acc);font-weight:600;font-size:13px}}\n'
-                '.baud{{color:var(--dim);font-size:11px}}\n'
-                '.count{{color:var(--dim);font-size:11px;white-space:nowrap}}\n'
-                '.sep{{width:1px;height:16px;background:var(--sep);margin:0 4px}}\n'
-                '.btn{{border:1px solid var(--sep);background:var(--btn-bg);color:var(--txt);padding:3px 10px;'
-                'border-radius:4px;cursor:pointer;font-size:11px;transition:background .15s}}\n'
-                '.btn:hover{{background:var(--btn-hover)}}\n'
-                '.btn.danger{{background:var(--warn);border-color:var(--warn);color:#fff}}\n'
-                '.btn.danger:hover{{opacity:.85}}\n'
-                '.out{{flex:1;overflow-y:auto;padding:8px 14px;font-family:\'Cascadia Code\',Consolas,monospace;'
-                'font-size:12.5px;line-height:1.55}}\n'
-                '.line{{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.02);'
-                'white-space:pre-wrap;word-break:break-all}}\n'
-                '.ftr{{padding:4px 14px;text-align:center;font-size:10px;color:var(--dim);'
-                'border-top:1px solid var(--sep);background:var(--hdr);flex-shrink:0}}\n'
-                '@media(prefers-color-scheme:light){{:root{{--bg:#f1f5f9;--hdr:#e2e8f0;--txt:#1e293b;'
-                '--dim:#64748b;--acc:#0284c7;--warn:#dc2626;--btn-bg:#cbd5e1;--btn-hover:#94a3b8;--sep:#cbd5e1}}}}\n'
-                '</style></head>\n<body>\n'
-                '<div class="tbar">\n  <span class="l">\n'
-                '    <span class="dot" id="dot"></span>\n'
-                '    <span class="port">{_p}</span>\n'
-                '    <span class="baud">{_b}&nbsp;baud</span>\n'
-                '    <span class="sep"></span>\n'
-                '    <span class="count" id="info">{_n}&nbsp;lines&nbsp;|&nbsp;{_t}</span>\n'
-                '  </span>\n  <span class="r">\n'
-                '    <button class="btn" onclick="clearOutput()">Clear</button>\n'
-                '    <button class="btn danger" onclick="stopMonitor()">Stop</button>\n'
-                '  </span>\n</div>\n'
-                '<div class="out" id="out">{_r}</div><!--/output-->\n'
-                '<div class="ftr">FirmForge Serial Monitor</div>\n'
-                '<script>\n'
-                'let cur=(out.innerHTML.match(/<div class="line">/g)||[]).length,dot=document.getElementById("dot");\n'
-                'setInterval(function(){{\n  var x=new XMLHttpRequest();\n'
-                '  x.open("GET",location.pathname.split("?")[0]+"?t="+Date.now(),true);\n'
-                '  x.onload=function(){{\n    if(x.status!==200)return;\n'
-                '    var t=x.responseText,m=t.match(/<div class="out" id="out">([\\s\\S]*?)<!--\\/output-->/);\n'
-                '    if(!m)return;\n    var n=(m[1].match(/<div class="line">/g)||[]).length;\n'
-                '    if(n!==cur){{var all=(m[1].match(/<div class="line">[\\s\\S]*?<\\/div>/g)||[]);'
-                'for(var i=cur;i<all.length;i++)out.insertAdjacentHTML("beforeend",all[i]);cur=n;'
-                'var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}\n'
-                '    var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);\n'
-                '    if(info)document.getElementById("info").innerHTML=info[1];\n'
-                '    var tm=t.match(/\\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);\n'
-                '    if(tm){{var p=tm[1].split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2],\n'
-                '      ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),\n'
-                '      df=Math.min(Math.abs(ns-fs),86400-Math.abs(ns-fs));\n'
-                '      dot.style.background=df<3?"var(--acc)":"var(--warn)";}}\n  }};\n  x.send();\n'
-                '}},500);\nwindow.onload=function(){{out.scrollTop=out.scrollHeight;}};\n'
-                'function clearOutput(){{out.innerHTML="";}}\n'
-                'function stopMonitor(){{fetch("/stop",{{method:"POST"}}).then(function(){{'
-                'document.body.innerHTML=\''
-                '<div style="display:flex;align-items:center;justify-content:center;height:100vh;'
-                'font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>\';}});'
-                'navigator.sendBeacon("/quit");}}\n</script>\n</body></html>'
-            )
-
-            def _build_html(lns, p, b):
-                ts = __import__("time").strftime("%H:%M:%S")
-                rows = "".join(f'<div class="line">{ln}</div>\n' for ln in lns)
-                return _HTML_TMPL.format(_p=p, _b=b, _n=len(lns), _t=ts, _r=rows)
+            # File paths for send/modbus commands + MODBUS response
+            _send_cmd_file = os.path.join(data_dir, "send_cmd.json")
+            _modbus_cmd_file = os.path.join(data_dir, "modbus_cmd.json")
+            _modbus_resp_file = os.path.join(data_dir, "modbus_resp.json")
+            rx_total = [0]
+            tx_total = [0]
 
             # Open COM4 (retry up to 10x — avrdude may still be releasing port)
             from firmforge.providers.com_port import ComPort
@@ -926,7 +859,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             lines: list[str] = []
 
             # Write initial HTML
-            html = _build_html(lines, port, baud)
+            html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%H:%M:%S"))
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
                     f.write(html)
@@ -948,6 +881,16 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                             break
                 except Exception:
                     pass
+
+                # Process send command (from panel input)
+                _sc = _process_send_file(_send_cmd_file, ser, tx_total)
+                if _sc:
+                    lines.append(_sc)
+
+                # Process MODBUS command (from panel MODBUS tab)
+                _mc = _process_modbus_file(_modbus_cmd_file, ser, _modbus_resp_file, tx_total, rx_total)
+                if _mc:
+                    lines.append(_mc)
 
                 # Sample handoff — write first 3+ lines to shared list, signal parent
                 if not _sample_written:
@@ -980,7 +923,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 # Write HTML (throttled: max 3.3 fps)
                 now = time.time()
                 if now - last_write >= 0.3:
-                    html = _build_html(lines, port, baud)
+                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0], True, time.strftime("%H:%M:%S"))
                     try:
                         with open(html_path, "w", encoding="utf-8") as f:
                             f.write(html)
@@ -1015,6 +958,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             except Exception:
                 pass
 
+
+# -- MODBUS + Panel helpers (module-level, shared by collector thread) --
+
     def _default_chip(self) -> str:
         """Detect chip name from first available board config."""
         try:
@@ -1046,3 +992,91 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             )
         except Exception:
             pass
+
+def _modbus_crc(data):
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            if crc & 1: crc = (crc >> 1) ^ 0xA001
+            else: crc >>= 1
+    return crc
+
+
+_PANEL_TEMPLATE = None
+
+
+def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp):
+    global _PANEL_TEMPLATE
+    if _PANEL_TEMPLATE is None:
+        _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "panel.html")
+        with open(_tp, encoding="utf-8") as f:
+            _PANEL_TEMPLATE = f.read()
+    rows = "".join(f'<div class="line">{ln}</div>\n' for ln in lines)
+    t = _PANEL_TEMPLATE
+    t = t.replace("{{PORT}}", str(port))
+    t = t.replace("{{OPEN_CLOSE}}", "Close" if is_open else "Open")
+    t = t.replace("{{DOT_COLOR}}", "var(--acc)" if is_open else "var(--warn)")
+    t = t.replace("{{ROWS}}", rows)
+    t = t.replace("{{RX}}", str(rx_count))
+    t = t.replace("{{TX}}", str(tx_count))
+    t = t.replace("{{IS_OPEN}}", "true" if is_open else "false")
+    t = t.replace('<div class="modbus"', f'<span style="display:none" id="ts">{timestamp}</span><div class="modbus"')
+    return t
+
+
+def _process_send_file(send_file, ser, tx_total):
+    if not os.path.exists(send_file): return None
+    try:
+        import json as _j
+        with open(send_file, "rb") as f: data = _j.loads(f.read())
+        os.remove(send_file)
+        text = data.get("text", ""); is_hex = data.get("hex", False); crlf = data.get("crlf", True)
+        payload = bytes.fromhex(text.replace(" ","")) if is_hex else text.encode("ascii","replace")
+        if crlf: payload += b"\r\n"
+        ser.write(payload); tx_total[0] += len(payload)
+        return f'<span style="color:var(--tx-clr)">[TX]</span> {text}'
+    except: return None
+
+
+def _process_modbus_file(modbus_file, ser, resp_file, tx_total, rx_total):
+    if not os.path.exists(modbus_file): return None
+    try:
+        import json as _j, struct as _s, time as _t
+        with open(modbus_file, "rb") as f: data = _j.loads(f.read())
+        os.remove(modbus_file)
+        mb = data.get("mb", {})
+        slave = mb.get("slave",1)&0xFF; fc = mb.get("fc",3)&0xFF
+        addr = mb.get("addr",0)&0xFFFF; count = mb.get("count",1)&0xFFFF
+        ds = mb.get("data","")
+        frame = _s.pack(">BBHH", slave, fc, addr, count if fc!=6 else 0)
+        if fc in (6,16) and ds:
+            vs = [int(v.strip()) for v in ds.split(",") if v.strip()]
+            if fc==6 and vs: frame += _s.pack(">H", vs[0])
+            elif fc==16 and vs: frame += _s.pack(">H",len(vs))+_s.pack(">B",len(vs)*2)+_s.pack(">"+"H"*len(vs),*vs)
+        frame += _s.pack("<H", _modbus_crc(frame))
+        try: ser.reset_input_buffer()
+        except: pass
+        ser.write(frame); tx_total[0] += len(frame)
+        d = _t.time()+0.5; resp = b""
+        while _t.time()<d:
+            try:
+                ck = ser.read(64)
+                if ck: resp += ck
+                if len(resp)>=5 and len(resp)>=5+resp[2]: break
+            except: break
+            _t.sleep(0.01)
+        rx_total[0] += len(resp)
+        rh = " ".join(f"{b:02X}" for b in resp) if resp else "(no response)"
+        ok = len(resp)>=5 and _modbus_crc(resp[:-2])==_s.unpack("<H",resp[-2:])[0]
+        regs = []
+        if ok and fc in (3,4) and len(resp)>=5:
+            bc = resp[2]
+            regs = [resp[i]<<8|resp[i+1] for i in range(3, min(3+bc, len(resp)-2), 2)]
+        try:
+            with open(resp_file,"w") as f: _j.dump({"raw":rh+("" if ok else ' <span style="color:var(--warn)">CRC ERR</span>'),"crc_ok":ok,"regs":regs,"rx_bytes":len(resp),"tx_bytes":len(frame)},f)
+        except: pass
+        return f'<span style="color:var(--tx-clr)">[TX MODBUS]</span> {rh}'
+    except: return None
+
+
