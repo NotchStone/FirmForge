@@ -441,6 +441,15 @@ def _start_monitor_httpd(root: str) -> int:
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=data_dir, **kw)
 
+        def do_GET(self):
+            if "/serial_live.html" in self.path:
+                try:
+                    with open(os.path.join(data_dir, "heartbeat.txt"), "w") as f:
+                        f.write(str(time.time()))
+                except Exception:
+                    pass
+            super().do_GET()
+
         def do_POST(self):
             if self.path == "/stop":
                 try:
