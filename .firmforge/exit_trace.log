@@ -1,0 +1,14 @@
+[20:54:36] EXIT: THREAD CRASH ValueError: invalid literal for int() with base 10: '--app'
+Traceback (most recent call last):
+  File "C:\MyLab\MCU\firmforge\core\pipeline_runner.py", line 816, in _collector_thread
+    from firmforge.tools.serial_collector import make_html
+  File "C:\MyLab\MCU\firmforge\tools\serial_collector.py", line 20, in <module>
+    baud = int(sys.argv[3])
+ValueError: invalid literal for int() with base 10: '--app'
+[20:54:58] EXIT: THREAD CRASH ValueError: invalid literal for int() with base 10: '--app'
+Traceback (most recent call last):
+  File "C:\MyLab\MCU\firmforge\core\pipeline_runner.py", line 816, in _collector_thread
+    from firmforge.tools.serial_collector import make_html
+  File "C:\MyLab\MCU\firmforge\tools\serial_collector.py", line 20, in <module>
+    baud = int(sys.argv[3])
+ValueError: invalid literal for int() with base 10: '--app'

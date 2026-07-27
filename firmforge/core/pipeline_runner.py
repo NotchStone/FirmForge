@@ -269,8 +269,13 @@ class PipelineRunner:
         state.mark_done("test")
         state.save()
 
-        # Write serial output summary HTML for Agent panel display
-        self._write_serial_summary(source_dir, s5)
+        # Wait for collector thread to exit (Stop button on panel)
+        if hasattr(self, '_collector_alive') and self._collector_alive.is_alive():
+            logger.info("S5 panel live — waiting for Stop signal (or close window)")
+            try:
+                self._collector_alive.join()
+            except KeyboardInterrupt:
+                pass
 
         result.overall_success = all(s.success for s in result.stages)
         result.total_elapsed_ms = (time.time() - start) * 1000
@@ -754,6 +759,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             )
             t.start()
 
+            # Keep reference for run() to wait on
+            self._collector_alive = t
+
             # Wait for sample (3 lines or 8s timeout)
             if sample_ready.wait(timeout=8.0):
                 sample_lines = list(_sample_lines[:3])
@@ -812,8 +820,79 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             data_dir = str(Path(html_path).parent)
             stop_path = html_path + ".stop"
 
-            # Import HTML maker
-            from firmforge.tools.serial_collector import make_html
+            # Inline HTML template (no cross-file import)
+            _HTML_TMPL = (
+                '<!DOCTYPE html>\n<html lang="zh-CN">\n<head><meta charset="UTF-8"><title>FirmForge Serial</title>\n'
+                '<style>\n:root{{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#94a3b8;--acc:#22d3ee;'
+                '--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748}}'
+                '\n*{{margin:0;padding:0;box-sizing:border-box}}\n'
+                'body{{background:var(--bg);color:var(--txt);font-family:\'Segoe UI\',system-ui,sans-serif;'
+                'font-size:13px;height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}}\n'
+                '.tbar{{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(--hdr);'
+                'border-bottom:1px solid var(--sep);flex-shrink:0;min-height:36px}}\n'
+                '.tbar .l{{display:flex;align-items:center;gap:8px;flex:1;min-width:0}}\n'
+                '.tbar .r{{display:flex;align-items:center;gap:6px}}\n'
+                '.dot{{width:8px;height:8px;border-radius:50%;background:var(--acc);flex-shrink:0}}\n'
+                '.port{{color:var(--acc);font-weight:600;font-size:13px}}\n'
+                '.baud{{color:var(--dim);font-size:11px}}\n'
+                '.count{{color:var(--dim);font-size:11px;white-space:nowrap}}\n'
+                '.sep{{width:1px;height:16px;background:var(--sep);margin:0 4px}}\n'
+                '.btn{{border:1px solid var(--sep);background:var(--btn-bg);color:var(--txt);padding:3px 10px;'
+                'border-radius:4px;cursor:pointer;font-size:11px;transition:background .15s}}\n'
+                '.btn:hover{{background:var(--btn-hover)}}\n'
+                '.btn.danger{{background:var(--warn);border-color:var(--warn);color:#fff}}\n'
+                '.btn.danger:hover{{opacity:.85}}\n'
+                '.out{{flex:1;overflow-y:auto;padding:8px 14px;font-family:\'Cascadia Code\',Consolas,monospace;'
+                'font-size:12.5px;line-height:1.55}}\n'
+                '.line{{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.02);'
+                'white-space:pre-wrap;word-break:break-all}}\n'
+                '.ftr{{padding:4px 14px;text-align:center;font-size:10px;color:var(--dim);'
+                'border-top:1px solid var(--sep);background:var(--hdr);flex-shrink:0}}\n'
+                '@media(prefers-color-scheme:light){{:root{{--bg:#f1f5f9;--hdr:#e2e8f0;--txt:#1e293b;'
+                '--dim:#64748b;--acc:#0284c7;--warn:#dc2626;--btn-bg:#cbd5e1;--btn-hover:#94a3b8;--sep:#cbd5e1}}}}\n'
+                '</style></head>\n<body>\n'
+                '<div class="tbar">\n  <span class="l">\n'
+                '    <span class="dot" id="dot"></span>\n'
+                '    <span class="port">{_p}</span>\n'
+                '    <span class="baud">{_b}&nbsp;baud</span>\n'
+                '    <span class="sep"></span>\n'
+                '    <span class="count" id="info">{_n}&nbsp;lines&nbsp;|&nbsp;{_t}</span>\n'
+                '  </span>\n  <span class="r">\n'
+                '    <button class="btn" onclick="clearOutput()">Clear</button>\n'
+                '    <button class="btn danger" onclick="stopMonitor()">Stop</button>\n'
+                '  </span>\n</div>\n'
+                '<div class="out" id="out">{_r}</div><!--/output-->\n'
+                '<div class="ftr">FirmForge Serial Monitor</div>\n'
+                '<script>\n'
+                'let cur=(out.innerHTML.match(/<div class="line">/g)||[]).length,dot=document.getElementById("dot");\n'
+                'setInterval(function(){{\n  var x=new XMLHttpRequest();\n'
+                '  x.open("GET",location.pathname.split("?")[0]+"?t="+Date.now(),true);\n'
+                '  x.onload=function(){{\n    if(x.status!==200)return;\n'
+                '    var t=x.responseText,m=t.match(/<div class="out" id="out">([\\s\\S]*?)<!--\\/output-->/);\n'
+                '    if(!m)return;\n    var n=(m[1].match(/<div class="line">/g)||[]).length;\n'
+                '    if(n!==cur){{var all=(m[1].match(/<div class="line">[\\s\\S]*?<\\/div>/g)||[]);'
+                'for(var i=cur;i<all.length;i++)out.insertAdjacentHTML("beforeend",all[i]);cur=n;'
+                'var last=out.lastElementChild;if(last)last.scrollIntoView(false);}}\n'
+                '    var info=t.match(/<span[^>]+id="info"[^>]*>([^<]+)<\\/span>/);\n'
+                '    if(info)document.getElementById("info").innerHTML=info[1];\n'
+                '    var tm=t.match(/\\| (\\d{{2}}:\\d{{2}}:\\d{{2}})<\\/span>/);\n'
+                '    if(tm){{var p=tm[1].split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2],\n'
+                '      ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds(),\n'
+                '      df=Math.min(Math.abs(ns-fs),86400-Math.abs(ns-fs));\n'
+                '      dot.style.background=df<3?"var(--acc)":"var(--warn)";}}\n  }};\n  x.send();\n'
+                '}},500);\nwindow.onload=function(){{out.scrollTop=out.scrollHeight;}};\n'
+                'function clearOutput(){{out.innerHTML="";}}\n'
+                'function stopMonitor(){{fetch("/stop",{{method:"POST"}}).then(function(){{'
+                'document.body.innerHTML=\''
+                '<div style="display:flex;align-items:center;justify-content:center;height:100vh;'
+                'font-size:15px;color:var(--dim)">Serial closed. You may close this page.</div>\';}});'
+                'navigator.sendBeacon("/quit");}}\n</script>\n</body></html>'
+            )
+
+            def _build_html(lns, p, b):
+                ts = __import__("time").strftime("%H:%M:%S")
+                rows = "".join(f'<div class="line">{ln}</div>\n' for ln in lns)
+                return _HTML_TMPL.format(_p=p, _b=b, _n=len(lns), _t=ts, _r=rows)
 
             # Open COM4 (retry up to 10x — avrdude may still be releasing port)
             from firmforge.providers.com_port import ComPort
@@ -847,7 +926,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             lines: list[str] = []
 
             # Write initial HTML
-            html = make_html(lines, port, baud)
+            html = _build_html(lines, port, baud)
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
                     f.write(html)
@@ -890,7 +969,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 # Write HTML (throttled: max 3.3 fps)
                 now = time.time()
                 if now - last_write >= 0.3:
-                    html = make_html(lines, port, baud)
+                    html = _build_html(lines, port, baud)
                     try:
                         with open(html_path, "w", encoding="utf-8") as f:
                             f.write(html)
