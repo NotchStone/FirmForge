@@ -63,10 +63,13 @@ atexit.register(cleanup)
 
 
 # ---------- HTML template ----------
-def write_html():
+def make_html(lines_list, port, baud_rate):
+    """Generate complete serial_live.html from line data. Thread-safe — pure function."""
     ts = time.strftime('%H:%M:%S')
-    rows = "".join(f'<div class="line">{ln}</div>\n' for ln in lines)
-    cnt = len(lines)
+    rows = "".join(f'<div class="line">{ln}</div>\n' for ln in lines_list)
+    cnt = len(lines_list)
+    port_name = port
+    baud = baud_rate
 
     
     html = f"""<!DOCTYPE html>
@@ -136,6 +139,17 @@ function stopMonitor(){{fetch('/stop',{{method:'POST'}}).then(function(){{docume
 </script>
 </body></html>"""
 
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html)
+    except Exception:
+        pass
+
+
+def write_html():
+    """Legacy wrapper — calls make_html with module globals (for subprocess mode)."""
+    html = make_html(lines, port_name, baud)
     try:
         os.makedirs(data_dir, exist_ok=True)
         with open(html_path, "w", encoding="utf-8") as f:
