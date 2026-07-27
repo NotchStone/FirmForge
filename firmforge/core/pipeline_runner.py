@@ -260,7 +260,7 @@ class PipelineRunner:
         if not expected and flash_done_before and (state.should_skip_test(fps) or s4.details.get("skipped")):
             s5 = self._skipped_stage(5, "Test", "fingerprints match")
         else:
-            s5 = self._stage_test(board_id, expected)
+            s5 = self._stage_verify(board_id, expected)
         result.stages.append(s5)
         self._notify_progress(progress_callback, s5)
         if not s5.success:
@@ -700,18 +700,17 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # Stage 5: Test
     # ===================================================================
 
-    def _stage_test(self, board_id: str | None, expected: str = "") -> PipelineStage:
-        """S5 Verify — start collector, get 3 sample lines, return.
+    def _stage_verify(self, board_id: str | None, expected: str = "") -> PipelineStage:
+        """S5 Verify — start collector thread, get 3 sample lines, return.
 
-        Non-blocking. Collector keeps running for live panel after this returns.
-        Agent gets sample_lines for analysis. User opens panel for live view.
+        Thread-based (no subprocess). Collector runs in daemon thread.
+        Agent gets sample_lines. User opens panel for live view.
         """
         stage = PipelineStage(stage=5, name="Verify")
         t0 = time.time()
 
         try:
-            import subprocess
-            import sys
+            import threading
             import json
             from pathlib import Path
             root = Path(__file__).resolve().parent.parent.parent
@@ -734,46 +733,34 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 return stage
 
             html_path = str(root / ".firmforge" / "serial_live.html")
-            sample_path = str(root / ".firmforge" / "sample_lines.json")
+            stop_path = html_path + ".stop"
 
-            # Remove stale sample file
-            try:
-                os.remove(sample_path)
-            except OSError:
-                pass
             # Remove stale stop file
             try:
-                os.remove(html_path + ".stop")
+                os.remove(stop_path)
             except OSError:
                 pass
 
-            collector = str(root / "firmforge" / "tools" / "serial_collector.py")
-            DETACHED = 0x00000008
-            CREATE_NO_WINDOW = 0x08000000
-            pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
-            if not os.path.exists(pyw):
-                pyw = sys.executable
-            subprocess.Popen(
-                [pyw, collector, html_path, port, "9600", "0",
-                 "--sample", sample_path],
-                creationflags=DETACHED | CREATE_NO_WINDOW,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL, close_fds=True,
-            )
+            # Shared state between main thread and collector thread
+            sample_ready = threading.Event()
+            _sample_lines: list[str] = []
+            _total_lines = [0]
 
-            # Wait for sample JSON (collector writes after 3 lines or 8s timeout)
-            deadline = time.time() + 12.0
-            sample_lines: list[str] = []
-            total = 0
-            while time.time() < deadline:
-                try:
-                    with open(sample_path) as f:
-                        data = json.load(f)
-                    sample_lines = data.get("sample_lines", [])
-                    total = data.get("total", 0)
-                    break
-                except (OSError, json.JSONDecodeError):
-                    time.sleep(0.3)
+            # Start collector thread (daemon — dies with MCP process)
+            t = threading.Thread(
+                target=self._collector_thread,
+                args=(html_path, port, 9600, sample_ready, _sample_lines, _total_lines),
+                daemon=True,
+            )
+            t.start()
+
+            # Wait for sample (3 lines or 8s timeout)
+            if sample_ready.wait(timeout=8.0):
+                sample_lines = list(_sample_lines[:3])
+                total = _total_lines[0]
+            else:
+                sample_lines = []
+                total = 0
 
             stage.success = True
             stage.details = {
@@ -814,6 +801,129 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         stage.elapsed_ms = (time.time() - t0) * 1000
         logger.info("S5 Verify: %s", f"{stage.details.get('sample_count', 0)} sample lines")
         return stage
+
+    def _collector_thread(self, html_path: str, port: str, baud: int,
+                          sample_ready, sample_lines_out: list, total_lines_out: list) -> None:
+        """Daemon thread — opens COM4, reads serial, writes HTML + signals sample."""
+        try:
+            import json
+            from pathlib import Path
+
+            data_dir = str(Path(html_path).parent)
+            stop_path = html_path + ".stop"
+
+            # Import HTML maker
+            from firmforge.tools.serial_collector import make_html
+
+            # Open COM4 (retry up to 10x — avrdude may still be releasing port)
+            from firmforge.providers.com_port import ComPort
+            ser_wrapper = None
+            for _retry in range(10):
+                try:
+                    ser_wrapper = ComPort(port, baud, timeout=0.3)
+                    ser_wrapper.__enter__()
+                    break
+                except Exception:
+                    time.sleep(0.5)
+            if ser_wrapper is None:
+                # Write crash log but don't crash MCP
+                with open(os.path.join(data_dir, "exit_trace.log"), "a") as f:
+                    f.write(f"[{time.strftime('%H:%M:%S')}] EXIT: Could not open {port}\n")
+                sample_ready.set()  # Signal so verify doesn't hang
+                return
+
+            ser = ser_wrapper._ser
+            time.sleep(2.0)  # MCU post-flash settle
+            try:
+                ser.reset_input_buffer()
+            except Exception:
+                pass
+
+            buf = ""
+            _sample_written = False
+            _sample_timeout = 8.0
+            last_write = time.time()
+            _start_time = time.time()
+            lines: list[str] = []
+
+            # Write initial HTML
+            html = make_html(lines, port, baud)
+            try:
+                with open(html_path, "w", encoding="utf-8") as f:
+                    f.write(html)
+            except Exception:
+                pass
+
+            while True:
+                # Check .stop file (written by ff_monitor stop or panel Stop button)
+                if os.path.exists(stop_path):
+                    break
+
+                # Sample handoff — write first 3+ lines to shared list, signal parent
+                if not _sample_written:
+                    if len(lines) >= 3 or (time.time() - _start_time > _sample_timeout):
+                        sample_lines_out.extend(lines[:3] if lines else [])
+                        total_lines_out[0] = len(lines)
+                        try:
+                            sample_ready.set()
+                        except Exception:
+                            pass
+                        _sample_written = True
+
+                # Read serial
+                try:
+                    chunk = ser.read(64)
+                except Exception:
+                    time.sleep(0.5)
+                    continue
+
+                if chunk:
+                    if isinstance(chunk, bytes):
+                        chunk = chunk.decode("ascii", errors="replace")
+                    buf += chunk
+                    while chr(10) in buf:
+                        line, buf = buf.split(chr(10), 1)
+                        line = line.rstrip(chr(13))
+                        if line:
+                            lines.append(line)
+
+                # Write HTML (throttled: max 3.3 fps)
+                now = time.time()
+                if now - last_write >= 0.3:
+                    html = make_html(lines, port, baud)
+                    try:
+                        with open(html_path, "w", encoding="utf-8") as f:
+                            f.write(html)
+                    except Exception:
+                        pass
+                    last_write = now
+
+                time.sleep(0.05)
+
+            # Cleanup: close COM4 gracefully
+            try:
+                ser.close()
+            except Exception:
+                pass
+            try:
+                ser_wrapper.__exit__(None, None, None)
+            except Exception:
+                pass
+
+        except Exception as e:
+            # Thread crash — log but don't kill MCP process
+            try:
+                import traceback
+                log_dir = str(Path(html_path).parent) if html_path else ".firmforge"
+                with open(os.path.join(log_dir, "exit_trace.log"), "a") as f:
+                    f.write(f"[{time.strftime('%H:%M:%S')}] EXIT: THREAD CRASH {type(e).__name__}: {e}\n")
+                    f.write(traceback.format_exc())
+            except Exception:
+                pass
+            try:
+                sample_ready.set()
+            except Exception:
+                pass
 
     def _default_chip(self) -> str:
         """Detect chip name from first available board config."""
