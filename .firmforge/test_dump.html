@@ -35,21 +35,25 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <body>
 <div class="bar">
   <span style="color:var(--acc);font-weight:600;font-size:12px">FirmForge</span>
-  <select id="portsel"><option>{{PORT}}</option></select>
+  <select id="portsel"><option>COM4</option></select>
   <select id="baudsel" onchange="location.href=location.pathname.split('?')[0]+'?baud='+this.value">
     <option value="9600">9600</option><option value="19200">19200</option>
     <option value="38400">38400</option><option value="57600">57600</option>
     <option value="115200">115200</option>
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
-  <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
-  <span class="dot" style="background:{{DOT_COLOR}};margin-left:auto"></span>
+  <button id="connbtn" onclick="toggleConn()">Close</button>
+  <span class="dot" style="background:var(--acc);margin-left:auto"></span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
-<div class="out" id="out">{{ROWS}}</div>
+<div class="out" id="out"><div class="line">HB=201 LUX=135 PWM=5</div>
+<div class="line">HB=146 LUX=130 PWM=2</div>
+<div class="line">HB=91 LUX=130 PWM=2</div>
+<div class="line">HB=36 LUX=129 PWM=2</div>
+</div>
 <div class="modbus" id="modbus-panel">
   <div class="form">
     <div class="row"><span>Slave</span><input id="mb-slave" value="1" style="width:60px"></div>
@@ -76,11 +80,11 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
 </div>
-<div class="status" id="status">RX {{RX}}  TX {{TX}}</div>
+<div class="status" id="status">RX 86  TX 0</div>
 <script>
 var out=document.getElementById("out");
 var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
-var isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
+var isOpen=true,dot=document.querySelector(".dot");
 
 function toggleConn(){
   fetch(isOpen?"/close":"/open",{method:"POST"}).then(function(){location.reload()});;
