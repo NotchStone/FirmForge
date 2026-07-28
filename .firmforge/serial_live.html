@@ -43,6 +43,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
   <button id="connbtn" onclick="toggleConn()">Close</button>
+  <span style="color:var(--dim);font-size:10px;margin-left:8px">RX <span id="rxval">194</span>  TX <span id="txval">0</span>  <span id="tsval">18:17:36</span></span>
   <span class="dot" style="background:var(--acc);margin-left:auto"></span>
 </div>
 <div class="tabs">
@@ -50,32 +51,15 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
 <div class="out" id="out"><div class="line">HB=201 LUX=135 PWM=5</div>
-<div class="line">HB=146 LUX=129 PWM=2</div>
-<div class="line">HB=91 LUX=129 PWM=1</div>
-<div class="line">HB=36 LUX=129 PWM=1</div>
+<div class="line">HB=146 LUX=130 PWM=2</div>
+<div class="line">HB=91 LUX=129 PWM=2</div>
+<div class="line">HB=36 LUX=129 PWM=2</div>
 <div class="line">HB=237 LUX=129 PWM=2</div>
-<div class="line">HB=183 LUX=130 PWM=2</div>
+<div class="line">HB=183 LUX=129 PWM=2</div>
 <div class="line">HB=128 LUX=130 PWM=2</div>
-<div class="line">HB=73 LUX=130 PWM=2</div>
-<div class="line">HB=18 LUX=130 PWM=2</div>
-<div class="line">HB=219 LUX=130 PWM=2</div>
-<div class="line">HB=164 LUX=130 PWM=2</div>
-<div class="line">HB=110 LUX=130 PWM=2</div>
-<div class="line">HB=55 LUX=130 PWM=2</div>
-<div class="line">HB=0 LUX=129 PWM=2</div>
-<div class="line">HB=201 LUX=129 PWM=1</div>
-<div class="line">HB=146 LUX=129 PWM=1</div>
-<div class="line">HB=91 LUX=129 PWM=1</div>
-<div class="line">HB=36 LUX=129 PWM=1</div>
-<div class="line">HB=237 LUX=129 PWM=1</div>
-<div class="line">HB=183 LUX=129 PWM=1</div>
-<div class="line">HB=128 LUX=129 PWM=2</div>
 <div class="line">HB=73 LUX=129 PWM=2</div>
-<div class="line">HB=18 LUX=130 PWM=2</div>
-<div class="line">HB=219 LUX=130 PWM=2</div>
-<div class="line">HB=164 LUX=130 PWM=2</div>
-<div class="line">HB=109 LUX=130 PWM=2</div>
-</div><!--/output--><span style="display:none" id="ts">18:08:45</span>
+<div class="line">HB=18 LUX=129 PWM=2</div>
+</div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="form">
     <div class="row"><span>Slave</span><input id="mb-slave" value="1" style="width:60px"></div>
@@ -102,7 +86,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
 </div>
-<div class="status" id="status">RX 561  TX 0</div>
+</div>
 <script>
 var out=document.getElementById("out");
 var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
@@ -166,8 +150,9 @@ setInterval(function(){
       for(var i=cur;i<all.length;i++)out.insertAdjacentHTML("beforeend",all[i]);
       cur=n;out.scrollTop=out.scrollHeight;
     }
-    var st=t.match(/<div class="status" id="status">([^<]+)<\/div>/);
-    if(st)document.getElementById("status").innerHTML=st[1];
+    var st=t.match(/<span id="rxval">([^<]+)/);if(st)document.getElementById("rxval").innerHTML=st[1];
+    var sx=t.match(/<span id="txval">([^<]+)/);if(sx)document.getElementById("txval").innerHTML=sx[1];
+    var su=t.match(/<span id="tsval">([^<]+)/);if(su)document.getElementById("tsval").innerHTML=su[1];
     var tm=t.match(/(\d{2}:\d{2}:\d{2})/);
     if(tm){
       var p=tm[1].split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];

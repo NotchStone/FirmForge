@@ -43,6 +43,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
   <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
+  <span style="color:var(--dim);font-size:10px;margin-left:8px">RX <span id="rxval">{{RX}}</span>  TX <span id="txval">{{TX}}</span>  <span id="tsval">{{TIMESTAMP}}</span></span>
   <span class="dot" style="background:{{DOT_COLOR}};margin-left:auto"></span>
 </div>
 <div class="tabs">
@@ -76,7 +77,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
 </div>
-<div class="status" id="status">RX {{RX}}  TX {{TX}}<span style="margin-left:auto">&#64; {{TIMESTAMP}}</span></div>
+</div>
 <script>
 var out=document.getElementById("out");
 var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
@@ -140,8 +141,9 @@ setInterval(function(){
       for(var i=cur;i<all.length;i++)out.insertAdjacentHTML("beforeend",all[i]);
       cur=n;out.scrollTop=out.scrollHeight;
     }
-    var st=t.match(/<div class="status" id="status">([^<]+)<\/div>/);
-    if(st)document.getElementById("status").innerHTML=st[1];
+    var st=t.match(/<span id="rxval">([^<]+)/);if(st)document.getElementById("rxval").innerHTML=st[1];
+    var sx=t.match(/<span id="txval">([^<]+)/);if(sx)document.getElementById("txval").innerHTML=sx[1];
+    var su=t.match(/<span id="tsval">([^<]+)/);if(su)document.getElementById("tsval").innerHTML=su[1];
     var tm=t.match(/(\d{2}:\d{2}:\d{2})/);
     if(tm){
       var p=tm[1].split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];
