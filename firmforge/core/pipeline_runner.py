@@ -954,17 +954,20 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     last_write = now
 
                 # Push to SSE stream (instant updates, zero polling latency)
-                try:
-                    from firmforge.adapters.mcp_server import _get_stream_queue
-                    _get_stream_queue().put_nowait({
-                        "lines": list(lines[-30:]),  # last 30 lines
-                        "total": len(lines),
-                        "rx": rx_total[0],
-                        "tx": tx_total[0],
-                        "ts": time.strftime("%H:%M:%S"),
-                    })
-                except Exception:
-                    pass
+                _sse_pushed = getattr(ser, '_sse_pushed', 0)
+                if _sse_pushed < len(lines):
+                    try:
+                        from firmforge.adapters.mcp_server import _get_stream_queue
+                        _get_stream_queue().put_nowait({
+                            "new": lines[_sse_pushed:],  # delta only
+                            "total": len(lines),
+                            "rx": rx_total[0],
+                            "tx": tx_total[0],
+                            "ts": time.strftime("%H:%M:%S"),
+                        })
+                        setattr(ser, '_sse_pushed', len(lines))
+                    except Exception:
+                        pass
 
                 time.sleep(0.05)
 

@@ -9,19 +9,13 @@
     },
     "build": {
       "status": "done",
-      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\multifile\\firmware.hex"
-    },
-    "flash": {
-      "status": "done"
-    },
-    "test": {
-      "status": "done"
+      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\adc_log\\firmware.hex"
     }
   },
   "fingerprints": {
     "board_id": "arduino_328p",
     "port": "COM4",
-    "source": "6f5b3e65c06cdb2b",
-    "hex": "c210d605a9119894"
+    "source": "35017982421202f4",
+    "hex": "27fa52283bfe7aa8"
   }
 }
