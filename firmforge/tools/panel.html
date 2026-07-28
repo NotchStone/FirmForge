@@ -34,7 +34,8 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </style></head>
 <body>
 <div class="bar">
-  <span style="color:var(--acc);font-weight:600;font-size:12px">FirmForge</span>
+  <span class="dot" style="background:{{DOT_COLOR}};flex-shrink:0"></span>
+  <span style="color:var(--acc);font-weight:600;font-size:12px;margin-left:6px">FirmForge</span>
   <select id="portsel"><option>{{PORT}}</option></select>
   <select id="baudsel" onchange="location.href=location.pathname.split('?')[0]+'?baud='+this.value">
     <option value="9600">9600</option><option value="19200">19200</option>
@@ -42,9 +43,8 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
     <option value="115200">115200</option>
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
+  <span style="color:var(--dim);margin-left:auto">RX <span id="rxval">{{RX}}</span>  TX <span id="txval">{{TX}}</span>  <span id="tsval">{{TIMESTAMP}}</span></span>
   <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
-  <span style="color:var(--dim);font-size:10px;margin-left:8px">RX <span id="rxval">{{RX}}</span>  TX <span id="txval">{{TX}}</span>  <span id="tsval">{{TIMESTAMP}}</span></span>
-  <span class="dot" style="background:{{DOT_COLOR}};margin-left:auto"></span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
@@ -85,14 +85,17 @@ var isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
 
 function toggleConn(){
   if(isOpen){
+    dot.style.background="var(--warn)";
+    document.getElementById("connbtn").textContent="Closing...";
     fetch("/close",{method:"POST"}).then(function(){
       isOpen=false;
-      dot.style.background="var(--warn)";
       document.getElementById("connbtn").textContent="Open";
       document.getElementById("out").style.opacity="0.4";
       document.getElementById("sendinput").disabled=true;
     });
   }else{
+    dot.style.background="#22d3ee";
+    document.getElementById("connbtn").textContent="Opening...";
     fetch("/open",{method:"POST"}).then(function(){
       isOpen=true;
       dot.style.background="var(--acc)";
