@@ -858,7 +858,13 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             _start_time = time.time()
             lines: list[str] = []
 
-            # Write initial HTML
+            # Init heartbeat with current time (panel may not be open yet)
+            # If no panel opens within 30s, auto-stop
+            try:
+                with open(os.path.join(data_dir, "heartbeat.txt"), "w") as f:
+                    f.write(str(time.time()))
+            except Exception:
+                pass
             html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%H:%M:%S"))
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
@@ -915,13 +921,14 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     except Exception: pass
                     continue
 
-                # Heartbeat: auto-stop if no panel poll for 6s
+                # Heartbeat: auto-stop if no panel poll for 30s (initial) / 6s (after open)
                 _hb_path = os.path.join(data_dir, "heartbeat.txt")
                 try:
+                    _hb_timeout = 30.0 if time.time() - _start_time < 30.0 else 6.0
                     if os.path.exists(_hb_path):
                         with open(_hb_path) as f:
                             _hb = float(f.read().strip() or "0")
-                        if time.time() - _hb > 6.0:
+                        if time.time() - _hb > _hb_timeout:
                             break
                 except Exception:
                     pass
