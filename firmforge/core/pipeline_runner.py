@@ -858,13 +858,6 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             _start_time = time.time()
             lines: list[str] = []
 
-            # Init heartbeat with current time (panel may not be open yet)
-            # If no panel opens within 30s, auto-stop
-            try:
-                with open(os.path.join(data_dir, "heartbeat.txt"), "w") as f:
-                    f.write(str(time.time()))
-            except Exception:
-                pass
             html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%H:%M:%S"))
             try:
                 with open(html_path, "w", encoding="utf-8") as f:

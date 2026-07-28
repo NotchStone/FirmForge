@@ -43,7 +43,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
     <option value="115200">115200</option>
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
-  <span style="color:var(--dim);margin-left:auto">RX <span id="rxval">194</span>  TX <span id="txval">0</span>  <span id="tsval">20:20:38</span></span>
+  <span style="color:var(--dim);margin-left:auto">RX <span id="rxval">323</span>  TX <span id="txval">0</span>  <span id="tsval">20:27:05</span></span>
   <button id="connbtn" onclick="toggleConn()">Close</button>
 </div>
 <div class="tabs">
@@ -55,10 +55,16 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="line">HB=91 LUX=132 PWM=3</div>
 <div class="line">HB=36 LUX=132 PWM=3</div>
 <div class="line">HB=237 LUX=132 PWM=3</div>
-<div class="line">HB=183 LUX=132 PWM=3</div>
+<div class="line">HB=183 LUX=131 PWM=3</div>
 <div class="line">HB=128 LUX=132 PWM=3</div>
-<div class="line">HB=73 LUX=131 PWM=3</div>
-<div class="line">HB=18 LUX=131 PWM=3</div>
+<div class="line">HB=73 LUX=132 PWM=3</div>
+<div class="line">HB=18 LUX=132 PWM=3</div>
+<div class="line">HB=219 LUX=132 PWM=3</div>
+<div class="line">HB=164 LUX=132 PWM=3</div>
+<div class="line">HB=110 LUX=132 PWM=3</div>
+<div class="line">HB=55 LUX=132 PWM=3</div>
+<div class="line">HB=0 LUX=132 PWM=3</div>
+<div class="line">HB=201 LUX=131 PWM=3</div>
 </div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="form">
@@ -148,10 +154,13 @@ function onFcChange(){
   document.getElementById("mb-count").style.display=(fc==6)?"none":"";
   document.getElementById("mb-data-row").style.display=(fc==6||fc==16)?"flex":"none";
 }
-var es=new EventSource("http://127.0.0.1:9878/stream");
-es.onmessage=function(e){
-  var d=JSON.parse(e.data);
-  if(d.lines){
+function pollData(){
+  var x=new XMLHttpRequest();
+  x.open("GET","http://127.0.0.1:9878/data.json?t="+Date.now(),true);
+  x.onload=function(){
+    if(x.status!=200)return;
+    var d=JSON.parse(x.responseText);
+    if(!d.lines||d.lines.length==0)return;
     var n=d.total;
     if(n>cur){
       for(var i=cur;i<d.lines.length;i++){
@@ -159,16 +168,19 @@ es.onmessage=function(e){
       }
       cur=n;out.scrollTop=out.scrollHeight;
     }
-  }
-  document.getElementById("rxval").innerHTML=d.rx||0;
-  document.getElementById("txval").innerHTML=d.tx||0;
-  document.getElementById("tsval").innerHTML=d.ts||"";
-  if(d.ts){
-    var p=d.ts.split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];
-    var ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds();
-    dot.style.background=Math.abs(ns-fs)<4?"var(--acc)":"var(--warn)";
-  }
-};
-es.onerror=function(){dot.style.background="var(--warn)";};
+    document.getElementById("rxval").innerHTML=d.rx||0;
+    document.getElementById("txval").innerHTML=d.tx||0;
+    document.getElementById("tsval").innerHTML=d.ts||"";
+    if(d.ts){
+      var p=d.ts.split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];
+      var ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds();
+      dot.style.background=Math.abs(ns-fs)<4?"var(--acc)":"var(--warn)";
+    }
+  };
+  x.onerror=function(){dot.style.background="var(--warn)";};
+  x.send();
+}
+setInterval(pollData,400);
+pollData();
 </script>
 </body></html>
