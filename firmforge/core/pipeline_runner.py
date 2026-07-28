@@ -266,7 +266,7 @@ class PipelineRunner:
                     _icon = "&#128260;"  # 🔄 flash (may retry)
                 else:
                     _icon = "&#9989;"  # ✅ clean pass
-                stage_icons.append(f'<span style="color:var(--tx-clr)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                stage_icons.append(f'<span style="color:var(--dim)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
                 stage_icons.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
         stages_summary_html = "  ".join(stage_icons)
