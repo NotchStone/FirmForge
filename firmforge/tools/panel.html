@@ -49,7 +49,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
-<div class="out" id="out">{{ROWS}}</div><!--/output--><span style="display:none" id="ts">{{TIMESTAMP}}</span>
+<div class="out" id="out">{{ROWS}}</div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="form">
     <div class="row"><span>Slave</span><input id="mb-slave" value="1" style="width:60px"></div>
@@ -76,7 +76,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
 </div>
-<div class="status" id="status">RX {{RX}}  TX {{TX}}</div>
+<div class="status" id="status">RX {{RX}}  TX {{TX}}<span style="margin-left:auto">&#64; {{TIMESTAMP}}</span></div>
 <script>
 var out=document.getElementById("out");
 var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
