@@ -881,11 +881,22 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     try: ser_wrapper.__exit__(None, None, None)
                     except Exception: pass
                     ser = None
-                    # Wait for .pause to be removed (Open button)
+                    # Wait for .pause to be removed (Open button or heartbeat timeout)
+                    _pause_start = time.time()
                     while os.path.exists(pause_path):
                         if os.path.exists(stop_path):
                             break
-                        time.sleep(0.2)
+                        # Heartbeat check during pause — tab close detection
+                        _hb = time.time()
+                        try:
+                            if os.path.exists(_hb_path):
+                                with open(_hb_path) as f:
+                                    _hb = float(f.read().strip() or "0")
+                        except Exception:
+                            pass
+                        if time.time() - _hb > 6.0:
+                            break
+                        time.sleep(0.3)
                     if os.path.exists(stop_path):
                         break
                     # Reopen COM4
