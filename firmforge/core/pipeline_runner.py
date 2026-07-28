@@ -255,12 +255,21 @@ class PipelineRunner:
 
         state.mark_done("flash")
 
+        # Build stages summary for panel display
+        _ss_parts = []
+        for _s in result.stages:
+            if _s.success:
+                _ss_parts.append(f"S{_s.stage}:{int(_s.elapsed_ms)}ms")
+            else:
+                _ss_parts.append(f"S{_s.stage}:FAIL")
+        _ss = "  ".join(_ss_parts)
+
         # -- Stage 5: Test --
         # Always run Test if expected pattern is provided (need to verify output)
         if not expected and flash_done_before and (state.should_skip_test(fps) or s4.details.get("skipped")):
             s5 = self._skipped_stage(5, "Test", "fingerprints match")
         else:
-            s5 = self._stage_verify(board_id, expected)
+            s5 = self._stage_verify(board_id, expected, stages_summary=_ss)
         result.stages.append(s5)
         self._notify_progress(progress_callback, s5)
         if not s5.success:
@@ -705,7 +714,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # Stage 5: Test
     # ===================================================================
 
-    def _stage_verify(self, board_id: str | None, expected: str = "") -> PipelineStage:
+    def _stage_verify(self, board_id: str | None, expected: str = "",
+                       stages_summary: str = "") -> PipelineStage:
         """S5 Verify — start collector thread, get 3 sample lines, return.
 
         Thread-based (no subprocess). Collector runs in daemon thread.
@@ -754,7 +764,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # Start collector thread (daemon — dies with MCP process)
             t = threading.Thread(
                 target=self._collector_thread,
-                args=(html_path, port, 9600, sample_ready, _sample_lines, _total_lines),
+                args=(html_path, port, 9600, sample_ready, _sample_lines, _total_lines, stages_summary),
                 daemon=True,
             )
             t.start()
@@ -811,7 +821,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         return stage
 
     def _collector_thread(self, html_path: str, port: str, baud: int,
-                          sample_ready, sample_lines_out: list, total_lines_out: list) -> None:
+                          sample_ready, sample_lines_out: list, total_lines_out: list,
+                          stages_info: str = "") -> None:
         """Daemon thread — opens COM4, reads serial, writes HTML + signals sample."""
         try:
             import json
@@ -858,7 +869,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             _start_time = time.time()
             lines: list[str] = []
 
-            html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%H:%M:%S"))
+            html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info)
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
                     f.write(html)
@@ -945,7 +956,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 # Write HTML (throttled: max 3.3 fps)
                 now = time.time()
                 if now - last_write >= 0.3:
-                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0], True, time.strftime("%H:%M:%S"))
+                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0], True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info)
                     try:
                         with open(html_path, "w", encoding="utf-8") as f:
                             f.write(html)
@@ -964,6 +975,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                             "rx": rx_total[0],
                             "tx": tx_total[0],
                             "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "stages": stages_info,
                         })
                         setattr(ser, '_sse_pushed', len(lines))
                     except Exception:
@@ -1051,7 +1063,7 @@ def _modbus_crc(data):
 _PANEL_TEMPLATE = None
 
 
-def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp):
+def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, stages_str=""):
     global _PANEL_TEMPLATE
     if _PANEL_TEMPLATE is None:
         _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "panel.html")
@@ -1067,6 +1079,7 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp):
     t = t.replace("{{TX}}", str(tx_count))
     t = t.replace("{{IS_OPEN}}", "true" if is_open else "false")
     t = t.replace("{{TIMESTAMP}}", timestamp)
+    t = t.replace("{{STAGES}}", stages_str)
     return t
 
 

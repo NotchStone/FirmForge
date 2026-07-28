@@ -48,7 +48,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span id="tsval">{{TIMESTAMP}}</span>
+  <span id="tsval">{{TIMESTAMP}}</span> <span id="stages">{{STAGES}}</span>
   <span style="margin-left:auto">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span></span>
 </div>
 <div class="tabs">
@@ -150,6 +150,7 @@ es.onmessage=function(e){
   document.getElementById("rxval").innerHTML=d.rx||0;
   document.getElementById("txval").innerHTML=d.tx||0;
   document.getElementById("tsval").innerHTML=d.ts||"";
+  if(d.stages)document.getElementById("stages").innerHTML=d.stages;
   if(d.ts){
     var hm=d.ts.split(" ")[1];
     if(hm){var p=hm.split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];
