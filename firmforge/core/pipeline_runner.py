@@ -911,6 +911,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     continue
 
                 if chunk:
+                    rx_total[0] += len(chunk)
                     if isinstance(chunk, bytes):
                         chunk = chunk.decode("ascii", errors="replace")
                     buf += chunk
@@ -1021,7 +1022,6 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp):
     t = t.replace("{{RX}}", str(rx_count))
     t = t.replace("{{TX}}", str(tx_count))
     t = t.replace("{{IS_OPEN}}", "true" if is_open else "false")
-    t = t.replace('<div class="modbus"', f'<span style="display:none" id="ts">{timestamp}</span><div class="modbus"')
     return t
 
 

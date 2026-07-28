@@ -126,7 +126,7 @@ setInterval(function(){
   x.onload=function(){
     if(x.status!=200)return;
     var t=x.responseText;
-    var m=t.match(/<div class="out" id="out">([\s\S]*?)<\/div>\n<div class="modbus"/);
+    var m=t.match(/<div class="out" id="out">([\s\S]*?)<\/div>[\s\S]*?<div class="modbus"/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!=cur){
