@@ -983,6 +983,19 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                         pass
                     last_write = now
 
+                # Push to SSE stream (instant updates, zero polling latency)
+                try:
+                    from firmforge.adapters.mcp_server import _get_stream_queue
+                    _get_stream_queue().put_nowait({
+                        "lines": list(lines[-30:]),  # last 30 lines
+                        "total": len(lines),
+                        "rx": rx_total[0],
+                        "tx": tx_total[0],
+                        "ts": time.strftime("%H:%M:%S"),
+                    })
+                except Exception:
+                    pass
+
                 time.sleep(0.05)
 
             # Cleanup: close COM4 gracefully
@@ -992,6 +1005,13 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 pass
             try:
                 ser_wrapper.__exit__(None, None, None)
+            except Exception:
+                pass
+
+            # Clear stream queue so SSE handler exits
+            try:
+                from firmforge.adapters.mcp_server import _clear_stream_queue
+                _clear_stream_queue()
             except Exception:
                 pass
 
