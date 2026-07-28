@@ -481,6 +481,7 @@ def _start_monitor_httpd(root: str) -> int:
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             q = _get_stream_queue()
             import json as _json_sse
