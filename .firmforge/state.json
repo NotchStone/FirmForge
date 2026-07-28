@@ -10,6 +10,12 @@
     "build": {
       "status": "done",
       "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\adc_log\\firmware.hex"
+    },
+    "flash": {
+      "status": "done"
+    },
+    "test": {
+      "status": "done"
     }
   },
   "fingerprints": {
