@@ -426,6 +426,22 @@ if MCP_AVAILABLE and mcp is not None:
         return _do_monitor(port, baud, action)
 
 _monitor_httpd = None  # singleton HTTP server
+_stream_queue = None  # shared queue between collector thread and SSE handler
+
+
+def _get_stream_queue():
+    """Return the shared queue, creating it if needed."""
+    global _stream_queue
+    if _stream_queue is None:
+        import queue as _queue
+        _stream_queue = _queue.Queue()
+    return _stream_queue
+
+
+def _clear_stream_queue():
+    """Reset the stream queue (call after collector exits)."""
+    global _stream_queue
+    _stream_queue = None
 
 
 def _start_monitor_httpd(root: str) -> int:
@@ -455,6 +471,9 @@ def _start_monitor_httpd(root: str) -> int:
             super().__init__(*a, directory=data_dir, **kw)
 
         def do_GET(self):
+            if self.path == "/stream":
+                self._handle_sse()
+                return
             if "/serial_live.html" in self.path:
                 try:
                     with open(os.path.join(data_dir, "heartbeat.txt"), "w") as f:
@@ -462,6 +481,34 @@ def _start_monitor_httpd(root: str) -> int:
                 except Exception:
                     pass
             super().do_GET()
+
+        def _handle_sse(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            q = _get_stream_queue()
+            import json as _json_sse
+            _hb_file = os.path.join(data_dir, "heartbeat.txt")
+            try:
+                while True:
+                    try:
+                        item = q.get(timeout=3)
+                        data = _json_sse.dumps(item, ensure_ascii=False)
+                        self.wfile.write(f"data: {data}\n\n".encode())
+                        self.wfile.flush()
+                        # Update heartbeat (SSE active = panel open)
+                        try:
+                            with open(_hb_file, "w") as f:
+                                f.write(str(time.time()))
+                        except Exception:
+                            pass
+                    except Exception:
+                        self.wfile.write(b": hb\n\n")
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
 
         def do_POST(self):
             if self.path == "/stop":
