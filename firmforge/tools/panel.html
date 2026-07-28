@@ -79,7 +79,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 </div>
 <script>
-var out=document.getElementById("out"),cur=0,isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
+var out=document.getElementById("out"),isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
 
 function toggleConn(){
   if(isOpen){
@@ -100,7 +100,7 @@ function toggleConn(){
       document.getElementById("connbtn").textContent="Close";
       document.getElementById("out").style.opacity="1";
       document.getElementById("sendinput").disabled=false;
-      cur=0;out.innerHTML="";
+      out.innerHTML="";
     });
   }
 }
@@ -133,7 +133,7 @@ function sendModbus(){
     g.innerHTML=h;
   });
 }
-function clearOutput(){out.innerHTML="";cur=0;}
+function clearOutput(){out.innerHTML="";}
 function onFcChange(){
   var fc=parseInt(document.getElementById("mb-fc").value);
   document.getElementById("mb-count").style.display=(fc==6)?"none":"";
@@ -142,15 +142,7 @@ function onFcChange(){
 var es=new EventSource("http://127.0.0.1:9878/stream");
 es.onmessage=function(e){
   var d=JSON.parse(e.data);
-  if(d.lines){
-    var n=d.total;
-    if(n>cur){
-      for(var i=cur;i<d.lines.length;i++){
-        out.insertAdjacentHTML("beforeend",'<div class="line">'+d.lines[i]+'</div>');
-      }
-      cur=n;out.scrollTop=out.scrollHeight;
-    }
-  }
+  if(d.new){for(var i=0;i<d.new.length;i++)out.insertAdjacentHTML("beforeend",'<div class="line">'+d.new[i]+'</div>');out.scrollTop=out.scrollHeight;}
   document.getElementById("rxval").innerHTML=d.rx||0;
   document.getElementById("txval").innerHTML=d.tx||0;
   document.getElementById("tsval").innerHTML=d.ts||"";
