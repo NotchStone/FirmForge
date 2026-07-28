@@ -83,7 +83,7 @@ var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
 var isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
 
 function toggleConn(){
-  fetch(isOpen?"/close":"/open",{method:"POST"}).then(function(){location.reload();});
+  fetch(isOpen?"/close":"/open",{method:"POST"}).then(function(){location.reload()});;
 }
 function switchTab(t){
   document.getElementById("tab-serial").className="tab"+(t=="serial"?" on":"");
@@ -126,7 +126,7 @@ setInterval(function(){
   x.onload=function(){
     if(x.status!=200)return;
     var t=x.responseText;
-    var m=t.match(/<div class="out" id="out">([\s\S]*?)<\/div>[\s\S]*?<div class="modbus"/);
+    var m=t.match(/<div class="out" id="out">([\s\S]*?)<\/div>\n<div class="modbus"/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!=cur){
