@@ -43,8 +43,12 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
     <option value="115200">115200</option>
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
-  <span style="color:var(--dim);margin-left:auto">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span>  <span id="tsval">{{TIMESTAMP}}</span></span>
-  <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
+  <select id="paritysel"><option>None</option><option>Even</option><option>Odd</option></select>
+  <button id="connbtn" onclick="toggleConn()" style="margin-left:auto">{{OPEN_CLOSE}}</button>
+  <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
+</div>
+<div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
+  RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span>  <span id="tsval">{{TIMESTAMP}}</span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
@@ -72,10 +76,10 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 <div class="sendbar">
   <input id="sendinput" placeholder="type text or HEX..." onkeydown="if(event.key=='Enter')sendData()">
-  <button onclick="sendData()">Send</button>
   <label><input type="checkbox" id="hexchk">HEX</label>
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
+  <button onclick="sendData()" style="margin-left:auto">Send</button>
 </div>
 </div>
 <script>
