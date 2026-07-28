@@ -49,7 +49,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
-<div class="out" id="out">{{ROWS}}</div>
+<div class="out" id="out">{{ROWS}}</div><!--/output--><span style="display:none" id="ts">{{TIMESTAMP}}</span>
 <div class="modbus" id="modbus-panel">
   <div class="form">
     <div class="row"><span>Slave</span><input id="mb-slave" value="1" style="width:60px"></div>
@@ -83,7 +83,13 @@ var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
 var isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
 
 function toggleConn(){
-  fetch(isOpen?"/close":"/open",{method:"POST"}).then(function(){location.reload()});;
+  if(isOpen){
+    fetch("/close",{method:"POST"}).then(function(){
+      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:14px;color:var(--dim)">Serial closed. You may close this page.</div>';
+    });
+  }else{
+    fetch("/open",{method:"POST"}).then(function(){location.reload();});
+  }
 }
 function switchTab(t){
   document.getElementById("tab-serial").className="tab"+(t=="serial"?" on":"");
@@ -126,7 +132,7 @@ setInterval(function(){
   x.onload=function(){
     if(x.status!=200)return;
     var t=x.responseText;
-    var m=t.match(/<div class="out" id="out">([\s\S]*?)<\/div>\n<div class="modbus"/);
+    var t=x.responseText,m=t.match(/<div class="out" id="out">([\s\S]*?)<!--\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!=cur){

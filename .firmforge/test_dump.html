@@ -50,10 +50,14 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
 <div class="out" id="out"><div class="line">HB=201 LUX=135 PWM=5</div>
-<div class="line">HB=146 LUX=130 PWM=2</div>
-<div class="line">HB=91 LUX=130 PWM=2</div>
-<div class="line">HB=36 LUX=129 PWM=2</div>
-</div>
+<div class="line">HB=146 LUX=129 PWM=2</div>
+<div class="line">HB=91 LUX=129 PWM=1</div>
+<div class="line">HB=36 LUX=129 PWM=1</div>
+<div class="line">HB=237 LUX=129 PWM=2</div>
+<div class="line">HB=183 LUX=130 PWM=2</div>
+<div class="line">HB=128 LUX=130 PWM=2</div>
+<div class="line">HB=73 LUX=130 PWM=2</div>
+</div><!--/output--><span style="display:none" id="ts">18:08:08</span>
 <div class="modbus" id="modbus-panel">
   <div class="form">
     <div class="row"><span>Slave</span><input id="mb-slave" value="1" style="width:60px"></div>
@@ -80,14 +84,20 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
 </div>
-<div class="status" id="status">RX 86  TX 0</div>
+<div class="status" id="status">RX 173  TX 0</div>
 <script>
 var out=document.getElementById("out");
 var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
 var isOpen=true,dot=document.querySelector(".dot");
 
 function toggleConn(){
-  fetch(isOpen?"/close":"/open",{method:"POST"}).then(function(){location.reload()});;
+  if(isOpen){
+    fetch("/close",{method:"POST"}).then(function(){
+      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:14px;color:var(--dim)">Serial closed. You may close this page.</div>';
+    });
+  }else{
+    fetch("/open",{method:"POST"}).then(function(){location.reload();});
+  }
 }
 function switchTab(t){
   document.getElementById("tab-serial").className="tab"+(t=="serial"?" on":"");
@@ -130,7 +140,7 @@ setInterval(function(){
   x.onload=function(){
     if(x.status!=200)return;
     var t=x.responseText;
-    var m=t.match(/<div class="out" id="out">([\s\S]*?)<\/div>\n<div class="modbus"/);
+    var t=x.responseText,m=t.match(/<div class="out" id="out">([\s\S]*?)<!--\/output-->/);
     if(!m)return;
     var n=(m[1].match(/<div class="line">/g)||[]).length;
     if(n!=cur){

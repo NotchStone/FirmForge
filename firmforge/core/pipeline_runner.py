@@ -1022,6 +1022,7 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp):
     t = t.replace("{{RX}}", str(rx_count))
     t = t.replace("{{TX}}", str(tx_count))
     t = t.replace("{{IS_OPEN}}", "true" if is_open else "false")
+    t = t.replace("{{TIMESTAMP}}", timestamp)
     return t
 
 
