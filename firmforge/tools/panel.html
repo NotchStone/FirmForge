@@ -4,38 +4,38 @@
 <style>
 :root{--bg:#0f172a;--hdr:#1e293b;--txt:#e2e8f0;--dim:#94a3b8;--acc:#22d3ee;--warn:#ef4444;--btn-bg:#334155;--btn-hover:#475569;--sep:#2d3748;--tx-clr:#4ade80}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans-serif;font-size:12px;height:100vh;display:flex;flex-direction:column}
-.bar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--hdr);border-bottom:1px solid var(--sep);flex-shrink:0;min-height:34px}
-.bar select,.bar input{background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:3px 6px;font-size:11px;border-radius:3px}
-.bar button{border:1px solid var(--acc);background:transparent;color:var(--acc);padding:3px 12px;border-radius:3px;font-size:11px;cursor:pointer}
+body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans-serif;font-size:14px;height:100vh;display:flex;flex-direction:column}
+.bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--hdr);border-bottom:1px solid var(--sep);flex-shrink:0;min-height:40px}
+.bar select,.bar input{background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:4px 8px;font-size:13px;border-radius:4px}
+.bar button{border:1px solid var(--acc);background:transparent;color:var(--acc);padding:4px 14px;border-radius:4px;font-size:13px;cursor:pointer}
 .bar button:hover{background:var(--btn-hover)}
-.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .tabs{display:flex;background:var(--hdr);border-bottom:1px solid var(--sep)}
-.tab{padding:5px 16px;font-size:11px;cursor:pointer;color:var(--dim);border-bottom:2px solid transparent}
+.tab{padding:7px 18px;font-size:13px;cursor:pointer;color:var(--dim);border-bottom:2px solid transparent}
 .tab.on{color:var(--acc);border-bottom:2px solid var(--acc)}
-.out{flex:1;overflow-y:auto;padding:6px 12px;font-family:"Cascadia Code",Consolas,monospace;font-size:11.5px;line-height:1.55;min-height:0}
-.sendbar{display:flex;gap:6px;padding:6px 12px;border-top:1px solid var(--sep);align-items:center}
-.sendbar input{flex:1;background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:5px 8px;font-size:11px;border-radius:3px;font-family:"Cascadia Code",monospace}
-.sendbar button{border:1px solid var(--acc);background:transparent;color:var(--acc);padding:4px 10px;border-radius:3px;font-size:11px;cursor:pointer;white-space:nowrap}
-.sendbar label{font-size:10px;color:var(--dim);display:flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap}
-.status{display:flex;gap:14px;padding:3px 12px;font-size:10px;color:#64748b;border-top:1px solid var(--sep);flex-shrink:0;white-space:nowrap}
+.out{flex:1;overflow-y:auto;padding:8px 14px;font-family:"Cascadia Code",Consolas,monospace;font-size:13px;line-height:1.55;min-height:0}
+.sendbar{display:flex;gap:8px;padding:8px 14px;border-top:1px solid var(--sep);align-items:center}
+.sendbar input{flex:1;background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:6px 10px;font-size:13px;border-radius:4px;font-family:"Cascadia Code",monospace}
+.sendbar button{border:1px solid var(--acc);background:transparent;color:var(--acc);padding:5px 14px;border-radius:4px;font-size:13px;cursor:pointer;white-space:nowrap}
+.sendbar label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.status{display:flex;gap:14px;padding:3px 12px;font-size:12px;color:#64748b;border-top:1px solid var(--sep);flex-shrink:0;white-space:nowrap}
 .modbus{display:none;flex:1;padding:10px 12px;gap:12px;overflow-y:auto}
 .modbus.show{display:flex}
 .modbus .form{display:flex;flex-direction:column;gap:7px;width:260px;flex-shrink:0}
-.modbus .form .row{display:flex;gap:6px;align-items:center;font-size:10px;color:var(--dim)}
-.modbus .form .row span{width:44px;flex-shrink:0}
-.modbus .form input,.modbus .form select{background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:4px 6px;font-size:11px;border-radius:3px}
+.modbus .form .row{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)}
+.modbus .form .row span{width:48px;flex-shrink:0}
+.modbus .form input,.modbus .form select{background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:5px 8px;font-size:13px;border-radius:4px}
 .modbus .result{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
-.modbus .raw{padding:6px 8px;background:var(--hdr);border-radius:3px;font-family:"Cascadia Code",monospace;font-size:10px;color:var(--tx-clr);min-height:32px;word-break:break-all}
-.modbus .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(60px,1fr));gap:3px;font-size:10px}
-.modbus .cell{background:var(--hdr);padding:4px;border-radius:2px;text-align:center}
-.modbus .cell .addr{color:var(--dim);font-size:9px}
-.modbus .cell .val{color:var(--txt);font-family:monospace;font-size:11px}
+.modbus .raw{padding:8px 10px;background:var(--hdr);border-radius:4px;font-family:"Cascadia Code",monospace;font-size:12px;color:var(--tx-clr);min-height:36px;word-break:break-all}
+.modbus .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:4px;font-size:12px}
+.modbus .cell{background:var(--hdr);padding:5px;border-radius:3px;text-align:center}
+.modbus .cell .addr{color:var(--dim);font-size:10px}
+.modbus .cell .val{color:var(--txt);font-family:monospace;font-size:13px}
 </style></head>
 <body>
 <div class="bar">
   <span class="dot" style="background:{{DOT_COLOR}};flex-shrink:0"></span>
-  <span style="color:var(--acc);font-weight:600;font-size:12px;margin-left:6px">FirmForge</span>
+  <span style="color:var(--acc);font-weight:600;font-size:14px;margin-left:6px">FirmForge</span>
   <select id="portsel"><option>{{PORT}}</option></select>
   <select id="baudsel" onchange="location.href=location.pathname.split('?')[0]+'?baud='+this.value">
     <option value="9600">9600</option><option value="19200">19200</option>
