@@ -259,9 +259,16 @@ class PipelineRunner:
         _ss_parts = []
         for _s in result.stages:
             if _s.success:
-                _ss_parts.append(f'<span style="color:var(--tx-clr)">S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                _icon = ""
+                if _s.stage == 2 and _s.details.get("cppcheck"):
+                    _icon = "&#9888;"  # ⚠ warning
+                elif _s.stage == 4:
+                    _icon = "&#128260;"  # 🔄 flash (may retry)
+                else:
+                    _icon = "&#9989;"  # ✅ clean pass
+                _ss_parts.append(f'<span style="color:var(--tx-clr)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                _ss_parts.append(f'<span style="color:var(--warn)">S{_s.stage}:FAIL</span>')
+                _ss_parts.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
         _ss = "  ".join(_ss_parts)
 
         # -- Stage 5: Test --
