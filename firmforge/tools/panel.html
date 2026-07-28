@@ -139,7 +139,7 @@ function onFcChange(){
   document.getElementById("mb-count").style.display=(fc==6)?"none":"";
   document.getElementById("mb-data-row").style.display=(fc==6||fc==16)?"flex":"none";
 }
-var es=new EventSource("/stream");
+var es=new EventSource("http://127.0.0.1:9878/stream");
 es.onmessage=function(e){
   var d=JSON.parse(e.data);
   if(d.lines){
