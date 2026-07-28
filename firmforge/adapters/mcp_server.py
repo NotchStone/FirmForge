@@ -485,7 +485,6 @@ def _start_monitor_httpd(root: str) -> int:
             self.end_headers()
             q = _get_stream_queue()
             import json as _json_sse
-            _hb_file = os.path.join(data_dir, "heartbeat.txt")
             try:
                 while True:
                     try:
@@ -493,12 +492,6 @@ def _start_monitor_httpd(root: str) -> int:
                         data = _json_sse.dumps(item, ensure_ascii=False)
                         self.wfile.write(f"data: {data}\n\n".encode())
                         self.wfile.flush()
-                        # Update heartbeat (SSE active = panel open)
-                        try:
-                            with open(_hb_file, "w") as f:
-                                f.write(str(time.time()))
-                        except Exception:
-                            pass
                     except Exception:
                         self.wfile.write(b": hb\n\n")
                         self.wfile.flush()
