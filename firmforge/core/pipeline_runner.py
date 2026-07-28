@@ -259,11 +259,20 @@ class PipelineRunner:
         stage_icons = []
         for _s in result.stages:
             if _s.success:
-                _icon = ""
-                if _s.stage == 2 and _s.details.get("cppcheck"):
-                    _icon = "&#9888;"  # ⚠ review warnings
+                # Choose icon based on retry/warning state
+                if _s.stage == 2:
+                    if _s.details.get("cppcheck"):
+                        _icon = "&#9888;"  # ⚠ cppcheck found code issues
+                    elif _s.details.get("warnings"):
+                        _icon = "&#8505;"  # ℹ register-only warnings (weak)
+                    else:
+                        _icon = "&#9989;"  # ✅ clean
+                elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
+                    _icon = "&#128260;"  # 🔄 build retried
+                elif _s.stage == 4 and _s.details.get("baud_retries", 0) > 0:
+                    _icon = "&#128260;"  # 🔄 flash baud retried
                 else:
-                    _icon = "&#9989;"  # ✅ clean pass
+                    _icon = "&#9989;"  # ✅ clean first-try pass
                 stage_icons.append(f'<span style="color:var(--dim)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
                 stage_icons.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
@@ -703,6 +712,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             stage.details = {
                 "bytes_written": flash_result.bytes_written if hasattr(flash_result, "bytes_written") else 0,
                 "elapsed_flash_ms": flash_result.elapsed_ms if hasattr(flash_result, "elapsed_ms") else 0,
+                "baud_retries": getattr(flash_result, "baud_retries", 0),
             }
             if not flash_result.success:
                 stage.error = flash_result.stderr[-200:] if hasattr(flash_result, "stderr") else "Flash failed"

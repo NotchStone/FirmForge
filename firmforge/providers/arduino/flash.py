@@ -167,8 +167,10 @@ class ArduinoFlashProvider(FlashProvider):
         op_flag = "w" if operation == "flash" else "v"
 
         bauds = [self._resolve_baud()] + self._get_baud_fallbacks()
+        baud_attempts = 0
 
         for baud in bauds:
+            baud_attempts += 1
             if operation == "flash":
                 self._bootloader_reset(port)
 
@@ -202,9 +204,11 @@ class ArduinoFlashProvider(FlashProvider):
                         bytes_written = int(m.group(1))
                     com_port_clean_close(port)
 
-                return FlashResult(success=True, bytes_written=bytes_written,
+                result = FlashResult(success=True, bytes_written=bytes_written,
                                    stdout=proc.stdout, stderr=proc.stderr,
                                    elapsed_ms=elapsed)
+                result.baud_retries = baud_attempts - 1
+                return result
 
             logger.warning("%s failed @%d: %s", operation.capitalize(), baud, combined[-100:])
 
