@@ -461,6 +461,10 @@ def _start_monitor_httpd(root: str) -> int:
     import os as _os
     import threading
     from http.server import HTTPServer, SimpleHTTPRequestHandler
+    from socketserver import ThreadingMixIn
+
+    class _ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
 
     data_dir = _os.path.join(root, ".firmforge")
     stop_file = _os.path.join(data_dir, "serial_live.html.stop")
@@ -557,7 +561,7 @@ def _start_monitor_httpd(root: str) -> int:
 
     for p in range(9878, 9888):
         try:
-            _monitor_httpd = HTTPServer(("127.0.0.1", p), _H)
+            _monitor_httpd = _ThreadedHTTPServer(("127.0.0.1", p), _H)
             threading.Thread(target=_monitor_httpd.serve_forever, daemon=True).start()
             logger.info("Monitor HTTP server started on port %d", p)
             return p
