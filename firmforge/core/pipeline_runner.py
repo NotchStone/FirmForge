@@ -887,20 +887,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     try: ser_wrapper.__exit__(None, None, None)
                     except Exception: pass
                     ser = None
-                    # Wait for .pause to be removed (Open button or heartbeat timeout)
-                    _pause_start = time.time()
+                    # Wait for .pause to be removed (Open button)
                     while os.path.exists(pause_path):
                         if os.path.exists(stop_path):
-                            break
-                        # Heartbeat check during pause — tab close detection
-                        _hb = time.time()
-                        try:
-                            if os.path.exists(_hb_path):
-                                with open(_hb_path) as f:
-                                    _hb = float(f.read().strip() or "0")
-                        except Exception:
-                            pass
-                        if time.time() - _hb > 6.0:
                             break
                         time.sleep(0.3)
                     if os.path.exists(stop_path):
@@ -920,18 +909,6 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     try: ser.reset_input_buffer()
                     except Exception: pass
                     continue
-
-                # Heartbeat: auto-stop if no panel poll for 30s (initial) / 6s (after open)
-                _hb_path = os.path.join(data_dir, "heartbeat.txt")
-                try:
-                    _hb_timeout = 30.0 if time.time() - _start_time < 30.0 else 6.0
-                    if os.path.exists(_hb_path):
-                        with open(_hb_path) as f:
-                            _hb = float(f.read().strip() or "0")
-                        if time.time() - _hb > _hb_timeout:
-                            break
-                except Exception:
-                    pass
 
                 # Process send command (from panel input)
                 _sc = _process_send_file(_send_cmd_file, ser, tx_total)
