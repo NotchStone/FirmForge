@@ -963,7 +963,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                             "total": len(lines),
                             "rx": rx_total[0],
                             "tx": tx_total[0],
-                            "ts": time.strftime("%H:%M:%S"),
+                            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
                         })
                         setattr(ser, '_sse_pushed', len(lines))
                     except Exception:
