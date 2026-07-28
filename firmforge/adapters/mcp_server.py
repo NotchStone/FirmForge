@@ -448,6 +448,7 @@ def _start_monitor_httpd(root: str) -> int:
 
     data_dir = _os.path.join(root, ".firmforge")
     stop_file = _os.path.join(data_dir, "serial_live.html.stop")
+    pause_file = _os.path.join(data_dir, "serial_live.html.pause")
 
     class _H(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
@@ -463,21 +464,31 @@ def _start_monitor_httpd(root: str) -> int:
             super().do_GET()
 
         def do_POST(self):
-            if self.path == "/stop" or self.path == "/close":
+            if self.path == "/stop":
+                # Full exit: write .stop
                 try:
+                    with open(pause_file, "w") as f: f.write("x")
                     with open(stop_file, "w") as f: f.write("x")
-                except Exception:
-                    pass
+                except Exception: pass
                 self._json({"ok": True})
+            elif self.path == "/close":
+                # Pause COM4 only, keep process alive
+                try:
+                    with open(pause_file, "w") as f: f.write("x")
+                except Exception: pass
+                self._json({"ok": True, "paused": True})
             elif self.path == "/open":
-                try: os.remove(stop_file)
+                # Resume COM4
+                try: _os.remove(pause_file)
                 except OSError: pass
-                self._json({"ok": True, "reload": True})
+                try: _os.remove(stop_file)
+                except OSError: pass
+                self._json({"ok": True, "resumed": True})
             elif self.path == "/send":
-                self._save_body(os.path.join(data_dir, "send_cmd.json"))
+                self._save_body(_os.path.join(data_dir, "send_cmd.json"))
                 self._json({"ok": True})
             elif self.path == "/modbus":
-                self._save_body(os.path.join(data_dir, "modbus_cmd.json"))
+                self._save_body(_os.path.join(data_dir, "modbus_cmd.json"))
                 self._json({"ok": True})
             elif self.path == "/quit":
                 self.send_response(200); self.end_headers()

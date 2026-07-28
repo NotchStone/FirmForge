@@ -86,10 +86,21 @@ var isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
 function toggleConn(){
   if(isOpen){
     fetch("/close",{method:"POST"}).then(function(){
-      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:14px;color:var(--dim)">Serial closed. You may close this page.</div>';
+      isOpen=false;
+      dot.style.background="var(--warn)";
+      document.getElementById("connbtn").textContent="Open";
+      document.getElementById("out").style.opacity="0.4";
+      document.getElementById("sendinput").disabled=true;
     });
   }else{
-    fetch("/open",{method:"POST"}).then(function(){location.reload();});
+    fetch("/open",{method:"POST"}).then(function(){
+      isOpen=true;
+      dot.style.background="var(--acc)";
+      document.getElementById("connbtn").textContent="Close";
+      document.getElementById("out").style.opacity="1";
+      document.getElementById("sendinput").disabled=false;
+      cur=0;out.innerHTML="";
+    });
   }
 }
 function switchTab(t){

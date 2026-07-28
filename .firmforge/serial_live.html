@@ -43,22 +43,29 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
   <button id="connbtn" onclick="toggleConn()">Close</button>
-  <span style="color:var(--dim);font-size:10px;margin-left:8px">RX <span id="rxval">194</span>  TX <span id="txval">0</span>  <span id="tsval">18:17:36</span></span>
+  <span style="color:var(--dim);font-size:10px;margin-left:8px">RX <span id="rxval">348</span>  TX <span id="txval">0</span>  <span id="tsval">18:25:06</span></span>
   <span class="dot" style="background:var(--acc);margin-left:auto"></span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
-<div class="out" id="out"><div class="line">HB=201 LUX=135 PWM=5</div>
-<div class="line">HB=146 LUX=130 PWM=2</div>
-<div class="line">HB=91 LUX=129 PWM=2</div>
-<div class="line">HB=36 LUX=129 PWM=2</div>
-<div class="line">HB=237 LUX=129 PWM=2</div>
-<div class="line">HB=183 LUX=129 PWM=2</div>
+<div class="out" id="out"><div class="line">HB=201 LUX=137 PWM=6</div>
+<div class="line">HB=146 LUX=131 PWM=3</div>
+<div class="line">HB=91 LUX=130 PWM=2</div>
+<div class="line">HB=36 LUX=130 PWM=2</div>
+<div class="line">HB=237 LUX=130 PWM=2</div>
+<div class="line">HB=183 LUX=130 PWM=2</div>
 <div class="line">HB=128 LUX=130 PWM=2</div>
-<div class="line">HB=73 LUX=129 PWM=2</div>
-<div class="line">HB=18 LUX=129 PWM=2</div>
+<div class="line">HB=73 LUX=130 PWM=2</div>
+<div class="line">HB=18 LUX=130 PWM=2</div>
+<div class="line">HB=219 LUX=130 PWM=2</div>
+<div class="line">HB=164 LUX=130 PWM=2</div>
+<div class="line">HB=0 LUX=191 PWM=65506</div>
+<div class="line">HB=201 LUX=137 PWM=6</div>
+<div class="line">HB=146 LUX=130 PWM=2</div>
+<div class="line">HB=91 LUX=130 PWM=2</div>
+<div class="line">HB=36 LUX=130 PWM=2</div>
 </div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="form">
@@ -95,10 +102,21 @@ var isOpen=true,dot=document.querySelector(".dot");
 function toggleConn(){
   if(isOpen){
     fetch("/close",{method:"POST"}).then(function(){
-      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:14px;color:var(--dim)">Serial closed. You may close this page.</div>';
+      isOpen=false;
+      dot.style.background="var(--warn)";
+      document.getElementById("connbtn").textContent="Open";
+      document.getElementById("out").style.opacity="0.4";
+      document.getElementById("sendinput").disabled=true;
     });
   }else{
-    fetch("/open",{method:"POST"}).then(function(){location.reload();});
+    fetch("/open",{method:"POST"}).then(function(){
+      isOpen=true;
+      dot.style.background="var(--acc)";
+      document.getElementById("connbtn").textContent="Close";
+      document.getElementById("out").style.opacity="1";
+      document.getElementById("sendinput").disabled=false;
+      cur=0;out.innerHTML="";
+    });
   }
 }
 function switchTab(t){
