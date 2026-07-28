@@ -256,7 +256,7 @@ class PipelineRunner:
         state.mark_done("flash")
 
         # Build stages summary for panel display
-        _ss_parts = []
+        stage_icons = []
         for _s in result.stages:
             if _s.success:
                 _icon = ""
@@ -266,17 +266,17 @@ class PipelineRunner:
                     _icon = "&#128260;"  # 🔄 flash (may retry)
                 else:
                     _icon = "&#9989;"  # ✅ clean pass
-                _ss_parts.append(f'<span style="color:var(--tx-clr)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                stage_icons.append(f'<span style="color:var(--tx-clr)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                _ss_parts.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
-        _ss = "  ".join(_ss_parts)
+                stage_icons.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
+        stages_summary_html = "  ".join(stage_icons)
 
         # -- Stage 5: Test --
         # Always run Test if expected pattern is provided (need to verify output)
         if not expected and flash_done_before and (state.should_skip_test(fps) or s4.details.get("skipped")):
             s5 = self._skipped_stage(5, "Test", "fingerprints match")
         else:
-            s5 = self._stage_verify(board_id, expected, stages_summary=_ss)
+            s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html)
         result.stages.append(s5)
         self._notify_progress(progress_callback, s5)
         if not s5.success:
