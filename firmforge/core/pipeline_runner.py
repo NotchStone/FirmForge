@@ -259,9 +259,9 @@ class PipelineRunner:
         _ss_parts = []
         for _s in result.stages:
             if _s.success:
-                _ss_parts.append(f"S{_s.stage}:{int(_s.elapsed_ms)}ms")
+                _ss_parts.append(f'<span style="color:var(--tx-clr)">S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                _ss_parts.append(f"S{_s.stage}:FAIL")
+                _ss_parts.append(f'<span style="color:var(--warn)">S{_s.stage}:FAIL</span>')
         _ss = "  ".join(_ss_parts)
 
         # -- Stage 5: Test --
