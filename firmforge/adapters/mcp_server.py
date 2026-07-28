@@ -474,12 +474,6 @@ def _start_monitor_httpd(root: str) -> int:
             if self.path == "/stream":
                 self._handle_sse()
                 return
-            if "/serial_live.html" in self.path:
-                try:
-                    with open(os.path.join(data_dir, "heartbeat.txt"), "w") as f:
-                        f.write(str(time.time()))
-                except Exception:
-                    pass
             super().do_GET()
 
         def _handle_sse(self):
@@ -508,7 +502,10 @@ def _start_monitor_httpd(root: str) -> int:
                         self.wfile.write(b": hb\n\n")
                         self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError, OSError):
-                pass
+                # Client disconnected (panel closed) — signal collector to stop
+                try:
+                    with open(stop_file, "w") as f: f.write("x")
+                except Exception: pass
 
         def do_POST(self):
             if self.path == "/stop":
