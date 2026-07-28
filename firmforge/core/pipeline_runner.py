@@ -261,9 +261,7 @@ class PipelineRunner:
             if _s.success:
                 _icon = ""
                 if _s.stage == 2 and _s.details.get("cppcheck"):
-                    _icon = "&#9888;"  # ⚠ warning
-                elif _s.stage == 4:
-                    _icon = "&#128260;"  # 🔄 flash (may retry)
+                    _icon = "&#9888;"  # ⚠ review warnings
                 else:
                     _icon = "&#9989;"  # ✅ clean pass
                 stage_icons.append(f'<span style="color:var(--dim)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
