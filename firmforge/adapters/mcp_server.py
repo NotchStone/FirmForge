@@ -314,7 +314,7 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
             stage_info["warnings"] = s.details.get("warnings", [])
         if s.name == "Build" and s.details.get("compile_rounds", 0) > 0:
             stage_info["compile_rounds"] = s.details["compile_rounds"]
-        if s.name == "Test":
+        if s.name == "Verify":
             stage_info["matched_baud"] = s.details.get("matched_baud", 0)
             serial_full = s.details.get("serial_output", "")
             stage_info["serial_output"] = serial_full[:200]
@@ -322,7 +322,18 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
                 stage_info["pattern_match"] = s.details["pattern_match"]
                 stage_info["expected"] = s.details.get("expected", "")
                 stage_info["actual"] = s.details.get("actual", "")[:200]
+            if "panel_url" in s.details:
+                stage_info["panel_url"] = s.details["panel_url"]
+                stage_info["panel_file"] = s.details["panel_file"]
         stages.append(stage_info)
+
+    # Extract panel_url from Verify stage for convenience
+    panel_info = {}
+    for s in result.stages:
+        if s.name == "Verify" and "panel_url" in s.details:
+            panel_info["panel_url"] = s.details["panel_url"]
+            panel_info["panel_file"] = s.details["panel_file"]
+            break
 
     return {
         "overall_success": result.overall_success,
@@ -331,6 +342,7 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
         "stages": stages,
         "progress": progress_events,
         "serial_lines": serial_full.splitlines() if serial_full.strip() else [],
+        **panel_info,
     }
 
 

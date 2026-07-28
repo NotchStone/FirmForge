@@ -68,6 +68,47 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="line">HB=91 LUX=130 PWM=2</div>
 <div class="line">HB=36 LUX=130 PWM=2</div>
 <div class="line">HB=237 LUX=130 PWM=2</div>
+<div class="line">HB=183 LUX=130 PWM=2</div>
+<div class="line">HB=128 LUX=130 PWM=2</div>
+<div class="line">HB=73 LUX=130 PWM=2</div>
+<div class="line">HB=18 LUX=130 PWM=2</div>
+<div class="line">HB=219 LUX=129 PWM=2</div>
+<div class="line">HB=164 LUX=129 PWM=2</div>
+<div class="line">HB=109 LUX=129 PWM=2</div>
+<div class="line">HB=55 LUX=129 PWM=2</div>
+<div class="line">HB=0 LUX=129 PWM=2</div>
+<div class="line">HB=201 LUX=129 PWM=2</div>
+<div class="line">HB=146 LUX=129 PWM=2</div>
+<div class="line">HB=91 LUX=129 PWM=2</div>
+<div class="line">HB=36 LUX=130 PWM=2</div>
+<div class="line">HB=237 LUX=130 PWM=2</div>
+<div class="line">HB=182 LUX=129 PWM=2</div>
+<div class="line">HB=128 LUX=129 PWM=1</div>
+<div class="line">HB=73 LUX=128 PWM=1</div>
+<div class="line">HB=18 LUX=128 PWM=1</div>
+<div class="line">HB=219 LUX=129 PWM=1</div>
+<div class="line">HB=164 LUX=129 PWM=2</div>
+<div class="line">HB=109 LUX=130 PWM=2</div>
+<div class="line">HB=54 LUX=130 PWM=2</div>
+<div class="line">HB=0 LUX=130 PWM=2</div>
+<div class="line">HB=201 LUX=130 PWM=2</div>
+<div class="line">HB=146 LUX=129 PWM=1</div>
+<div class="line">HB=91 LUX=128 PWM=1</div>
+<div class="line">HB=36 LUX=128 PWM=1</div>
+<div class="line">HB=237 LUX=128 PWM=1</div>
+<div class="line">HB=182 LUX=128 PWM=1</div>
+<div class="line">HB=127 LUX=128 PWM=1</div>
+<div class="line">HB=73 LUX=129 PWM=1</div>
+<div class="line">HB=18 LUX=129 PWM=1</div>
+<div class="line">HB=219 LUX=129 PWM=1</div>
+<div class="line">HB=164 LUX=128 PWM=1</div>
+<div class="line">HB=109 LUX=129 PWM=1</div>
+<div class="line">HB=54 LUX=128 PWM=1</div>
+<div class="line">HB=255 LUX=128 PWM=1</div>
+<div class="line">HB=201 LUX=128 PWM=1</div>
+<div class="line">HB=146 LUX=128 PWM=1</div>
+<div class="line">HB=91 LUX=129 PWM=1</div>
+<div class="line">HB=36 LUX=128 PWM=1</div>
 </div>
 <div class="modbus" id="modbus-panel">
   <div class="form">
@@ -95,7 +136,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <label><input type="checkbox" id="crlfchk" checked>CRLF</label>
   <button style="border-color:var(--sep);color:var(--txt)" onclick="clearOutput()">Clear</button>
 </div>
-<div class="status" id="status">RX 409  TX 0</div>
+<div class="status" id="status">RX 1292  TX 0</div>
 <script>
 var out=document.getElementById("out");
 var cur=out.innerHTML.match(/<div class="line">/g);cur=cur?cur.length:0;
