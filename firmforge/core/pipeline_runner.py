@@ -866,10 +866,43 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             except Exception:
                 pass
 
+            pause_path = os.path.join(data_dir, "serial_live.html.pause")
+
             while True:
-                # Check .stop file (written by ff_monitor stop or panel Stop button)
+                # Check .stop (full exit — Stop button or tab close)
                 if os.path.exists(stop_path):
                     break
+
+                # Check .pause (COM4 close — Close button on panel)
+                if os.path.exists(pause_path):
+                    # Close COM4 gracefully
+                    try: ser.close()
+                    except Exception: pass
+                    try: ser_wrapper.__exit__(None, None, None)
+                    except Exception: pass
+                    ser = None
+                    # Wait for .pause to be removed (Open button)
+                    while os.path.exists(pause_path):
+                        if os.path.exists(stop_path):
+                            break
+                        time.sleep(0.2)
+                    if os.path.exists(stop_path):
+                        break
+                    # Reopen COM4
+                    ser_wrapper = None
+                    for _retry2 in range(10):
+                        try:
+                            ser_wrapper = ComPort(port, baud, timeout=0.3)
+                            ser_wrapper.__enter__()
+                            break
+                        except Exception:
+                            time.sleep(0.5)
+                    if ser_wrapper is None:
+                        break
+                    ser = ser_wrapper._ser
+                    try: ser.reset_input_buffer()
+                    except Exception: pass
+                    continue
 
                 # Heartbeat: auto-stop if no panel poll for 6s
                 _hb_path = os.path.join(data_dir, "heartbeat.txt")
