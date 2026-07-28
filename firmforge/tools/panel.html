@@ -44,11 +44,12 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   </select>
   <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
   <select id="paritysel"><option>None</option><option>Even</option><option>Odd</option></select>
-  <button id="connbtn" onclick="toggleConn()" style="margin-left:auto">{{OPEN_CLOSE}}</button>
+  <button style="border-color:var(--sep);color:var(--txt);font-size:13px;padding:4px 12px;margin-left:auto" onclick="clearOutput()">Clear</button>
+  <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span style="margin-left:auto">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span>  <span id="tsval">{{TIMESTAMP}}</span></span>
-  <button style="border-color:var(--sep);color:var(--txt);font-size:13px;padding:2px 10px;margin-left:12px" onclick="clearOutput()">Clear</button>
+  <span id="tsval">{{TIMESTAMP}}</span>
+  <span style="margin-left:auto">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span></span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
@@ -150,9 +151,10 @@ es.onmessage=function(e){
   document.getElementById("txval").innerHTML=d.tx||0;
   document.getElementById("tsval").innerHTML=d.ts||"";
   if(d.ts){
-    var p=d.ts.split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];
+    var hm=d.ts.split(" ")[1];
+    if(hm){var p=hm.split(":").map(Number),fs=p[0]*3600+p[1]*60+p[2];
     var ns=new Date().getHours()*3600+new Date().getMinutes()*60+new Date().getSeconds();
-    dot.style.background=Math.abs(ns-fs)<4?"var(--acc)":"var(--warn)";
+    dot.style.background=Math.abs(ns-fs)<4?"var(--acc)":"var(--warn)";}
   }
 };
 es.onerror=function(){dot.style.background="var(--warn)";};
