@@ -69,7 +69,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="out" id="out">{{ROWS}}</div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="mbbar">
-    Slave <select id="mb-slave" style="width:50px"><option>1</option></select>
+    Slave <input id="mb-slave" value="1" style="width:40px">
     FC <select id="mb-fc" onchange="onFcChange()" style="width:145px">
       <option value="3">03 Read Holding Reg</option><option value="4">04 Read Input Reg</option>
       <option value="6">06 Write Single Reg</option><option value="16">16 Write Multiple Reg</option></select>
@@ -156,7 +156,12 @@ function sendModbus(){
   entry.id="mbe-"+mbFrame;
   entry.innerHTML='<div class="mb-line"><span class="tag tx">TX\u2192</span><span class="ts">'+tsStr+'</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span style="color:var(--dim);font-size:10px;padding-left:16px">waiting for reply...</span></div>';
   mbLog.insertBefore(entry, mbLog.firstChild);
-  fetch("/modbus",{method:"POST",body:JSON.stringify({mb:{slave:slave,fc:fc,addr:addr,count:count,data:data}})})
+  fetch("/modbus",{method:"POST",body:JSON.stringify({
+    mb:{slave:slave,fc:fc,addr:addr,count:count,data:data},
+    tx_hex:txHex,
+    port:document.getElementById("portsel").value||"COM4",
+    baud:parseInt(document.getElementById("baudsel").value)||9600
+  })})
   .then(function(r){return r.json();})
   .then(function(d){
     var e=document.getElementById("mbe-"+mbFrame);

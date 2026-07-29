@@ -530,8 +530,34 @@ def _start_monitor_httpd(root: str) -> int:
                 self._save_body(_os.path.join(data_dir, "send_cmd.json"))
                 self._json({"ok": True})
             elif self.path == "/modbus":
-                self._save_body(_os.path.join(data_dir, "modbus_cmd.json"))
-                self._json({"ok": True})
+                length = int(self.headers.get("Content-Length", "0"))
+                body_bytes = self.rfile.read(length)
+                import json as _jm
+                try:
+                    req = _jm.loads(body_bytes)
+                except Exception:
+                    self._json({"ok": False, "error": "invalid JSON"})
+                    return
+                port = req.get("port", "")
+                baud = int(req.get("baud", 9600))
+                tx_hex = req.get("tx_hex", "")
+                raw_hex = ""
+                error = ""
+                if port and tx_hex:
+                    try:
+                        import serial as _ser2
+                        ser = _ser2.Serial(port, baud, timeout=1.0)
+                        tx_bytes = bytes(int(b, 16) for b in tx_hex.replace(",", " ").split() if b.strip())
+                        ser.write(tx_bytes)
+                        ser.flush()
+                        import time as _tm
+                        _tm.sleep(0.05)
+                        resp = ser.read(256)
+                        raw_hex = " ".join(f"{b:02X}" for b in resp)
+                        ser.close()
+                    except Exception as e:
+                        error = str(e)
+                self._json({"ok": True, "raw": raw_hex, "error": error})
             elif self.path == "/quit":
                 self.send_response(200); self.end_headers()
                 self.wfile.write(b"BYE"); os._exit(0)
