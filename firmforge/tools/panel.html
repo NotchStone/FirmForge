@@ -47,8 +47,11 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <button style="border-color:var(--sep);color:var(--txt);font-size:13px;padding:4px 12px;margin-left:auto" onclick="clearOutput()">Clear</button>
   <button id="connbtn" onclick="toggleConn()">{{OPEN_CLOSE}}</button>
 </div>
+<div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim);gap:12px">
+  <span id="tsval">{{TIMESTAMP}}</span> <span id="process">{{PROCESS}}</span>
+</div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span id="tsval">{{TIMESTAMP}}</span> <span id="stages">{{STAGES}}</span>
+  <span id="stages">{{STAGES}}</span>
   <span style="margin-left:auto">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span></span>
 </div>
 <div class="tabs">
