@@ -1,1 +1,27 @@
-{}
+{
+  "stages": {
+    "detect": {
+      "status": "done",
+      "board_id": "arduino_mega"
+    },
+    "review": {
+      "status": "done"
+    },
+    "build": {
+      "status": "done",
+      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_mega\\heart_ascii\\firmware.hex"
+    },
+    "flash": {
+      "status": "done"
+    },
+    "test": {
+      "status": "done"
+    }
+  },
+  "fingerprints": {
+    "board_id": "arduino_mega",
+    "port": "COM4",
+    "source": "6e62599d48553d9a",
+    "hex": "b3b555ecfaa619c2"
+  }
+}
