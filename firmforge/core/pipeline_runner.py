@@ -295,9 +295,9 @@ class PipelineRunner:
                     _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
                 else:
                     _icon = "&#9989;"; _color = "#4ade80"       # ✅ pass = green
-                result_icons.append(f'<span style="color:{_color}">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                result_icons.append(f'<span style="color:{_color}">{_icon}</span><span style="color:var(--dim)">S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                result_icons.append(f'<span style="color:#ef4444">&#10060;S{_s.stage}:FAIL</span>')
+                result_icons.append(f'<span style="color:#ef4444">&#10060;</span><span style="color:var(--dim)">S{_s.stage}:FAIL</span>')
         process_html = "  ".join(process_parts) if process_parts else ""
         result_html = "  ".join(result_icons)
 
