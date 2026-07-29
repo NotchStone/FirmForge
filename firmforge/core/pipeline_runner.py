@@ -1164,17 +1164,13 @@ def _process_modbus_file(modbus_file, ser, resp_file, tx_total, rx_total):
             if fc==6 and vs: frame += _s.pack(">H", vs[0])
             elif fc==16 and vs: frame += _s.pack(">H",len(vs))+_s.pack(">B",len(vs)*2)+_s.pack(">"+"H"*len(vs),*vs)
         frame += _s.pack("<H", _modbus_crc(frame))
-        try: ser.reset_input_buffer()
-        except: pass
+        # Don't flush — other loop may have just read; frame goes out fresh
         ser.write(frame); tx_total[0] += len(frame)
-        d = _t.time()+0.5; resp = b""
-        while _t.time()<d:
-            try:
-                ck = ser.read(64)
-                if ck: resp += ck
-                if len(resp)>=5 and len(resp)>=5+resp[2]: break
-            except: break
-            _t.sleep(0.01)
+        _t.sleep(0.05)  # wait for slave to respond
+        try:
+            resp = ser.read(256)  # single blocking read (timeout is 300ms)
+        except:
+            resp = b""
         rx_total[0] += len(resp)
         rh = " ".join(f"{b:02X}" for b in resp) if resp else "(no response)"
         ok = len(resp)>=5 and _modbus_crc(resp[:-2])==_s.unpack("<H",resp[-2:])[0]

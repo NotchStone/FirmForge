@@ -427,6 +427,7 @@ if MCP_AVAILABLE and mcp is not None:
 
 _monitor_httpd = None  # singleton HTTP server
 _stream_queue = None  # shared queue between collector thread and SSE handler
+_modbus_queue = None  # shared queue for Modbus requests (collector → handler)
 
 
 def _get_stream_queue():
@@ -538,25 +539,27 @@ def _start_monitor_httpd(root: str) -> int:
                 except Exception:
                     self._json({"ok": False, "error": "invalid JSON"})
                     return
-                port = req.get("port", "")
-                baud = int(req.get("baud", 9600))
-                tx_hex = req.get("tx_hex", "")
-                raw_hex = ""
-                error = ""
-                if port and tx_hex:
-                    try:
-                        import serial as _ser2
-                        ser = _ser2.Serial(port, baud, timeout=1.0)
-                        tx_bytes = bytes(int(b, 16) for b in tx_hex.replace(",", " ").split() if b.strip())
-                        ser.write(tx_bytes)
-                        ser.flush()
-                        import time as _tm
-                        _tm.sleep(0.05)
-                        resp = ser.read(256)
-                        raw_hex = " ".join(f"{b:02X}" for b in resp)
-                        ser.close()
-                    except Exception as e:
-                        error = str(e)
+                # Write command file for collector thread to process
+                try:
+                    with open(_os.path.join(data_dir, "modbus_cmd.json"), "wb") as _mf:
+                        _mf.write(body_bytes)
+                except Exception:
+                    pass
+                # Poll for response (collector thread processes the command)
+                _resp_p = _os.path.join(data_dir, "modbus_resp.json")
+                raw_hex = ""; error = ""
+                for _mp in range(50):  # up to 5s
+                    import time as _mt
+                    _mt.sleep(0.1)
+                    if _os.path.exists(_resp_p):
+                        try:
+                            with open(_resp_p) as _mf:
+                                _md = _jm.load(_mf)
+                            raw_hex = _md.get("raw", ""); error = _md.get("error", "")
+                            _os.remove(_resp_p)
+                        except Exception as e:
+                            error = str(e)
+                        break
                 self._json({"ok": True, "raw": raw_hex, "error": error})
             elif self.path == "/quit":
                 self.send_response(200); self.end_headers()
