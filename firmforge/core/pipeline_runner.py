@@ -263,11 +263,14 @@ class PipelineRunner:
                 # Process details
                 if _s.stage == 2:
                     cpp = len(_s.details.get("cppcheck") or [])
+                    cpp_err = sum(1 for w in (_s.details.get("cppcheck") or []) if w.get("severity") == "error")
+                    cpp_warn = cpp - cpp_err
                     reg = len(_s.details.get("warnings") or [])
-                    if cpp or reg:
-                        _items = []
-                        if cpp: _items.append(f"cppcheck={cpp}")
-                        if reg: _items.append(f"register={reg}")
+                    _items = []
+                    if cpp_err: _items.append(f"cppcheck:err={cpp_err}")
+                    if cpp_warn: _items.append(f"cppcheck:warn={cpp_warn}")
+                    if reg: _items.append(f"register={reg}")
+                    if _items:
                         process_parts.append(f'S2:({",".join(_items)})')
                 elif _s.stage == 3:
                     process_parts.append(f'S3:build&times;{_s.details.get("compile_rounds",1)}')
@@ -276,10 +279,14 @@ class PipelineRunner:
 
                 # Result icon
                 if _s.stage == 2:
-                    if _s.details.get("cppcheck"):
-                        _icon = "&#9888;"; _color = "var(--warn)"  # ⚠ cppcheck
+                    cpp_all = _s.details.get("cppcheck") or []
+                    cpp_err = sum(1 for w in cpp_all if w.get("severity") == "error")
+                    if cpp_err:
+                        _icon = "&#10060;"; _color = "var(--warn)"  # ❌ error = block
+                    elif cpp_all:
+                        _icon = "&#9888;"; _color = "var(--warn)"  # ⚠ cppcheck issues (red)
                     elif _s.details.get("warnings"):
-                        _icon = "&#8505;"; _color = "var(--dim)"   # ℹ register
+                        _icon = "&#9888;"; _color = "#eab308"      # ⚠ register warnings (yellow)
                     else:
                         _icon = "&#9989;"; _color = "var(--dim)"   # ✅ clean
                 elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
@@ -465,11 +472,13 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
         # Phase 1: Cppcheck static analysis (logic bugs, uninit vars, etc.)
         cppcheck_warnings: list[dict] = []
+        cppcheck_errors = 0  # severity=error → blocking
         try:
             from firmforge.providers.arduino.cppcheck import run_cppcheck
             cppcheck_warnings = run_cppcheck(source_dir)
             if cppcheck_warnings:
-                logger.info("Cppcheck: %d potential issues found", len(cppcheck_warnings))
+                cppcheck_errors = sum(1 for w in cppcheck_warnings if w.get("severity") == "error")
+                logger.info("Cppcheck: %d potential issues found (%d errors)", len(cppcheck_warnings), cppcheck_errors)
         except FileNotFoundError:
             logger.debug("Cppcheck not installed, skipping static analysis")
         except Exception as e:
@@ -484,8 +493,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         conf_ok = not (conf_result and conf_result.needs_review)
 
         sub_stages = [
-            {"name": "cppcheck", "success": True,
-             "issues": len(cppcheck_warnings)},
+            {"name": "cppcheck", "success": cppcheck_errors == 0,
+             "issues": len(cppcheck_warnings), "errors": cppcheck_errors},
             {"name": "review", "success": review_ok,
              "violations": len(c_result.violations) if c_result else 0,
              "registers": [v.register for v in c_result.violations[:10]] if c_result else []},
@@ -514,7 +523,14 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             logger.warning("Confidence below threshold: %.0f%% — needs review",
                            conf_result.overall_score)
 
-        stage.success = True     # S2 is always non-blocking
+        if cppcheck_errors:
+            stage.success = False
+            stage.error = f"Cppcheck: {cppcheck_errors} error(s) found — review required"
+            stage.elapsed_ms = (time.time() - t0) * 1000
+            logger.warning("S2 Review: BLOCKED (%d cppcheck errors)", cppcheck_errors)
+            return stage
+
+        stage.success = True     # S2 is non-blocking for warnings/style only
         stage.details = details
 
         stage.elapsed_ms = (time.time() - t0) * 1000
