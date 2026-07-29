@@ -69,7 +69,6 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="out" id="out">{{ROWS}}</div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="mbbar">
-    <button onclick="sendModbus()">Send</button>
     Slave <select id="mb-slave" style="width:50px"><option>1</option></select>
     FC <select id="mb-fc" onchange="onFcChange()" style="width:145px">
       <option value="3">03 Read Holding Reg</option><option value="4">04 Read Input Reg</option>
@@ -77,6 +76,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
     Addr <input id="mb-addr" value="0" style="width:50px">
     Count <input id="mb-count" value="10" style="width:40px">
     <span id="mb-data-wrap" style="display:none">Data <input id="mb-data" value="0" style="width:60px" placeholder="val1,..."></span>
+    <button onclick="sendModbus()" style="margin-left:auto">Send</button>
   </div>
   <div class="mblog" id="mb-log"></div>
 </div>
