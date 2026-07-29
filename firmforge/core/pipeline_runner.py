@@ -284,7 +284,7 @@ class PipelineRunner:
                     if cpp_err:
                         _icon = "&#10060;"; _color = "var(--warn)"  # ❌ error = block
                     elif cpp_all:
-                        _icon = "&#9888;"; _color = "var(--warn)"  # ⚠ cppcheck issues (red)
+                        _icon = "&#9888;"; _color = "#eab308"      # ⚠ cppcheck issues (yellow)
                     elif _s.details.get("warnings"):
                         _icon = "&#9888;"; _color = "#eab308"      # ⚠ register warnings (yellow)
                     else:
