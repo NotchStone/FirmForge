@@ -277,27 +277,27 @@ class PipelineRunner:
                 elif _s.stage == 4:
                     process_parts.append(f'S4:flash@115200(retry={_s.details.get("baud_retries",0)})')
 
-                # Result icon
+                # Result icon with color: ✅绿 ⚠️黄 ❌红 🔄蓝
                 if _s.stage == 2:
                     cpp_all = _s.details.get("cppcheck") or []
                     cpp_err = sum(1 for w in cpp_all if w.get("severity") == "error")
                     if cpp_err:
-                        _icon = "&#10060;"  # ❌ error = block
+                        _icon = "&#10060;"; _color = "#ef4444"  # ❌ error = red
                     elif cpp_all:
-                        _icon = "&#9888;"   # ⚠ cppcheck issues
+                        _icon = "&#9888;"; _color = "#eab308"   # ⚠ cppcheck = yellow
                     elif _s.details.get("warnings"):
-                        _icon = "&#9888;"   # ⚠ register warnings
+                        _icon = "&#9888;"; _color = "#eab308"   # ⚠ register = yellow
                     else:
-                        _icon = "&#9989;"   # ✅ clean
+                        _icon = "&#9989;"; _color = "#4ade80"   # ✅ clean = green
                 elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
-                    _icon = "&#128260;"     # 🔄 retry
+                    _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
                 elif _s.stage == 4 and _s.details.get("baud_retries", 0) > 0:
-                    _icon = "&#128260;"
+                    _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
                 else:
-                    _icon = "&#9989;"
-                result_icons.append(f'<span style="color:var(--dim)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                    _icon = "&#9989;"; _color = "#4ade80"       # ✅ pass = green
+                result_icons.append(f'<span style="color:{_color}">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                result_icons.append(f'<span style="color:var(--dim)">&#10060;S{_s.stage}:FAIL</span>')
+                result_icons.append(f'<span style="color:#ef4444">&#10060;S{_s.stage}:FAIL</span>')
         process_html = "  ".join(process_parts) if process_parts else ""
         result_html = "  ".join(result_icons)
 
