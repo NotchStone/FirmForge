@@ -255,35 +255,54 @@ class PipelineRunner:
 
         state.mark_done("flash")
 
-        # Build stages summary for panel display
-        stage_icons = []
+        # Build stages summary for panel display (process + result)
+        process_parts = []
+        result_icons = []
         for _s in result.stages:
             if _s.success:
-                # Choose icon based on retry/warning state
+                # Process details
+                if _s.stage == 2:
+                    cpp = len(_s.details.get("cppcheck") or [])
+                    reg = len(_s.details.get("warnings") or [])
+                    if cpp or reg:
+                        _items = []
+                        if cpp: _items.append(f"cppcheck={cpp}")
+                        if reg: _items.append(f"register={reg}")
+                        process_parts.append(f'S2:({",".join(_items)})')
+                elif _s.stage == 3:
+                    process_parts.append(f'S3:build&times;{_s.details.get("compile_rounds",1)}')
+                elif _s.stage == 4:
+                    process_parts.append(f'S4:flash@115200(retry={_s.details.get("baud_retries",0)})')
+
+                # Result icon
                 if _s.stage == 2:
                     if _s.details.get("cppcheck"):
-                        _icon = "&#9888;"  # ⚠ cppcheck found code issues
+                        _icon = "&#9888;"; _color = "var(--warn)"  # ⚠ cppcheck
                     elif _s.details.get("warnings"):
-                        _icon = "&#8505;"  # ℹ register-only warnings (weak)
+                        _icon = "&#8505;"; _color = "var(--dim)"   # ℹ register
                     else:
-                        _icon = "&#9989;"  # ✅ clean
+                        _icon = "&#9989;"; _color = "var(--dim)"   # ✅ clean
                 elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
-                    _icon = "&#128260;"  # 🔄 build retried
+                    _icon = "&#128260;"; _color = "var(--dim)"   # 🔄 retry
                 elif _s.stage == 4 and _s.details.get("baud_retries", 0) > 0:
-                    _icon = "&#128260;"  # 🔄 flash baud retried
+                    _icon = "&#128260;"; _color = "var(--dim)"
                 else:
-                    _icon = "&#9989;"  # ✅ clean first-try pass
-                stage_icons.append(f'<span style="color:var(--dim)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                    _icon = "&#9989;"; _color = "var(--dim)"
+                result_icons.append(f'<span style="color:{_color}">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                stage_icons.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
-        stages_summary_html = "  ".join(stage_icons)
+                result_icons.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
+        process_html = "  ".join(process_parts) if process_parts else ""
+        result_html = "  ".join(result_icons)
+
+        # Old single string kept for _stage_verify (backward compat)
+        stages_summary_html = result_html
 
         # -- Stage 5: Test --
         # Always run Test if expected pattern is provided (need to verify output)
         if not expected and flash_done_before and (state.should_skip_test(fps) or s4.details.get("skipped")):
             s5 = self._skipped_stage(5, "Test", "fingerprints match")
         else:
-            s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html)
+            s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html, process_summary=process_html)
         result.stages.append(s5)
         self._notify_progress(progress_callback, s5)
         if not s5.success:
@@ -730,7 +749,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # ===================================================================
 
     def _stage_verify(self, board_id: str | None, expected: str = "",
-                       stages_summary: str = "") -> PipelineStage:
+                       stages_summary: str = "", process_summary: str = "") -> PipelineStage:
         """S5 Verify — start collector thread, get 3 sample lines, return.
 
         Thread-based (no subprocess). Collector runs in daemon thread.
@@ -779,7 +798,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # Start collector thread (daemon — dies with MCP process)
             t = threading.Thread(
                 target=self._collector_thread,
-                args=(html_path, port, 9600, sample_ready, _sample_lines, _total_lines, stages_summary),
+                args=(html_path, port, 9600, sample_ready, _sample_lines, _total_lines, stages_summary, process_summary),
                 daemon=True,
             )
             t.start()
@@ -837,7 +856,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
     def _collector_thread(self, html_path: str, port: str, baud: int,
                           sample_ready, sample_lines_out: list, total_lines_out: list,
-                          stages_info: str = "") -> None:
+                          stages_info: str = "", process_info: str = "") -> None:
         """Daemon thread — opens COM4, reads serial, writes HTML + signals sample."""
         try:
             import json
@@ -884,7 +903,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             _start_time = time.time()
             lines: list[str] = []
 
-            html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info)
+            html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info, process_info)
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
                     f.write(html)
@@ -971,7 +990,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 # Write HTML (throttled: max 3.3 fps)
                 now = time.time()
                 if now - last_write >= 0.3:
-                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0], True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info)
+                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0], True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info, process_info)
                     try:
                         with open(html_path, "w", encoding="utf-8") as f:
                             f.write(html)
@@ -1078,7 +1097,7 @@ def _modbus_crc(data):
 _PANEL_TEMPLATE = None
 
 
-def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, stages_str=""):
+def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, stages_str="", process_str=""):
     global _PANEL_TEMPLATE
     if _PANEL_TEMPLATE is None:
         _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "panel.html")
@@ -1095,6 +1114,7 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, sta
     t = t.replace("{{IS_OPEN}}", "true" if is_open else "false")
     t = t.replace("{{TIMESTAMP}}", timestamp)
     t = t.replace("{{STAGES}}", stages_str)
+    t = t.replace("{{PROCESS}}", process_str)
     return t
 
 
