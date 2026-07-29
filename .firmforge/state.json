@@ -12,10 +12,8 @@
       "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_mega\\heart_ascii\\firmware.hex"
     },
     "flash": {
-      "status": "done"
-    },
-    "test": {
-      "status": "done"
+      "status": "failed",
+      "error": "Flash failed across all baud rates"
     }
   },
   "fingerprints": {
@@ -23,5 +21,9 @@
     "port": "COM4",
     "source": "6e62599d48553d9a",
     "hex": "b3b555ecfaa619c2"
+  },
+  "last_error": {
+    "stage": "flash",
+    "message": "Flash failed across all baud rates"
   }
 }
