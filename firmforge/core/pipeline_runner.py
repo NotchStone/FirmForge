@@ -282,22 +282,22 @@ class PipelineRunner:
                     cpp_all = _s.details.get("cppcheck") or []
                     cpp_err = sum(1 for w in cpp_all if w.get("severity") == "error")
                     if cpp_err:
-                        _icon = "&#10060;"; _color = "var(--warn)"  # ❌ error = block
+                        _icon = "&#10060;"  # ❌ error = block
                     elif cpp_all:
-                        _icon = "&#9888;"; _color = "#eab308"      # ⚠ cppcheck issues (yellow)
+                        _icon = "&#9888;"   # ⚠ cppcheck issues
                     elif _s.details.get("warnings"):
-                        _icon = "&#9888;"; _color = "#eab308"      # ⚠ register warnings (yellow)
+                        _icon = "&#9888;"   # ⚠ register warnings
                     else:
-                        _icon = "&#9989;"; _color = "var(--dim)"   # ✅ clean
+                        _icon = "&#9989;"   # ✅ clean
                 elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
-                    _icon = "&#128260;"; _color = "var(--dim)"   # 🔄 retry
+                    _icon = "&#128260;"     # 🔄 retry
                 elif _s.stage == 4 and _s.details.get("baud_retries", 0) > 0:
-                    _icon = "&#128260;"; _color = "var(--dim)"
+                    _icon = "&#128260;"
                 else:
-                    _icon = "&#9989;"; _color = "var(--dim)"
-                result_icons.append(f'<span style="color:{_color}">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+                    _icon = "&#9989;"
+                result_icons.append(f'<span style="color:var(--dim)">{_icon}S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
             else:
-                result_icons.append(f'<span style="color:var(--warn)">&#10060;S{_s.stage}:FAIL</span>')
+                result_icons.append(f'<span style="color:var(--dim)">&#10060;S{_s.stage}:FAIL</span>')
         process_html = "  ".join(process_parts) if process_parts else ""
         result_html = "  ".join(result_icons)
 
