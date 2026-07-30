@@ -134,6 +134,7 @@ function mbCrc(buf){
   return [crc&0xFF,(crc>>8)&0xFF];
 }
 function mb2hex(buf){var h="";for(var i=0;i<buf.length;i++)h+=("0"+buf[i].toString(16)).slice(-2).toUpperCase()+" ";return h.trim();}
+function tsNow(){var t=new Date();return ("0"+t.getHours()).slice(-2)+":"+("0"+t.getMinutes()).slice(-2)+":"+("0"+t.getSeconds()).slice(-2);}
 function doModbusSend(){
   var slave=parseInt(document.getElementById("modbus-slave").value)||1;
   var fc=parseInt(document.getElementById("modbus-func").value)||3;
@@ -154,7 +155,8 @@ function doModbusSend(){
   var entry=document.createElement("div");
   entry.id="modbus-entry-"+modbusFrameNum;
   entry.innerHTML='<div class="mb-line"><span class="tag tx">TX\u2192</span><span class="ts">'+tsStr+'</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span style="color:var(--dim);font-size:10px;padding-left:16px">waiting for reply...</span></div>';
-  modbusLog.insertBefore(entry, modbusLog.firstChild);
+  modbusLog.appendChild(entry);
+  modbusLog.scrollTop = modbusLog.scrollHeight;
   fetch("/modbus",{method:"POST",body:JSON.stringify({
     mb:{slave:slave,fc:fc,addr:addr,count:count,data:data},
     tx_hex:txHex,
@@ -167,7 +169,8 @@ function doModbusSend(){
     if(!e)return;
     var raw=d.raw||"";
     if(d.error){
-      e.innerHTML='<div class="mb-line"><span class="tag tx">TX\u2192</span><span class="ts">'+tsStr+'</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span class="tag err">ERR</span><span class="raw" style="color:var(--warn)">'+d.error+'</span></div>';
+      var rxTs=tsNow();
+      e.innerHTML='<div class="mb-line"><span class="tag tx">TX\u2192</span><span class="ts">'+tsStr+'</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span class="tag err">ERR</span><span class="ts">'+rxTs+'</span><span class="raw" style="color:var(--warn)">'+d.error+'</span></div>';
     }else if(raw){
       var parts=raw.trim().split(/[\\s,]+/);
       var bytes=[];for(var i=0;i<parts.length;i++){var b=parseInt(parts[i],16);if(!isNaN(b))bytes.push(b);}
@@ -177,7 +180,7 @@ function doModbusSend(){
       }else if(bytes.length>=3&&(bytes[1]==fc||(fc==3&&bytes[1]==3))){
         var regBytes=bytes.slice(3,bytes.length-2);
         var regs=[];for(var i=0;i<regBytes.length;i+=2)regs.push((regBytes[i]<<8)+(regBytes[i+1]||0));
-        var h='<div class="mb-line"><span class="tag rx">RX\u2190</span><span class="ts">'+tsStr+'</span><span class="raw">'+raw+'</span></div>';
+        var h='<div class="mb-line"><span class="tag rx">RX\u2190</span><span class="ts">'+rxTs+'</span><span class="raw">'+raw+'</span></div>';
         if(regs.length){h+='<div class="mb-decode">';regs.forEach(function(v,i){h+='<div class="cell"><div class="addr">'+(addr+i)+'</div><div class="val">'+v+'</div></div>';});h+='</div>';}
         e.innerHTML='<div class="mb-line"><span class="tag tx">TX\u2192</span><span class="ts">'+tsStr+'</span><span class="raw">'+txHex+'</span></div>'+h;
       }else{
