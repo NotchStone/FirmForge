@@ -55,18 +55,22 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <button id="connbtn" onclick="doToggleConn()">Close</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:20ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:102ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:1517ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:3063ms</span></span>
-  <span style="margin-left:auto">RX: <span id="rxval">0</span>  TX: <span id="txval">8</span></span>
+  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:28ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:95ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:1639ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:2897ms</span></span>
+  <span style="margin-left:auto">RX: <span id="rxval">32</span>  TX: <span id="txval">32</span></span>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim);gap:12px">
   <span id="process">S3:build&times;1  S4:flash@115200(retry=0)</span>
-  <span id="tsval" style="margin-left:auto">2026-07-30 22:31:06</span>
+  <span id="tsval" style="margin-left:auto">2026-07-30 22:38:34</span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
 </div>
-<div class="serial-out" id="serial-out"><div class="line"><span style="color:var(--tx-clr)">[TX MODBUS]</span> (no response)</div>
+<div class="serial-out" id="serial-out"><div class="line"><span style="color:var(--tx-clr)">[TX MODBUS]</span> 01 03 02 12 34 B5 33</div>
+<div class="line"><span style="color:var(--tx-clr)">[TX MODBUS]</span> 01 03 02 12 34 B5 33</div>
+<div class="line"><span style="color:var(--tx-clr)">[TX MODBUS]</span> 01 03 02 12 34 B5 33</div>
+<div class="line">OK</div>
+<div class="line"><span style="color:var(--tx-clr)">[TX MODBUS]</span> 01 03 02 12 34 B5 33</div>
 </div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="mbbar">
