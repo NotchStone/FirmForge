@@ -881,10 +881,10 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             data_dir = str(Path(html_path).parent)
             stop_path = html_path + ".stop"
 
-            # File paths for send/modbus commands + MODBUS response
-            _send_cmd_file = os.path.join(data_dir, "send_cmd.json")
-            _modbus_cmd_file = os.path.join(data_dir, "modbus_cmd.json")
-            _modbus_resp_file = os.path.join(data_dir, "modbus_resp.json")
+            # File paths for serial write / modbus request-response
+            serial_write_file = os.path.join(data_dir, "serial_write.json")
+            modbus_request_file = os.path.join(data_dir, "modbus_request.json")
+            modbus_response_file = os.path.join(data_dir, "modbus_response.json")
             rx_total = [0]
             tx_total = [0]
 
@@ -965,12 +965,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     continue
 
                 # Process send command (from panel input)
-                _sc = _process_send_file(_send_cmd_file, ser, tx_total)
+                _sc = _exec_serial_write(serial_write_file, ser, tx_total)
                 if _sc:
                     lines.append(_sc)
 
                 # Process MODBUS command (from panel MODBUS tab)
-                _mc = _process_modbus_file(_modbus_cmd_file, ser, _modbus_resp_file, tx_total, rx_total)
+                _mc = _exec_modbus(modbus_request_file, ser, modbus_response_file, tx_total, rx_total)
                 if _mc:
                     lines.append(_mc)
 
@@ -1100,16 +1100,6 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         except Exception:
             pass
 
-def _modbus_crc(data):
-    crc = 0xFFFF
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if crc & 1: crc = (crc >> 1) ^ 0xA001
-            else: crc >>= 1
-    return crc
-
-
 _PANEL_TEMPLATE = None
 
 
@@ -1134,7 +1124,7 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, sta
     return t
 
 
-def _process_send_file(send_file, ser, tx_total):
+def _exec_serial_write(send_file, ser, tx_total):
     if not os.path.exists(send_file): return None
     try:
         import json as _j
@@ -1148,7 +1138,7 @@ def _process_send_file(send_file, ser, tx_total):
     except: return None
 
 
-def _process_modbus_file(modbus_file, ser, resp_file, tx_total, rx_total):
+def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
     if not os.path.exists(modbus_file): return None
     try:
         import json as _j, struct as _s, time as _t
@@ -1163,7 +1153,8 @@ def _process_modbus_file(modbus_file, ser, resp_file, tx_total, rx_total):
             vs = [int(v.strip()) for v in ds.split(",") if v.strip()]
             if fc==6 and vs: frame += _s.pack(">H", vs[0])
             elif fc==16 and vs: frame += _s.pack(">H",len(vs))+_s.pack(">B",len(vs)*2)+_s.pack(">"+"H"*len(vs),*vs)
-        frame += _s.pack("<H", _modbus_crc(frame))
+        from firmforge.tools.modbus_utils import modbus_crc
+        frame += _s.pack("<H", modbus_crc(frame))
         # Don't flush — other loop may have just read; frame goes out fresh
         ser.write(frame); tx_total[0] += len(frame)
         _t.sleep(0.05)  # wait for slave to respond
@@ -1173,7 +1164,7 @@ def _process_modbus_file(modbus_file, ser, resp_file, tx_total, rx_total):
             resp = b""
         rx_total[0] += len(resp)
         rh = " ".join(f"{b:02X}" for b in resp) if resp else "(no response)"
-        ok = len(resp)>=5 and _modbus_crc(resp[:-2])==_s.unpack("<H",resp[-2:])[0]
+        ok = len(resp)>=5 and modbus_crc(resp[:-2])==_s.unpack("<H",resp[-2:])[0]
         regs = []
         if ok and fc in (3,4) and len(resp)>=5:
             bc = resp[2]

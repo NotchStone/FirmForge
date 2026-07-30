@@ -425,178 +425,25 @@ if MCP_AVAILABLE and mcp is not None:
         _add_project_root_to_path()
         return _do_monitor(port, baud, action)
 
-_monitor_httpd = None  # singleton HTTP server
-_stream_queue = None  # shared queue between collector thread and SSE handler
-_modbus_queue = None  # shared queue for Modbus requests (collector → handler)
+_monitor_httpd = None  # legacy — kept for backward compat with pipeline_runner
 
 
 def _get_stream_queue():
-    """Return the shared queue, creating it if needed."""
-    global _stream_queue
-    if _stream_queue is None:
-        import queue as _queue
-        _stream_queue = _queue.Queue()
-    return _stream_queue
+    """Backward compat — delegates to panel_service."""
+    from firmforge.adapters.panel_service import get_stream_queue
+    return get_stream_queue()
 
 
 def _clear_stream_queue():
-    """Reset the stream queue (call after collector exits)."""
-    global _stream_queue
-    _stream_queue = None
+    """Backward compat — delegates to panel_service."""
+    from firmforge.adapters.panel_service import clear_stream_queue
+    return clear_stream_queue()
 
 
 def _start_monitor_httpd(root: str) -> int:
-    """Start HTTP server serving .firmforge/ on port 9878. Returns port.
-    Singleton: first call starts, subsequent calls return existing port.
-    Server has /stop endpoint for Stop button on panel.
-    """
-    global _monitor_httpd
-    # Always create fresh (in-process singleton: only for stopping old server)
-    try:
-        if _monitor_httpd is not None:
-            _monitor_httpd.shutdown()
-    except Exception:
-        pass
-    _monitor_httpd = None
-
-    import os as _os
-    import threading
-    from http.server import HTTPServer, SimpleHTTPRequestHandler
-    from socketserver import ThreadingMixIn
-
-    class _ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-        daemon_threads = True
-
-    data_dir = _os.path.join(root, ".firmforge")
-    stop_file = _os.path.join(data_dir, "serial_live.html.stop")
-    pause_file = _os.path.join(data_dir, "serial_live.html.pause")
-
-    class _H(SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=data_dir, **kw)
-
-        def do_GET(self):
-            if self.path == "/stream":
-                self._handle_sse()
-                return
-            super().do_GET()
-
-        def _handle_sse(self):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Connection", "keep-alive")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            q = _get_stream_queue()
-            import json as _json_sse
-            try:
-                while True:
-                    try:
-                        item = q.get(timeout=3)
-                        data = _json_sse.dumps(item, ensure_ascii=False)
-                        self.wfile.write(f"data: {data}\n\n".encode())
-                        self.wfile.flush()
-                    except Exception:
-                        self.wfile.write(b": hb\n\n")
-                        self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError, OSError):
-                # Client disconnected (panel closed) — signal collector to stop
-                try:
-                    with open(stop_file, "w") as f: f.write("x")
-                except Exception: pass
-
-        def do_POST(self):
-            if self.path == "/stop":
-                # Full exit: write .stop
-                try:
-                    with open(pause_file, "w") as f: f.write("x")
-                    with open(stop_file, "w") as f: f.write("x")
-                except Exception: pass
-                self._json({"ok": True})
-            elif self.path == "/close":
-                # Pause COM4 only, keep process alive
-                try:
-                    with open(pause_file, "w") as f: f.write("x")
-                except Exception: pass
-                self._json({"ok": True, "paused": True})
-            elif self.path == "/open":
-                # Resume COM4
-                try: _os.remove(pause_file)
-                except OSError: pass
-                try: _os.remove(stop_file)
-                except OSError: pass
-                self._json({"ok": True, "resumed": True})
-            elif self.path == "/send":
-                self._save_body(_os.path.join(data_dir, "send_cmd.json"))
-                self._json({"ok": True})
-            elif self.path == "/modbus":
-                length = int(self.headers.get("Content-Length", "0"))
-                body_bytes = self.rfile.read(length)
-                import json as _jm
-                try:
-                    req = _jm.loads(body_bytes)
-                except Exception:
-                    self._json({"ok": False, "error": "invalid JSON"})
-                    return
-                # Write command file for collector thread to process
-                try:
-                    with open(_os.path.join(data_dir, "modbus_cmd.json"), "wb") as _mf:
-                        _mf.write(body_bytes)
-                except Exception:
-                    pass
-                # Poll for response (collector thread processes the command)
-                _resp_p = _os.path.join(data_dir, "modbus_resp.json")
-                raw_hex = ""; error = ""
-                for _mp in range(50):  # up to 5s
-                    import time as _mt
-                    _mt.sleep(0.1)
-                    if _os.path.exists(_resp_p):
-                        try:
-                            with open(_resp_p) as _mf:
-                                _md = _jm.load(_mf)
-                            raw_hex = _md.get("raw", ""); error = _md.get("error", "")
-                            _os.remove(_resp_p)
-                        except Exception as e:
-                            error = str(e)
-                        break
-                self._json({"ok": True, "raw": raw_hex, "error": error})
-            elif self.path == "/quit":
-                self.send_response(200); self.end_headers()
-                self.wfile.write(b"BYE"); os._exit(0)
-
-        def _json(self, data):
-            import json as _j_http
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(_j_http.dumps(data).encode())
-
-        def _save_body(self, path):
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                with open(path, "wb") as f: f.write(self.rfile.read(length))
-            except Exception: pass
-
-        def end_headers(self):
-            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-            super().end_headers()
-
-        def log_message(self, *a):
-            pass
-
-        def log_error(self, *a):
-            pass
-
-    for p in range(9878, 9888):
-        try:
-            _monitor_httpd = _ThreadedHTTPServer(("127.0.0.1", p), _H)
-            threading.Thread(target=_monitor_httpd.serve_forever, daemon=True).start()
-            logger.info("Monitor HTTP server started on port %d", p)
-            return p
-        except Exception as e:
-            logger.warning("Monitor HTTP port %d failed: %s", p, e)
-    return 0
+    """Backward compat — delegates to panel_service."""
+    from firmforge.adapters.panel_service import start_panel_httpd
+    return start_panel_httpd(root)
 
 
 # -- Main entry point --
