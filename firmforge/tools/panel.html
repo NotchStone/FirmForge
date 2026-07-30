@@ -17,7 +17,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 .serial-sendbar{display:flex;gap:8px;padding:8px 14px;border-top:1px solid var(--sep);align-items:center}
 .serial-sendbar input{flex:1;background:var(--hdr);border:1px solid var(--sep);color:var(--txt);padding:6px 10px;font-size:13px;border-radius:4px;font-family:"Cascadia Code",monospace}
 .serial-sendbar button{border:1px solid var(--acc);background:transparent;color:var(--acc);padding:5px 14px;border-radius:4px;font-size:13px;cursor:pointer;white-space:nowrap}
-.serial-sendbar label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.serial-sendbar label{font-size:13px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
 .status{display:flex;gap:14px;padding:3px 12px;font-size:12px;color:#64748b;border-top:1px solid var(--sep);flex-shrink:0;white-space:nowrap}
 .modbus{display:none;flex-direction:column;flex:1;min-height:0}
 .modbus.show{display:flex}
@@ -27,7 +27,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 .mbbar button:hover{background:var(--btn-hover)}
 .mblog{flex:1;overflow-y:auto;padding:8px 14px;font-family:"Cascadia Code",Consolas,monospace;font-size:13px;line-height:1.6;min-height:0}
 .mb-line{display:flex;align-items:baseline;gap:6px;padding:1px 0}
-.mb-line .tag{font-weight:600;font-size:11px;padding:0 4px;border-radius:2px;flex-shrink:0}
+.mb-line .tag{font-weight:600;font-size:12px;padding:0 4px;border-radius:2px;flex-shrink:0}
 .mb-line .tag.tx{color:#f59e0b}
 .mb-line .tag.rx{color:#4ade80}
 .mb-line .tag.ok{color:#4ade80}
@@ -36,7 +36,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 .mb-line .raw{color:var(--txt);word-break:break-all}
 .mb-decode{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:2px;padding:4px 0 6px 20px;font-size:12px}
 .mb-decode .cell{background:var(--hdr);padding:3px 5px;border-radius:2px;text-align:center}
-.mb-decode .cell .addr{color:var(--dim);font-size:10px}
+.mb-decode .cell .addr{color:var(--dim);font-size:11px}
 .mb-decode .cell .val{color:var(--txt)}
 </style></head>
 <body>
@@ -64,7 +64,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
-  <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">MODBUS</div>
+  <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">Modbus</div>
 </div>
 <div class="serial-out" id="serial-out">{{ROWS}}</div><!--/output-->
 <div class="modbus" id="modbus-panel">
@@ -74,7 +74,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
       <option value="3">03 Read Holding Reg</option><option value="4">04 Read Input Reg</option>
       <option value="6">06 Write Single Reg</option><option value="16">16 Write Multiple Reg</option></select>
     Addr <input id="modbus-addr" value="0" style="width:50px">
-    Count <input id="modbus-count" value="10" style="width:40px">
+    Count <input id="modbus-count" value="1" style="width:40px">
     <span id="modbus-data-row" style="display:none">Data <input id="modbus-data" value="0" style="width:60px" placeholder="val1,..."></span>
     <button onclick="doModbusSend()" style="margin-left:auto">Send</button>
   </div>
@@ -154,7 +154,7 @@ function doModbusSend(){
   modbusFrameNum++;
   var entry=document.createElement("div");
   entry.id="modbus-entry-"+modbusFrameNum;
-  entry.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span style="color:var(--dim);font-size:10px;padding-left:16px">waiting...</span></div>';
+  entry.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span style="color:var(--dim);padding-left:16px">waiting...</span></div>';
   modbusLog.appendChild(entry);
   modbusLog.scrollTop = modbusLog.scrollHeight;
   fetch("/modbus",{method:"POST",body:JSON.stringify({
