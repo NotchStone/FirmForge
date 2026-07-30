@@ -969,10 +969,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 if _sc:
                     lines.append(_sc)
 
-                # Process MODBUS command (from panel MODBUS tab)
-                _mc = _exec_modbus(modbus_request_file, ser, modbus_response_file, tx_total, rx_total)
-                if _mc:
-                    lines.append(_mc)
+                # Process MODBUS command (atomic — response goes to modbus_response.json)
+                _exec_modbus(modbus_request_file, ser, modbus_response_file, tx_total, rx_total)
 
                 # Sample handoff — write first 3+ lines to shared list, signal parent
                 if not _sample_written:

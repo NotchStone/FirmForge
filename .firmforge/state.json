@@ -9,7 +9,7 @@
     },
     "build": {
       "status": "done",
-      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_mega\\modbus_slave\\firmware.hex"
+      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_mega\\modbus_mini\\firmware.hex"
     },
     "flash": {
       "status": "done"
@@ -21,7 +21,7 @@
   "fingerprints": {
     "board_id": "arduino_mega",
     "port": "COM4",
-    "source": "2d2ba61f76afeb6f",
-    "hex": "e589195c80fcb764"
+    "source": "b0ce6d83aeb9bd4c",
+    "hex": "8c42d9cdff2cd508"
   }
 }
