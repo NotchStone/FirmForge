@@ -1156,12 +1156,16 @@ def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
         from firmforge.tools.modbus_utils import modbus_crc
         frame += _s.pack("<H", modbus_crc(frame))
         # Don't flush — other loop may have just read; frame goes out fresh
-        ser.write(frame); tx_total[0] += len(frame)
-        _t.sleep(0.05)  # wait for slave to respond
+        # Drain stale data from serial before sending Modbus frame
         try:
-            resp = ser.read(256)  # single blocking read (timeout is 300ms)
-        except:
-            resp = b""
+            while ser.read(64): pass  # drain any pending data (timeout=0.3s per read)
+        except: pass
+        ser.write(frame); tx_total[0] += len(frame)
+        _t.sleep(0.3)  # wait for slave to process + respond
+        resp = b""
+        try:
+            resp = ser.read(256)
+        except: pass
         rx_total[0] += len(resp)
         rh = " ".join(f"{b:02X}" for b in resp) if resp else "(no response)"
         ok = len(resp)>=5 and modbus_crc(resp[:-2])==_s.unpack("<H",resp[-2:])[0]
