@@ -36,6 +36,23 @@ def clear_stream_queue():
     global _stream_queue
     _stream_queue = None
 
+_modbus_request_queue = None
+_modbus_response_queue = None
+
+def get_modbus_request_queue():
+    global _modbus_request_queue
+    if _modbus_request_queue is None:
+        import queue as _q
+        _modbus_request_queue = _q.Queue()
+    return _modbus_request_queue
+
+def get_modbus_response_queue():
+    global _modbus_response_queue
+    if _modbus_response_queue is None:
+        import queue as _q
+        _modbus_response_queue = _q.Queue()
+    return _modbus_response_queue
+
 
 def start_panel_httpd(root: str) -> int:
     """Start HTTP server serving .firmforge/ on port 9878. Returns port.
@@ -132,27 +149,23 @@ def start_panel_httpd(root: str) -> int:
             elif self.path == "/modbus":
                 length = int(self.headers.get("Content-Length", "0"))
                 body_bytes = self.rfile.read(length)
+                import json as _j, queue as _queue
                 try:
-                    with open(modbus_request_file, "wb") as f:
-                        f.write(body_bytes)
+                    data = _j.loads(body_bytes)
                 except Exception:
-                    pass
-                # Poll for response (collector thread processes the command)
+                    self._json({"ok": False, "error": "invalid JSON"})
+                    return
+                req_q = get_modbus_request_queue()
+                resp_q = get_modbus_response_queue()
+                req_q.put(data)
                 raw_hex = ""
                 error = ""
-                for _ in range(50):  # up to 5s
-                    time.sleep(0.1)
-                    if os.path.exists(modbus_response_file):
-                        try:
-                            import json as _j
-                            with open(modbus_response_file) as f:
-                                md = _j.load(f)
-                            raw_hex = md.get("raw", "")
-                            error = md.get("error", "")
-                            os.remove(modbus_response_file)
-                        except Exception as e:
-                            error = str(e)
-                        break
+                try:
+                    resp = resp_q.get(timeout=5)
+                    raw_hex = resp.get("raw", "")
+                    error = resp.get("error", "")
+                except _queue.Empty:
+                    error = "timeout — no response from slave"
                 self._json({"ok": True, "raw": raw_hex, "error": error})
 
             elif self.path == "/quit":
