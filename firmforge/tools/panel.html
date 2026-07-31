@@ -190,7 +190,7 @@ function doModbusSend(){
     }
   });
 }
-function doClearOutput(){serialOut.innerHTML="";}
+function doClearOutput(){serialOut.innerHTML="";modbusLog.innerHTML="";document.getElementById("rxval").innerHTML="0";document.getElementById("txval").innerHTML="0";}
 function doFcChange(){
   var fc=parseInt(document.getElementById("modbus-func").value);
   document.getElementById("modbus-count").style.display=(fc==6)?"none":"";
