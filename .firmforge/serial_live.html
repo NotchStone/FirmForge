@@ -34,7 +34,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 .mb-line .tag.err{color:#ef4444}
 .mb-line .ts{color:var(--dim);font-size:12px;flex-shrink:0}
 .mb-line .raw{color:var(--txt);word-break:break-all}
-.mb-decode{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:2px;padding:4px 0 6px 20px;font-size:12px}
+.mb-decode{display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:2px;padding:4px 0 6px 0;margin-left:100px;font-size:12px}
 .mb-decode .cell{background:var(--hdr);padding:3px 5px;border-radius:2px;text-align:center}
 .mb-decode .cell .addr{color:var(--dim);font-size:11px}
 .mb-decode .cell .val{color:var(--txt)}
@@ -55,12 +55,12 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <button id="connbtn" onclick="doToggleConn()">Close</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:20ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:73ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:2273ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:2973ms</span></span>
-  <span style="margin-left:auto">RX: <span id="rxval">21</span>  TX: <span id="txval">32</span></span>
+  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:17ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:77ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:1285ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:3004ms</span></span>
+  <span style="margin-left:auto">RX: <span id="rxval">7</span>  TX: <span id="txval">16</span></span>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim);gap:12px">
   <span id="process">S3:build&times;1  S4:flash@115200(retry=0)</span>
-  <span id="tsval" style="margin-left:auto">2026-07-31 20:55:34</span>
+  <span id="tsval" style="margin-left:auto">2026-07-31 21:02:01</span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
