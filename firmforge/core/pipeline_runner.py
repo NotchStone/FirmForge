@@ -1125,8 +1125,8 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, sta
 def _exec_serial_write(send_file, ser, tx_total):
     if not os.path.exists(send_file): return None
     try:
-        import json as _j
-        with open(send_file, "rb") as f: data = _j.loads(f.read())
+        import json
+        with open(send_file, "rb") as f: data = json.loads(f.read())
         os.remove(send_file)
         text = data.get("text", ""); is_hex = data.get("hex", False); crlf = data.get("crlf", True)
         payload = bytes.fromhex(text.replace(" ","")) if is_hex else text.encode("ascii","replace")
@@ -1139,40 +1139,35 @@ def _exec_serial_write(send_file, ser, tx_total):
 def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
     if not os.path.exists(modbus_file): return None
     try:
-        import json as _j, struct as _s, time as _t
-        with open(modbus_file, "rb") as f: data = _j.loads(f.read())
+        import json, struct, time
+        with open(modbus_file, "rb") as f: data = json.loads(f.read())
         os.remove(modbus_file)
         mb = data.get("mb", {})
         slave = mb.get("slave",1)&0xFF; fc = mb.get("fc",3)&0xFF
         addr = mb.get("addr",0)&0xFFFF; count = mb.get("count",1)&0xFFFF
         ds = mb.get("data","")
-        frame = _s.pack(">BBHH", slave, fc, addr, count if fc!=6 else 0)
+        frame = struct.pack(">BBHH", slave, fc, addr, count if fc!=6 else 0)
         if fc in (6,16) and ds:
             vs = [int(v.strip()) for v in ds.split(",") if v.strip()]
-            if fc==6 and vs: frame += _s.pack(">H", vs[0])
-            elif fc==16 and vs: frame += _s.pack(">H",len(vs))+_s.pack(">B",len(vs)*2)+_s.pack(">"+"H"*len(vs),*vs)
+            if fc==6 and vs: frame += struct.pack(">H", vs[0])
+            elif fc==16 and vs: frame += struct.pack(">H",len(vs))+struct.pack(">B",len(vs)*2)+struct.pack(">"+"H"*len(vs),*vs)
         from firmforge.tools.modbus_utils import modbus_crc
-        frame += _s.pack("<H", modbus_crc(frame))
-        # Don't flush — other loop may have just read; frame goes out fresh
-        # Drain stale data from serial before sending Modbus frame
-        try:
-            while ser.read(64): pass  # drain any pending data (timeout=0.3s per read)
-        except: pass
+        frame += struct.pack("<H", modbus_crc(frame))
         ser.write(frame); tx_total[0] += len(frame)
-        _t.sleep(0.3)  # wait for slave to process + respond
+        time.sleep(0.05)  # wait for slave to receive + respond (~20ms)
         resp = b""
         try:
             resp = ser.read(256)
         except: pass
         rx_total[0] += len(resp)
         rh = " ".join(f"{b:02X}" for b in resp) if resp else "(no response)"
-        ok = len(resp)>=5 and modbus_crc(resp[:-2])==_s.unpack("<H",resp[-2:])[0]
+        ok = len(resp)>=5 and modbus_crc(resp[:-2])==struct.unpack("<H",resp[-2:])[0]
         regs = []
         if ok and fc in (3,4) and len(resp)>=5:
             bc = resp[2]
             regs = [resp[i]<<8|resp[i+1] for i in range(3, min(3+bc, len(resp)-2), 2)]
         try:
-            with open(resp_file,"w") as f: _j.dump({"raw":rh+("" if ok else ' <span style="color:var(--warn)">CRC ERR</span>'),"crc_ok":ok,"regs":regs,"rx_bytes":len(resp),"tx_bytes":len(frame)},f)
+            with open(resp_file,"w") as f: json.dump({"raw":rh+("" if ok else ' <span style="color:var(--warn)">CRC ERR</span>'),"crc_ok":ok,"regs":regs,"rx_bytes":len(resp),"tx_bytes":len(frame)},f)
         except: pass
         return f'<span style="color:var(--tx-clr)">[TX MODBUS]</span> {rh}'
     except: return None

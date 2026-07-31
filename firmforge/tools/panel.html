@@ -172,7 +172,7 @@ function doModbusSend(){
     if(d.error){
       e.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span class="ts">'+rxTs+'</span><span class="tag err">ERR</span><span class="raw" style="color:var(--warn)">'+d.error+'</span></div>';
     }else if(raw){
-      var parts=raw.trim().split(/[\\s,]+/);
+      var parts=raw.trim().split(/\s+/);
       var bytes=[];for(var i=0;i<parts.length;i++){var b=parseInt(parts[i],16);if(!isNaN(b))bytes.push(b);}
       if(bytes.length>=3&&(bytes[1]&0x80)){
         var exc=bytes[2];var msgs=["Illegal Function","Illegal Data Address","Illegal Data Value","Slave Failure","Acknowledge","Slave Busy"];
