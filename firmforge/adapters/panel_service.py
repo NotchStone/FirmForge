@@ -106,11 +106,7 @@ def start_panel_httpd(root: str) -> int:
                         self.wfile.write(b": hb\n\n")
                         self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError, OSError):
-                # Client disconnected (panel closed) — signal collector to stop
-                try:
-                    with open(stop_file, "w") as f: f.write("x")
-                except Exception:
-                    pass
+                pass  # SSE client disconnected — collector keeps running
 
         def do_POST(self):
             if self.path == "/serial-stop":
