@@ -160,9 +160,13 @@ def start_panel_httpd(root: str) -> int:
                     resp = resp_q.get(timeout=5)
                     raw_hex = resp.get("raw", "")
                     error = resp.get("error", "")
+                    rx_bytes = resp.get("rx_bytes", 0)
+                    tx_bytes = resp.get("tx_bytes", 0)
                 except _queue.Empty:
                     error = "timeout — no response from slave"
-                self._json({"ok": True, "raw": raw_hex, "error": error})
+                    rx_bytes = 0; tx_bytes = 0
+                self._json({"ok": True, "raw": raw_hex, "error": error,
+                            "rx": rx_bytes, "tx": tx_bytes})
 
             elif self.path == "/quit":
                 self.send_response(200)

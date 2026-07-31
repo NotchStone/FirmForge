@@ -188,19 +188,20 @@ function doModbusSend(){
     }else{
       e.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span style="color:var(--dim);padding-left:16px">response pending (server stored)</span></div>';
     }
+    var rxc=intval("rxval")+(d.rx||0), txc=intval("txval")+(d.tx||0);
+    document.getElementById("rxval").innerHTML=rxc;
+    document.getElementById("txval").innerHTML=txc;
     modbusLog.scrollTop = modbusLog.scrollHeight;
   });
 }
-var rxBase=0,txBase=0;
 function doClearOutput(){
   if(modbusPanel.classList.contains("show")){
     modbusLog.innerHTML="";
+    document.getElementById("rxval").innerHTML="0";
+    document.getElementById("txval").innerHTML="0";
   }else{
     serialOut.innerHTML="";
   }
-  rxBase=intval("rxval"); txBase=intval("txval");
-  document.getElementById("rxval").innerHTML="0";
-  document.getElementById("txval").innerHTML="0";
 }
 function intval(id){return parseInt(document.getElementById(id).innerHTML)||0;}
 function doFcChange(){
@@ -212,8 +213,8 @@ var es=new EventSource("http://127.0.0.1:9878/stream");
 es.onmessage=function(e){
   var d=JSON.parse(e.data);
   if(d.new){for(var i=0;i<d.new.length;i++)serialOut.insertAdjacentHTML("beforeend",'<div class="line">'+d.new[i]+'</div>');serialOut.scrollTop=serialOut.scrollHeight;}
-  document.getElementById("rxval").innerHTML=Math.max(0,(d.rx||0)-rxBase);
-  document.getElementById("txval").innerHTML=Math.max(0,(d.tx||0)-txBase);
+  document.getElementById("rxval").innerHTML=d.rx||0;
+  document.getElementById("txval").innerHTML=d.tx||0;
   if(d.stages)document.getElementById("stages").innerHTML=d.stages;
   if(d.ts){
     var hm=d.ts.split(" ")[1];
