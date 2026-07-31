@@ -56,15 +56,14 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
   <span id="stages">{{STAGES}}</span>
-  <span style="margin-left:auto">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span></span>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim);gap:12px">
   <span id="process">{{PROCESS}}</span>
-  <span id="tsval" style="margin-left:auto">{{TIMESTAMP}}</span>
 </div>
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">Modbus</div>
+  <span style="margin-left:auto;color:var(--dim);font-size:13px;padding:7px 14px">RX: <span id="rxval">{{RX}}</span>  TX: <span id="txval">{{TX}}</span></span>
 </div>
 <div class="serial-out" id="serial-out">{{ROWS}}</div><!--/output-->
 <div class="modbus" id="modbus-panel">
@@ -203,7 +202,6 @@ es.onmessage=function(e){
   if(d.new){for(var i=0;i<d.new.length;i++)serialOut.insertAdjacentHTML("beforeend",'<div class="line">'+d.new[i]+'</div>');serialOut.scrollTop=serialOut.scrollHeight;}
   document.getElementById("rxval").innerHTML=d.rx||0;
   document.getElementById("txval").innerHTML=d.tx||0;
-  document.getElementById("tsval").innerHTML=d.ts||"";
   if(d.stages)document.getElementById("stages").innerHTML=d.stages;
   if(d.ts){
     var hm=d.ts.split(" ")[1];
