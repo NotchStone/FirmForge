@@ -87,7 +87,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 </div>
 <script>
-var serialOut=document.getElementById("serial-out"),modbusPanel=document.getElementById("modbus-panel"),isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
+var serialOut=document.getElementById("serial-out"),modbusPanel=document.getElementById("modbus-panel"),isOpen={{IS_OPEN}},dot=document.querySelector(".dot"),mbRx=0,mbTx=0;
 
 function doToggleConn(){
   if(isOpen){
@@ -188,15 +188,16 @@ function doModbusSend(){
     }else{
       e.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div><div class="mb-line"><span style="color:var(--dim);padding-left:16px">response pending (server stored)</span></div>';
     }
-    var rxc=intval("rxval")+(d.rx||0), txc=intval("txval")+(d.tx||0);
-    document.getElementById("rxval").innerHTML=rxc;
-    document.getElementById("txval").innerHTML=txc;
+    mbRx+=d.rx||0; mbTx+=d.tx||0;
+    document.getElementById("rxval").innerHTML=mbRx;
+    document.getElementById("txval").innerHTML=mbTx;
     modbusLog.scrollTop = modbusLog.scrollHeight;
   });
 }
 function doClearOutput(){
   if(modbusPanel.classList.contains("show")){
     modbusLog.innerHTML="";
+    mbRx=0; mbTx=0;
     document.getElementById("rxval").innerHTML="0";
     document.getElementById("txval").innerHTML="0";
   }else{
@@ -213,8 +214,10 @@ var es=new EventSource("http://127.0.0.1:9878/stream");
 es.onmessage=function(e){
   var d=JSON.parse(e.data);
   if(d.new){for(var i=0;i<d.new.length;i++)serialOut.insertAdjacentHTML("beforeend",'<div class="line">'+d.new[i]+'</div>');serialOut.scrollTop=serialOut.scrollHeight;}
-  document.getElementById("rxval").innerHTML=d.rx||0;
-  document.getElementById("txval").innerHTML=d.tx||0;
+  if(!modbusPanel.classList.contains("show")){
+    document.getElementById("rxval").innerHTML=d.rx||0;
+    document.getElementById("txval").innerHTML=d.tx||0;
+  }
   if(d.stages)document.getElementById("stages").innerHTML=d.stages;
   if(d.ts){
     var hm=d.ts.split(" ")[1];
