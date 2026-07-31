@@ -87,7 +87,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 </div>
 <script>
-var serialOut=document.getElementById("serial-out"),isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
+var serialOut=document.getElementById("serial-out"),modbusPanel=document.getElementById("modbus-panel"),isOpen={{IS_OPEN}},dot=document.querySelector(".dot");
 
 function doToggleConn(){
   if(isOpen){
@@ -190,7 +190,15 @@ function doModbusSend(){
     }
   });
 }
-function doClearOutput(){serialOut.innerHTML="";modbusLog.innerHTML="";document.getElementById("rxval").innerHTML="0";document.getElementById("txval").innerHTML="0";}
+function doClearOutput(){
+  if(modbusPanel.classList.contains("show")){
+    modbusLog.innerHTML="";
+  }else{
+    serialOut.innerHTML="";
+  }
+  document.getElementById("rxval").innerHTML="0";
+  document.getElementById("txval").innerHTML="0";
+}
 function doFcChange(){
   var fc=parseInt(document.getElementById("modbus-func").value);
   document.getElementById("modbus-count").style.display=(fc==6)?"none":"";
