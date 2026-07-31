@@ -1177,6 +1177,14 @@ def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
         resp_q = get_modbus_response_queue()
         resp_q.put({"raw": rh if ok else rh + ' <span style="color:var(--warn)">CRC ERR</span>',
                     "crc_ok": ok, "regs": regs, "rx_bytes": len(resp), "tx_bytes": len(frame)})
+        # Push counter update to SSE (modbus doesn't append to lines)
+        try:
+            from firmforge.adapters.mcp_server import _get_stream_queue
+            _get_stream_queue().put_nowait({
+                "new": [], "rx": rx_total[0], "tx": tx_total[0],
+                "ts": time.strftime("%Y-%m-%d %H:%M:%S")
+            })
+        except: pass
         return f'<span style="color:var(--tx-clr)">[TX MODBUS]</span> {rh}'
     except: return None
 
