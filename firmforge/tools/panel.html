@@ -198,11 +198,11 @@ function doClearOutput(){
   if(modbusPanel.classList.contains("show")){
     modbusLog.innerHTML="";
     mbRx=0; mbTx=0;
-    document.getElementById("rxval").innerHTML="0";
-    document.getElementById("txval").innerHTML="0";
   }else{
     serialOut.innerHTML="";
   }
+  document.getElementById("rxval").innerHTML="0";
+  document.getElementById("txval").innerHTML="0";
 }
 function intval(id){return parseInt(document.getElementById(id).innerHTML)||0;}
 function doFcChange(){
