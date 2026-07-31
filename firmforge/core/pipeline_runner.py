@@ -1137,11 +1137,15 @@ def _exec_serial_write(send_file, ser, tx_total):
 
 
 def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
-    if not os.path.exists(modbus_file): return None
+    import queue as _queue
+    from firmforge.adapters.panel_service import get_modbus_request_queue, get_modbus_response_queue
+    req_q = get_modbus_request_queue()
+    try:
+        data = req_q.get(block=False)
+    except _queue.Empty:
+        return None
     try:
         import json, struct, time
-        with open(modbus_file, "rb") as f: data = json.loads(f.read())
-        os.remove(modbus_file)
         mb = data.get("mb", {})
         slave = mb.get("slave",1)&0xFF; fc = mb.get("fc",3)&0xFF
         addr = mb.get("addr",0)&0xFFFF; count = mb.get("count",1)&0xFFFF
@@ -1166,9 +1170,9 @@ def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
         if ok and fc in (3,4) and len(resp)>=5:
             bc = resp[2]
             regs = [resp[i]<<8|resp[i+1] for i in range(3, min(3+bc, len(resp)-2), 2)]
-        try:
-            with open(resp_file,"w") as f: json.dump({"raw":rh+("" if ok else ' <span style="color:var(--warn)">CRC ERR</span>'),"crc_ok":ok,"regs":regs,"rx_bytes":len(resp),"tx_bytes":len(frame)},f)
-        except: pass
+        resp_q = get_modbus_response_queue()
+        resp_q.put({"raw": rh if ok else rh + ' <span style="color:var(--warn)">CRC ERR</span>',
+                    "crc_ok": ok, "regs": regs, "rx_bytes": len(resp), "tx_bytes": len(frame)})
         return f'<span style="color:var(--tx-clr)">[TX MODBUS]</span> {rh}'
     except: return None
 
