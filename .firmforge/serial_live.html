@@ -55,7 +55,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <button id="connbtn" onclick="doToggleConn()">Close</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:20ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:75ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:1318ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:3055ms</span></span>
+  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:17ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:87ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:1829ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:3023ms</span></span>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim);gap:12px">
   <span id="process">S3:build&times;1  S4:flash@115200(retry=0)</span>
@@ -63,13 +63,9 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="tabs">
   <div class="tab on" onclick="switchTab('serial')" id="tab-serial">Serial</div>
   <div class="tab" onclick="switchTab('modbus')" id="tab-modbus">Modbus</div>
-  <span style="margin-left:auto;color:var(--dim);font-size:13px;padding:7px 14px">RX: <span id="rxval">52</span>  TX: <span id="txval">16</span></span>
+  <span style="margin-left:auto;color:var(--dim);font-size:13px;padding:7px 14px">RX: <span id="rxval">68</span>  TX: <span id="txval">32</span></span>
 </div>
 <div class="serial-out" id="serial-out"><div class="line">OK</div>
-<div class="line">OK</div>
-<div class="line">OK</div>
-<div class="line">OK</div>
-<div class="line">OK</div>
 </div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="mbbar">
@@ -92,7 +88,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 </div>
 <script>
-var serialOut=document.getElementById("serial-out"),isOpen=true,dot=document.querySelector(".dot");
+var serialOut=document.getElementById("serial-out"),modbusPanel=document.getElementById("modbus-panel"),isOpen=true,dot=document.querySelector(".dot");
 
 function doToggleConn(){
   if(isOpen){
@@ -195,7 +191,15 @@ function doModbusSend(){
     }
   });
 }
-function doClearOutput(){serialOut.innerHTML="";modbusLog.innerHTML="";document.getElementById("rxval").innerHTML="0";document.getElementById("txval").innerHTML="0";}
+function doClearOutput(){
+  if(modbusPanel.classList.contains("show")){
+    modbusLog.innerHTML="";
+  }else{
+    serialOut.innerHTML="";
+  }
+  document.getElementById("rxval").innerHTML="0";
+  document.getElementById("txval").innerHTML="0";
+}
 function doFcChange(){
   var fc=parseInt(document.getElementById("modbus-func").value);
   document.getElementById("modbus-count").style.display=(fc==6)?"none":"";
