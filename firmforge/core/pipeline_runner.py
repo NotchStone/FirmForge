@@ -962,6 +962,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     ser = ser_wrapper._ser
                     try: ser.reset_input_buffer()
                     except Exception: pass
+                    lines.clear()  # don't accumulate old data on reopen
+                    rx_total[0] = 0; tx_total[0] = 0
                     continue
 
                 # Process send command (from panel input)
