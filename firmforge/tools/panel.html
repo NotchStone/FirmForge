@@ -141,17 +141,18 @@ function mbCrc(buf){
 }
 function mb2hex(buf){var h="";for(var i=0;i<buf.length;i++)h+=("0"+buf[i].toString(16)).slice(-2).toUpperCase()+" ";return h.trim();}
 function tsNow(){var t=new Date();return ("0"+t.getHours()).slice(-2)+":"+("0"+t.getMinutes()).slice(-2)+":"+("0"+t.getSeconds()).slice(-2)+"."+("00"+t.getMilliseconds()).slice(-3);}
+function mbNum(s){s=String(s).trim();if(/^0[xX][0-9a-fA-F]+$/.test(s))return parseInt(s,16);var n=parseInt(s,10);return isNaN(n)?0:n;}
 function doModbusSend(){
-  var slave=parseInt(document.getElementById("modbus-slave").value)||1;
-  var fc=parseInt(document.getElementById("modbus-func").value)||3;
-  var addr=parseInt(document.getElementById("modbus-addr").value)||0;
-  var count=parseInt(document.getElementById("modbus-count").value)||1;
+  var slave=mbNum(document.getElementById("modbus-slave").value)||1;
+  var fc=mbNum(document.getElementById("modbus-func").value)||3;
+  var addr=mbNum(document.getElementById("modbus-addr").value)||0;
+  var count=mbNum(document.getElementById("modbus-count").value)||1;
   var data=document.getElementById(fc==16?"modbus-data-multi":"modbus-data-single").value;
   var tsStr=tsNow();
   var pdu=[slave,fc,(addr>>8)&0xFF,addr&0xFF];
-  if(fc==6){var v=parseInt(data)||0;pdu.push((v>>8)&0xFF,v&0xFF);}
+  if(fc==6){var v=mbNum(data);pdu.push((v>>8)&0xFF,v&0xFF);}
   else if(fc==16){
-    var vals=data.trim().split(/[\s,，]+/).map(function(x){return parseInt(x)||0;});
+    var vals=data.trim().split(/[\s,，]+/).map(function(x){return mbNum(x);});
     pdu.push((count>>8)&0xFF,count&0xFF,(vals.length*2>>8)&0xFF,vals.length*2&0xFF);
     for(var k=0;k<vals.length;k++){pdu.push((vals[k]>>8)&0xFF,vals[k]&0xFF);}
   }else{pdu.push((count>>8)&0xFF,count&0xFF);}

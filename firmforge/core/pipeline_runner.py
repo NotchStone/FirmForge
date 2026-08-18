@@ -1175,9 +1175,17 @@ def _exec_modbus(ser, tx_total, rx_total):
     try:
         import struct, time
         from firmforge.tools.modbus_utils import modbus_encode_frame, modbus_crc
+        def _mb_int(s, default=0):
+            """Parse decimal or 0x-prefixed hex; fall back to default on error."""
+            try:
+                s = str(s).strip()
+                return int(s, 16) if s.lower().startswith("0x") else int(s, 10)
+            except (ValueError, TypeError):
+                return default
+
         mb = data.get("mb", {})
-        slave = int(mb.get("slave", 1)); fc = int(mb.get("fc", 3))
-        addr = int(mb.get("addr", 0)); count = int(mb.get("count", 1))
+        slave = _mb_int(mb.get("slave", 1), 1); fc = _mb_int(mb.get("fc", 3), 3)
+        addr = _mb_int(mb.get("addr", 0)); count = _mb_int(mb.get("count", 1), 1)
         ds = mb.get("data", "")
         # Parameter validation
         if not (1 <= slave <= 247):
@@ -1191,7 +1199,7 @@ def _exec_modbus(ser, tx_total, rx_total):
         vs = []
         if fc in (6, 16) and ds:
             import re as _re
-            vs = [int(v) for v in _re.split(r"[\s,，]+", ds.strip()) if v.strip()]
+            vs = [_mb_int(v) for v in _re.split(r"[\s,，]+", ds.strip()) if v.strip()]
         frame = modbus_encode_frame(slave, fc, addr, count, vs)
         ser.write(frame); tx_total[0] += len(frame)
         time.sleep(0.05)  # wait for slave to receive + respond (~20ms)

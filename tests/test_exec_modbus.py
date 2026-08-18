@@ -95,7 +95,36 @@ class TestExecModbus:
         assert "out of range" in resp["error"]
         assert ser.written == []  # nothing sent
 
-    def test_bad_hex_value_reports_error(self):
-        ser = MockSer()
-        resp, _, _ = _run(ser, {"slave": 1, "fc": 6, "addr": 0, "data": "zzz"})
-        assert "error" in resp  # int() conversion failed -> caught
+    def test_bad_value_falls_back_to_zero(self):
+        ser = MockSer(_resp_frame("01 06 00 00 00 00"))
+        _run(ser, {"slave": 1, "fc": 6, "addr": 0, "data": "zzz"})
+        sent = ser.written[0]
+        assert sent[4:6] == b"\x00\x00"  # unparsable -> 0 (lenient, no crash)
+
+
+class TestHexInputParsing:
+    """0x-prefixed hex input support in _exec_modbus."""
+
+    def test_fc06_hex_value(self):
+        ser = MockSer(_resp_frame("01 06 00 00 12 34"))
+        _run(ser, {"slave": 1, "fc": 6, "addr": 0, "count": 0, "data": "0x1234"})
+        sent = ser.written[0]
+        assert sent[4:6] == b"\x12\x34"  # 0x1234 parsed as hex value
+
+    def test_fc16_mixed_separators_and_hex(self):
+        ser = MockSer(_resp_frame("01 10 00 00 00 02"))
+        _run(ser, {"slave": 1, "fc": 16, "addr": "0x0A", "count": 2,
+                   "data": "0x0B 0x10,0x21"})
+        sent = ser.written[0]
+        assert sent[2:4] == b"\x00\x0A"       # addr 0x0A
+        assert sent[7:9] == b"\x00\x0B"       # 0x0B
+        assert sent[9:11] == b"\x00\x10"      # 0x10
+        assert sent[11:13] == b"\x00\x21"     # 0x21
+
+    def test_hex_addr_and_count(self):
+        ser = MockSer(_resp_frame("01 03 02 12 34 B5 33"))
+        _run(ser, {"slave": "0x01", "fc": 3, "addr": "0x10", "count": "0x02"})
+        sent = ser.written[0]
+        assert sent[0] == 1
+        assert sent[2:4] == b"\x00\x10"  # addr 0x10
+        assert sent[4:6] == b"\x00\x02"  # count 0x02
