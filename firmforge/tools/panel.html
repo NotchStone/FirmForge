@@ -34,10 +34,10 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 .mb-line .tag.err{color:#ef4444}
 .mb-line .ts{color:var(--dim);font-size:12px;flex-shrink:0}
 .mb-line .raw{color:var(--txt);word-break:break-all}
-.mb-decode{display:flex;flex-direction:column;gap:2px;padding:4px 0 6px 0;margin-left:100px;font-size:12px}
-.mb-row{display:flex;gap:8px;background:var(--hdr);padding:2px 8px;border-radius:2px;align-items:center}
-.mb-row .mb-addr{color:var(--dim);min-width:90px}
-.mb-row .mb-val{color:var(--txt)}
+.mb-decode{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:2px;padding:4px 0 6px 0;margin-left:100px;font-size:12px}
+.mb-decode .cell{background:var(--hdr);padding:3px 5px;border-radius:2px;text-align:center;white-space:nowrap}
+.mb-decode .cell .addr{color:var(--dim);font-size:11px}
+.mb-decode .cell .val{color:var(--txt)}
 </style></head>
 <body>
 <div class="bar">
@@ -186,15 +186,15 @@ function doModbusSend(){
           /* Read response — decode register grid */
           var regBytes=bytes.slice(3,bytes.length-2);
           var regs=[];for(var i=0;i<regBytes.length;i+=2)regs.push((regBytes[i]<<8)+(regBytes[i+1]||0));
-          if(regs.length){h+='<div class="mb-decode">';regs.forEach(function(v,i){h+='<div class="mb-row"><span class="mb-addr">Address '+(addr+i)+'</span><span class="mb-val">Value '+v+'</span></div>';});h+='</div>';}
+          if(regs.length){h+='<div class="mb-decode">';regs.forEach(function(v,i){h+='<div class="cell"><div class="addr">addr '+(addr+i)+'</div><div class="val">Value '+v+'</div></div>';});h+='</div>';}
         }else if(fc==6&&bytes.length>=6){
           /* Write single echo — show addr + value */
           var wa=(bytes[2]<<8)|bytes[3], wv=(bytes[4]<<8)|bytes[5];
-          h+='<div class="mb-decode"><div class="mb-row"><span class="mb-addr">Address '+wa+'</span><span class="mb-val">Value '+wv+'</span></div></div>';
+          h+='<div class="mb-decode"><div class="cell"><div class="addr">addr '+wa+'</div><div class="val">Value '+wv+'</div></div></div>';
         }else if(fc==16&&bytes.length>=6){
           /* Write multiple echo — show addr + count */
           var ma=(bytes[2]<<8)|bytes[3], mc=(bytes[4]<<8)|bytes[5];
-          h+='<div class="mb-decode"><div class="mb-row"><span class="mb-addr">Address '+ma+'</span><span class="mb-val">Count '+mc+'</span></div></div>';
+          h+='<div class="mb-decode"><div class="cell"><div class="addr">addr '+ma+'</div><div class="val">Count '+mc+'</div></div></div>';
         }
         e.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div>'+h;
       }else{
