@@ -256,53 +256,7 @@ class PipelineRunner:
         state.mark_done("flash")
 
         # Build stages summary for panel display (process + result)
-        process_parts = []
-        result_icons = []
-        for _s in result.stages:
-            if _s.success:
-                # Process details
-                if _s.stage == 2:
-                    cpp = len(_s.details.get("cppcheck") or [])
-                    cpp_err = sum(1 for w in (_s.details.get("cppcheck") or []) if w.get("severity") == "error")
-                    cpp_warn = cpp - cpp_err
-                    reg = len(_s.details.get("warnings") or [])
-                    _items = []
-                    if cpp_err: _items.append(f"cppcheck:err={cpp_err}")
-                    if cpp_warn: _items.append(f"cppcheck:warn={cpp_warn}")
-                    if reg: _items.append(f"register={reg}")
-                    if _items:
-                        process_parts.append(f'S2:({",".join(_items)})')
-                elif _s.stage == 3:
-                    process_parts.append(f'S3:build&times;{_s.details.get("compile_rounds",1)}')
-                elif _s.stage == 4:
-                    process_parts.append(f'S4:flash@115200(retry={_s.details.get("baud_retries",0)})')
-
-                # Result icon with color: ✅绿 ⚠️黄 ❌红 🔄蓝
-                if _s.stage == 2:
-                    cpp_all = _s.details.get("cppcheck") or []
-                    cpp_err = sum(1 for w in cpp_all if w.get("severity") == "error")
-                    if cpp_err:
-                        _icon = "&#10060;"; _color = "#ef4444"  # ❌ error = red
-                    elif cpp_all:
-                        _icon = "&#9888;"; _color = "#eab308"   # ⚠ cppcheck = yellow
-                    elif _s.details.get("warnings"):
-                        _icon = "&#9888;"; _color = "#eab308"   # ⚠ register = yellow
-                    else:
-                        _icon = "&#9989;"; _color = "#4ade80"   # ✅ clean = green
-                elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
-                    _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
-                elif _s.stage == 4 and _s.details.get("baud_retries", 0) > 0:
-                    _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
-                else:
-                    _icon = "&#9989;"; _color = "#4ade80"       # ✅ pass = green
-                result_icons.append(f'<span style="color:{_color}">{_icon}</span><span style="color:var(--dim)">S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
-            else:
-                result_icons.append(f'<span style="color:#ef4444">&#10060;</span><span style="color:var(--dim)">S{_s.stage}:FAIL</span>')
-        process_html = "  ".join(process_parts) if process_parts else ""
-        result_html = "  ".join(result_icons)
-
-        # Old single string kept for _stage_verify (backward compat)
-        stages_summary_html = result_html
+        stages_summary_html, process_html = self._build_summary(result.stages)
 
         # -- Stage 5: Test --
         # Always run Test if expected pattern is provided (need to verify output)
@@ -329,6 +283,59 @@ class PipelineRunner:
         result.overall_success = all(s.success for s in result.stages)
         result.total_elapsed_ms = (time.time() - start) * 1000
         return result
+
+    @staticmethod
+    def _build_summary(stages) -> tuple[str, str]:
+        """Build panel top-bar summaries from stage results.
+
+        Returns (stages_html, process_html):
+          stages:  icons per stage — ✅绿 ⚠️黄 ❌红 🔄蓝 + elapsed ms
+          process: S2:(cppcheck:err/warn,register) S3:build×n S4:flash@baud
+        """
+        process_parts = []
+        result_icons = []
+        for _s in stages:
+            if _s.success:
+                # Process details
+                if _s.stage == 2:
+                    cpp = len(_s.details.get("cppcheck") or [])
+                    cpp_err = sum(1 for w in (_s.details.get("cppcheck") or []) if w.get("severity") == "error")
+                    cpp_warn = cpp - cpp_err
+                    reg = len(_s.details.get("warnings") or [])
+                    _items = []
+                    if cpp_err: _items.append(f"cppcheck:err={cpp_err}")
+                    if cpp_warn: _items.append(f"cppcheck:warn={cpp_warn}")
+                    if reg: _items.append(f"register={reg}")
+                    if _items:
+                        process_parts.append(f'S2:({",".join(_items)})')
+                elif _s.stage == 3:
+                    process_parts.append(f'S3:build&times;{_s.details.get("compile_rounds",1)}')
+                elif _s.stage == 4:
+                    baud = _s.details.get("baud", 115200)
+                    process_parts.append(f'S4:flash@{baud}(retry={_s.details.get("baud_retries",0)})')
+
+                # Result icon with color: ✅绿 ⚠️黄 ❌红 🔄蓝
+                if _s.stage == 2:
+                    cpp_all = _s.details.get("cppcheck") or []
+                    cpp_err = sum(1 for w in cpp_all if w.get("severity") == "error")
+                    if cpp_err:
+                        _icon = "&#10060;"; _color = "#ef4444"  # ❌ error = red
+                    elif cpp_all:
+                        _icon = "&#9888;"; _color = "#eab308"   # ⚠ cppcheck = yellow
+                    elif _s.details.get("warnings"):
+                        _icon = "&#9888;"; _color = "#eab308"   # ⚠ register = yellow
+                    else:
+                        _icon = "&#9989;"; _color = "#4ade80"   # ✅ clean = green
+                elif _s.stage == 3 and _s.details.get("compile_rounds", 1) > 1:
+                    _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
+                elif _s.stage == 4 and _s.details.get("baud_retries", 0) > 0:
+                    _icon = "&#128260;"; _color = "#22d3ee"     # 🔄 retry = blue
+                else:
+                    _icon = "&#9989;"; _color = "#4ade80"       # ✅ pass = green
+                result_icons.append(f'<span style="color:{_color}">{_icon}</span><span style="color:var(--dim)">S{_s.stage}:{int(_s.elapsed_ms)}ms</span>')
+            else:
+                result_icons.append(f'<span style="color:#ef4444">&#10060;</span><span style="color:var(--dim)">S{_s.stage}:FAIL</span>')
+        return ("  ".join(result_icons), "  ".join(process_parts) if process_parts else "")
 
     @staticmethod
     def _notify_progress(
