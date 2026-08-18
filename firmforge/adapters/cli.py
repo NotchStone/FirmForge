@@ -23,7 +23,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
     """ff detect: USB scan + board identification."""
     print("FirmForge init: scanning for connected boards...")
 
-    detector = BoardDetector(boards_dir=args.boards_dir or Path("./boards"))
+    detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
     result = detector.detect(user_text=args.intent or "")
 
     # Multiple boards detected — list all, let caller choose
@@ -76,7 +76,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
             print("\nTip: write code then run: ff verify --app <source_dir>")
 
     # List available boards and ask user
-    available = detector.list_available_boards(Path(args.boards_dir or "./boards"))
+    available = detector.list_available_boards(Path(args.boards_dir or str(_bdir())))
     if available:
         print("\nAvailable boards:")
         for b in available:
@@ -95,6 +95,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     """
     from firmforge.core.pipeline_runner import PipelineRunner
 
+
     workspace = Path(args.workspace or ".")
     board_id = args.board
     source_dir = args.app
@@ -105,7 +106,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     runner = PipelineRunner(
-        boards_dir=args.boards_dir or "./boards",
+        boards_dir=args.boards_dir or str(_bdir()),
         workspace=workspace,
     )
 
@@ -150,13 +151,14 @@ def cmd_build(args: argparse.Namespace) -> int:
     """ff build: Review + Build only."""
     from firmforge.core.pipeline_runner import PipelineRunner
 
+
     workspace = Path(args.workspace or ".")
     source_dir = args.app
     if not source_dir:
         print("Error: --app <source_dir> is required")
         return 1
 
-    runner = PipelineRunner(boards_dir=args.boards_dir or "./boards", workspace=workspace)
+    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()), workspace=workspace)
     result = runner.build(source_dir=source_dir, board_id=args.board or None)
 
     for s in result.stages:
@@ -187,7 +189,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
         from firmforge.core.board_detector import BoardDetector
         from firmforge.providers.arduino.flash import ArduinoFlashProvider
 
-        detector = BoardDetector(boards_dir=args.boards_dir or Path("./boards"))
+        detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
         config = detector.resolve_board(board_id)
 
         if not config:
@@ -236,8 +238,8 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         version="FirmForge 0.1.0",
     )
     parser.add_argument(
-        "--boards-dir", type=str, default="./boards",
-        help="Path to boards/ directory (default: ./boards)",
+        "--boards-dir", type=str, default=None,
+        help="Override board definitions directory (default: bundled package data)",
     )
     parser.add_argument(
         "--workspace", "-w", type=str, default=".",

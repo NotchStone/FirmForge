@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from firmforge.core.resources import knowledge_dir as resources
 
 import pytest
 
@@ -46,7 +47,7 @@ class TestRegisterLoading:
         assert "arduino_mega" in stats["pin_maps_loaded"]
 
     def test_registers_json_valid_json(self):
-        reg_path = Path("knowledge/reference/avr/atmega2560/registers.json")
+        reg_path = Path(resources()) / "reference/avr/atmega2560/registers.json"
         with open(reg_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         assert data["mcu"] == "ATmega2560"
@@ -56,7 +57,7 @@ class TestRegisterLoading:
         assert "usart" in data["register_groups"]
 
     def test_pins_json_valid_json(self):
-        pin_path = Path("knowledge/reference/avr/atmega2560/pins.json")
+        pin_path = Path(resources()) / "reference/avr/atmega2560/pins.json"
         with open(pin_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         assert data["board"] == "arduino_mega"

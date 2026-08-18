@@ -167,7 +167,7 @@ def _do_detect() -> dict[str, Any]:
     try:
         root = _add_project_root_to_path()
         from firmforge.core.board_detector import BoardDetector
-        detector = BoardDetector(boards_dir=str(root / "boards"))
+        detector = BoardDetector()
         result = detector.detect()
         boards = result.boards if result.boards else []
         candidates = result.candidates if result.candidates else []
@@ -193,14 +193,14 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
         from firmforge.core.board_detector import BoardDetector
 
         if not board:
-            detector = BoardDetector(boards_dir=str(root / "boards"))
+            detector = BoardDetector()
             detect_result = detector.detect()
             board = detect_result.board_id or ""
 
         if not board:
             return {"error": "No board detected or specified. Run ff_detect first."}
 
-        config = BoardDetector(boards_dir=str(root / "boards")).resolve_board(board) or {}
+        config = BoardDetector().resolve_board(board) or {}
         mcu = config.get("mcu", {})
         chip = mcu.get("chip", "atmega328p").lower()
 
@@ -238,7 +238,7 @@ def _do_build(board: str = "", app: str = "") -> dict[str, Any]:
     root = _add_project_root_to_path()
     from firmforge.core.pipeline_runner import PipelineRunner
 
-    runner = PipelineRunner(boards_dir=str(root / "boards"), workspace=str(root))
+    runner = PipelineRunner(workspace=str(root))
     try:
         result = runner.build(source_dir=app or None, board_id=board or None)
     except Exception as e:
@@ -272,7 +272,7 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
     from firmforge.core.pipeline_runner import PipelineRunner
 
     workspace = str(root)
-    runner = PipelineRunner(boards_dir=str(root / "boards"), workspace=workspace)
+    runner = PipelineRunner(workspace=workspace)
 
     progress_events: list[dict[str, Any]] = []
 
@@ -352,7 +352,7 @@ def _do_flash(board: str = "", firmware: str = "") -> dict[str, Any]:
     from firmforge.core.pipeline_runner import PipelineRunner
 
     try:
-        runner = PipelineRunner(boards_dir=str(root / "boards"), workspace=str(root))
+        runner = PipelineRunner(workspace=str(root))
         result = runner.flash(board_id=board or None, firmware_path=firmware)
         return {
             "success": result.overall_success,
@@ -482,7 +482,7 @@ def _do_monitor(port: str = "", baud: int = 9600,
         if not port:
             try:
                 from firmforge.core.board_detector import BoardDetector
-                bd = BoardDetector(boards_dir=str(root / "boards"))
+                bd = BoardDetector()
                 result = bd.detect()
                 for c in (result.candidates or []):
                     p = c.details.get("port", "")
