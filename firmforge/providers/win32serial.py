@@ -72,12 +72,16 @@ _k.ReadFile.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctype
 _k.WriteFile.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p]
 
 
-def _build_dcb(baud):
+_PARITY_MAP = {"None": 0, "Odd": 1, "Even": 2}
+
+def _build_dcb(baud, parity="None"):
     d = _DCB()
     d.DCBlength = ctypes.sizeof(_DCB)
     d.BaudRate = baud
     d.flags = 0x00000001 | (1 << 4) | (1 << 12)  # fBinary, DTR enable, RTS enable
     d.ByteSize = 8
+    d.Parity = _PARITY_MAP.get(str(parity), 0)
+    d.StopBits = 0  # ONESTOPBIT
     return d
 
 
@@ -88,13 +92,14 @@ class Win32SerialError(Exception):
 class Win32Serial:
     """Fallback serial port — heals CH340 4.0 same-baud SetCommState bug."""
 
-    def __init__(self, port, baudrate=9600, timeout=1.0):
+    def __init__(self, port, baudrate=9600, timeout=1.0, parity="None"):
         if not port.startswith("\\\\.\\"):
             port = "\\\\.\\" + port
         self._port = port
         self._port_display = port.replace("\\\\.\\", "")
         self._baudrate = int(baudrate)
         self._timeout = timeout
+        self._parity = parity
         self._handle = None
 
     @property
@@ -115,8 +120,8 @@ class Win32Serial:
         cur.DCBlength = ctypes.sizeof(_DCB)
         if _k.GetCommState(self._handle, ctypes.byref(cur)) and cur.BaudRate == value:
             heal = HEAL_BAUD if value != HEAL_BAUD else 9600
-            _k.SetCommState(self._handle, ctypes.byref(_build_dcb(heal)))
-        dcb = _build_dcb(value)
+            _k.SetCommState(self._handle, ctypes.byref(_build_dcb(heal, self._parity)))
+        dcb = _build_dcb(value, self._parity)
         if not _k.SetCommState(self._handle, ctypes.byref(dcb)):
             raise Win32SerialError(f"baudrate setter: SetCommState({value}) failed, err {_k.GetLastError()}")
         self._baudrate = value
@@ -133,10 +138,10 @@ class Win32Serial:
 
         if cur.BaudRate == self._baudrate:
             heal = HEAL_BAUD if self._baudrate != HEAL_BAUD else 9600
-            _k.SetCommState(h, ctypes.byref(_build_dcb(heal)))
+            _k.SetCommState(h, ctypes.byref(_build_dcb(heal, self._parity)))
             logger.debug("Win32Serial open: healed same-baud via toggle %d", heal)
 
-        dcb = _build_dcb(self._baudrate)
+        dcb = _build_dcb(self._baudrate, self._parity)
         if not _k.SetCommState(h, ctypes.byref(dcb)):
             raise Win32SerialError(f"SetCommState({self._baudrate}) failed, err {_k.GetLastError()}")
 

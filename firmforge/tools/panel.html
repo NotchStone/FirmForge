@@ -44,13 +44,12 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <span class="dot" style="background:{{DOT_COLOR}};flex-shrink:0"></span>
   <span style="color:var(--acc);font-weight:600;font-size:14px;margin-left:6px">FirmForge</span>
   <select id="portsel"><option>{{PORT}}</option></select>
-  <select id="baudsel" onchange="location.href=location.pathname.split('?')[0]+'?baud='+this.value">
+  <select id="baudsel" onchange="doSerialConfig()">
     <option value="9600">9600</option><option value="19200">19200</option>
     <option value="38400">38400</option><option value="57600">57600</option>
     <option value="115200">115200</option>
   </select>
-  <select id="framsel"><option>8N1</option><option>8E1</option><option>8O1</option></select>
-  <select id="paritysel"><option>None</option><option>Even</option><option>Odd</option></select>
+  <select id="paritysel" onchange="doSerialConfig()"><option value="None">8N1</option><option value="Even">8E1</option><option value="Odd">8O1</option></select>
   <button style="border-color:var(--sep);color:var(--txt);font-size:13px;padding:4px 12px;margin-left:auto" onclick="doClearOutput()">Clear</button>
   <button id="connbtn" onclick="doToggleConn()">{{OPEN_CLOSE}}</button>
 </div>
@@ -88,6 +87,12 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 </div>
 <script>
 var serialOut=document.getElementById("serial-out"),modbusPanel=document.getElementById("modbus-panel"),isOpen={{IS_OPEN}},dot=document.querySelector(".dot"),mbRx=0,mbTx=0;
+
+function doSerialConfig(){
+  var cfg={baud:parseInt(document.getElementById("baudsel").value)||9600,
+           parity:document.getElementById("paritysel").value};
+  fetch("/serial-config",{method:"POST",body:JSON.stringify(cfg)});
+}
 
 function doToggleConn(){
   if(isOpen){
@@ -210,7 +215,7 @@ function doFcChange(){
   document.getElementById("modbus-count").style.display=(fc==6)?"none":"";
   document.getElementById("modbus-data-row").style.display=(fc==6||fc==16)?"inline":"none";
 }
-var es=new EventSource("http://127.0.0.1:9878/stream");
+var es=new EventSource("/stream");
 es.onmessage=function(e){
   var d=JSON.parse(e.data);
   if(d.new){for(var i=0;i<d.new.length;i++)serialOut.insertAdjacentHTML("beforeend",'<div class="line">'+d.new[i]+'</div>');serialOut.scrollTop=serialOut.scrollHeight;}

@@ -18,19 +18,26 @@ def modbus_crc(data: bytes) -> int:
 
 def modbus_encode_frame(slave: int, func: int, addr: int,
                         count: int = 0, values: list[int] | None = None) -> bytes:
-    """Build a Modbus RTU frame (PDU + CRC)."""
-    if func in (6, 16) and values:
-        frame = struct.pack(">BBHH", slave, func, addr, count if func != 6 else 0)
-        if func == 6 and values:
-            frame += struct.pack(">H", values[0])
-        elif func == 16 and values:
-            frame += struct.pack(">H", len(values))
-            frame += struct.pack(">B", len(values) * 2)
-            frame += struct.pack(">" + "H" * len(values), *values)
+    """Build a Modbus RTU frame (PDU + CRC).
+
+    Frame layouts by function code:
+      FC03/04 (read):     slave + fc + addr(2) + count(2)          = 6B PDU
+      FC06   (write one): slave + fc + addr(2) + value(2)          = 6B PDU
+      FC16   (write many):slave + fc + addr(2) + count(2) + nbytes
+                           + values(n*2)                           = 7+n*2 B PDU
+    """
+    if func in (3, 4):
+        pdu = struct.pack(">BBHH", slave, func, addr, count)
+    elif func == 6:
+        value = (values[0] if values else 0) & 0xFFFF
+        pdu = struct.pack(">BBHH", slave, func, addr, value)
+    elif func == 16:
+        vals = values or []
+        pdu = struct.pack(">BBHHB", slave, func, addr, len(vals), len(vals) * 2)
+        pdu += struct.pack(">" + "H" * len(vals), *vals)
     else:
-        frame = struct.pack(">BBHH", slave, func, addr, count)
-    frame += struct.pack("<H", modbus_crc(frame))
-    return frame
+        raise ValueError(f"Unsupported function code: {func}")
+    return pdu + struct.pack("<H", modbus_crc(pdu))
 
 
 def modbus_decode_response(resp: bytes, addr_base: int = 0
