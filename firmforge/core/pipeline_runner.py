@@ -870,6 +870,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         logger.info("S5 Verify: %s", f"{stage.details.get('sample_count', 0)} sample lines")
         return stage
 
+    @staticmethod
     def _load_serial_config(data_dir: str, default_baud: int = 9600,
                             default_parity: str = "None") -> tuple[int, str]:
         """Read .firmforge/serial_config.json (panel baud/parity), else defaults."""
