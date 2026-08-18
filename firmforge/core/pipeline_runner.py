@@ -915,7 +915,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 sample_ready.set()  # Signal so verify doesn't hang
                 return
 
-            ser = ser_wrapper._ser
+            ser = ser_wrapper.ser
             time.sleep(2.0)  # MCU post-flash settle
             try:
                 ser.reset_input_buffer()
@@ -931,7 +931,6 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
             html = _render_panel(port, baud, lines, 0, 0,
                                  not os.path.exists(pause_path),
-                                 time.strftime("%Y-%m-%d %H:%M:%S"),
                                  stages_info, process_info)
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
@@ -973,7 +972,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                             time.sleep(0.5)
                     if ser_wrapper is None:
                         break
-                    ser = ser_wrapper._ser
+                    ser = ser_wrapper.ser
                     try: ser.reset_input_buffer()
                     except Exception: pass
                     lines.clear()  # don't accumulate old data on reopen
@@ -1022,7 +1021,6 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 if now - last_write >= 0.3:
                     html = _render_panel(port, baud, lines, rx_total[0], tx_total[0],
                                          not os.path.exists(pause_path),
-                                         time.strftime("%Y-%m-%d %H:%M:%S"),
                                          stages_info, process_info)
                     try:
                         with open(html_path, "w", encoding="utf-8") as f:
@@ -1120,7 +1118,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 _PANEL_TEMPLATE = None
 
 
-def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, stages_str="", process_str=""):
+def _render_panel(port, baud, lines, rx_count, tx_count, is_open, stages_str="", process_str=""):
     global _PANEL_TEMPLATE
     if _PANEL_TEMPLATE is None:
         _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "panel.html")
@@ -1135,7 +1133,6 @@ def _render_panel(port, baud, lines, rx_count, tx_count, is_open, timestamp, sta
     t = t.replace("{{RX}}", str(rx_count))
     t = t.replace("{{TX}}", str(tx_count))
     t = t.replace("{{IS_OPEN}}", "true" if is_open else "false")
-    t = t.replace("{{TIMESTAMP}}", timestamp)
     t = t.replace("{{STAGES}}", stages_str)
     t = t.replace("{{PROCESS}}", process_str)
     return t

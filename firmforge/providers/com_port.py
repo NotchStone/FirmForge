@@ -71,3 +71,8 @@ class ComPort:
                 self._ser.close()
             except Exception:
                 pass
+
+    @property
+    def ser(self):
+        """The underlying serial object (Win32Serial or pySerial)."""
+        return self._ser
