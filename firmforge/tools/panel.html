@@ -67,17 +67,17 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="serial-out" id="serial-out">{{ROWS}}</div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="mbbar">
-    Slave <input id="modbus-slave" value="1" style="width:56px">
+    Slave <input id="modbus-slave" value="1" style="width:56px" spellcheck="false">
     FC <select id="modbus-func" onchange="doFcChange()" style="width:165px">
       <option value="3">03 Read Holding Reg</option><option value="4">04 Read Input Reg</option>
       <option value="6">06 Write Single Reg</option><option value="16">16 Write Multiple Reg</option></select>
-    Addr <input id="modbus-addr" value="0" style="width:56px">
-    <span id="modbus-count-wrap">Count <input id="modbus-count" value="1" style="width:56px"></span>
-    <span id="modbus-data-single-row" style="display:none">Data <input id="modbus-data-single" value="0" style="width:80px"></span>
+    Addr <input id="modbus-addr" value="0" style="width:56px" spellcheck="false">
+    <span id="modbus-count-wrap">Count <input id="modbus-count" value="1" style="width:56px" spellcheck="false"></span>
+    <span id="modbus-data-single-row" style="display:none">Data <input id="modbus-data-single" value="0" style="width:80px" spellcheck="false"></span>
     <button onclick="doModbusSend()" style="margin-left:auto">Send</button>
   </div>
   <div class="mbbar" id="modbus-data-multi-row" style="display:none;border-bottom:none">
-    Data <input id="modbus-data-multi" value="0" style="flex:1;min-width:200px" placeholder="间隔符号：空格 / 英文逗号 / 中文逗号均可。例如：100 200 300">
+    Data <input id="modbus-data-multi" value="" style="flex:1;min-width:200px" spellcheck="false" placeholder="间隔符号：空格 / 英文逗号 / 中文逗号均可。例如：100 200 300">
   </div>
   <div class="mblog" id="modbus-log"></div>
 </div>
