@@ -186,15 +186,17 @@ function doModbusSend(){
           /* Read response — decode register grid */
           var regBytes=bytes.slice(3,bytes.length-2);
           var regs=[];for(var i=0;i<regBytes.length;i+=2)regs.push((regBytes[i]<<8)+(regBytes[i+1]||0));
-          if(regs.length){h+='<div class="mb-decode">';regs.forEach(function(v,i){h+='<div class="cell"><div class="addr">'+(addr+i)+'</div><div class="val">'+v+'</div></div>';});h+='</div>';}
+          if(regs.length){h+='<div class="mb-decode">';regs.forEach(function(v,i){h+='<div class="cell"><div class="addr">addr '+(addr+i)+'</div><div class="val">'+v+'</div></div>';});h+='</div>';}
         }else if(fc==6&&bytes.length>=6){
-          /* Write single echo — show addr + value (same meaning as read) */
+          /* Write single echo — addr + written value (same meaning as read) */
           var wa=(bytes[2]<<8)|bytes[3], wv=(bytes[4]<<8)|bytes[5];
-          h+='<div class="mb-decode"><div class="cell"><div class="addr">'+wa+'</div><div class="val">'+wv+'</div></div></div>';
+          h+='<div class="mb-decode"><div class="cell"><div class="addr">addr '+wa+'</div><div class="val">'+wv+'</div></div></div>';
         }else if(fc==16&&bytes.length>=6){
-          /* Write multiple echo — addr + COUNT (different meaning: not a value) */
-          var ma=(bytes[2]<<8)|bytes[3], mc=(bytes[4]<<8)|bytes[5];
-          h+='<div class="mb-decode"><div class="cell"><div class="addr">'+ma+'</div><div class="val">Count '+mc+'</div></div></div>';
+          /* Write multiple echo — addr + WRITTEN values (from send data, echo has no payload) */
+          var ma=(bytes[2]<<8)|bytes[3];
+          h+='<div class="mb-decode">';
+          vals.forEach(function(v,i){h+='<div class="cell"><div class="addr">addr '+(ma+i)+'</div><div class="val">'+v+'</div></div>';});
+          h+='</div>';
         }
         e.innerHTML='<div class="mb-line"><span class="ts">'+tsStr+'</span><span class="tag tx">TX\u2192</span><span class="raw">'+txHex+'</span></div>'+h;
       }else{
