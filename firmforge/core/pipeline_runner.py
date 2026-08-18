@@ -870,6 +870,17 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         logger.info("S5 Verify: %s", f"{stage.details.get('sample_count', 0)} sample lines")
         return stage
 
+    def _load_serial_config(data_dir: str, default_baud: int = 9600,
+                            default_parity: str = "None") -> tuple[int, str]:
+        """Read .firmforge/serial_config.json (panel baud/parity), else defaults."""
+        import json
+        try:
+            with open(os.path.join(data_dir, "serial_config.json"), encoding="utf-8") as f:
+                cfg = json.load(f)
+            return int(cfg.get("baud", default_baud)), str(cfg.get("parity", default_parity))
+        except Exception:
+            return default_baud, default_parity
+
     def _collector_thread(self, html_path: str, port: str, baud: int,
                           sample_ready, sample_lines_out: list, total_lines_out: list,
                           stages_info: str = "", process_info: str = "") -> None:
@@ -881,10 +892,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             data_dir = str(Path(html_path).parent)
             stop_path = html_path + ".stop"
 
-            # File paths for serial write / modbus request-response
+            # Serial write command file (panel Serial tab)
             serial_write_file = os.path.join(data_dir, "serial_write.json")
-            modbus_request_file = os.path.join(data_dir, "modbus_request.json")
-            modbus_response_file = os.path.join(data_dir, "modbus_response.json")
+            baud, parity = self._load_serial_config(data_dir, baud, "None")
             rx_total = [0]
             tx_total = [0]
 
@@ -893,7 +903,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             ser_wrapper = None
             for _retry in range(10):
                 try:
-                    ser_wrapper = ComPort(port, baud, timeout=0.3)
+                    ser_wrapper = ComPort(port, baud, timeout=0.3, parity=parity)
                     ser_wrapper.__enter__()
                     break
                 except Exception:
@@ -919,7 +929,10 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             _start_time = time.time()
             lines: list[str] = []
 
-            html = _render_panel(port, baud, lines, 0, 0, True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info, process_info)
+            html = _render_panel(port, baud, lines, 0, 0,
+                                 not os.path.exists(pause_path),
+                                 time.strftime("%Y-%m-%d %H:%M:%S"),
+                                 stages_info, process_info)
             try:
                 with open(html_path, "w", encoding="utf-8") as f:
                     f.write(html)
@@ -948,11 +961,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                         time.sleep(0.3)
                     if os.path.exists(stop_path):
                         break
-                    # Reopen COM4
+                    # Reopen COM4 (read latest panel baud/parity config)
                     ser_wrapper = None
+                    baud, parity = self._load_serial_config(data_dir, baud, parity)
                     for _retry2 in range(10):
                         try:
-                            ser_wrapper = ComPort(port, baud, timeout=0.3)
+                            ser_wrapper = ComPort(port, baud, timeout=0.3, parity=parity)
                             ser_wrapper.__enter__()
                             break
                         except Exception:
@@ -971,8 +985,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 if _sc:
                     lines.append(_sc)
 
-                # Process MODBUS command (atomic — response goes to modbus_response.json)
-                _exec_modbus(modbus_request_file, ser, modbus_response_file, tx_total, rx_total)
+                # Process MODBUS command (atomic — response via queue)
+                _exec_modbus(ser, tx_total, rx_total)
 
                 # Sample handoff — write first 3+ lines to shared list, signal parent
                 if not _sample_written:
@@ -1006,7 +1020,10 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 # Write HTML (throttled: max 3.3 fps)
                 now = time.time()
                 if now - last_write >= 0.3:
-                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0], True, time.strftime("%Y-%m-%d %H:%M:%S"), stages_info, process_info)
+                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0],
+                                         not os.path.exists(pause_path),
+                                         time.strftime("%Y-%m-%d %H:%M:%S"),
+                                         stages_info, process_info)
                     try:
                         with open(html_path, "w", encoding="utf-8") as f:
                             f.write(html)
@@ -1138,33 +1155,46 @@ def _exec_serial_write(send_file, ser, tx_total):
     except: return None
 
 
-def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
+def _exec_modbus(ser, tx_total, rx_total):
     import queue as _queue
     from firmforge.adapters.panel_service import get_modbus_request_queue, get_modbus_response_queue
     req_q = get_modbus_request_queue()
+    resp_q = get_modbus_response_queue()
     try:
         data = req_q.get(block=False)
     except _queue.Empty:
-        return None
+        return
+    if ser is None:
+        resp_q.put({"error": "serial closed — open COM first", "crc_ok": False,
+                    "regs": [], "rx_bytes": 0, "tx_bytes": 0})
+        return
     try:
-        import json, struct, time
+        import struct, time
+        from firmforge.tools.modbus_utils import modbus_encode_frame, modbus_crc
         mb = data.get("mb", {})
-        slave = mb.get("slave",1)&0xFF; fc = mb.get("fc",3)&0xFF
-        addr = mb.get("addr",0)&0xFFFF; count = mb.get("count",1)&0xFFFF
-        ds = mb.get("data","")
-        frame = struct.pack(">BBHH", slave, fc, addr, count if fc!=6 else 0)
-        if fc in (6,16) and ds:
+        slave = int(mb.get("slave", 1)); fc = int(mb.get("fc", 3))
+        addr = int(mb.get("addr", 0)); count = int(mb.get("count", 1))
+        ds = mb.get("data", "")
+        # Parameter validation
+        if not (1 <= slave <= 247):
+            resp_q.put({"error": f"slave {slave} out of range (1-247)", "crc_ok": False,
+                        "regs": [], "rx_bytes": 0, "tx_bytes": 0})
+            return
+        if not (0 <= addr <= 0xFFFF):
+            resp_q.put({"error": f"addr {addr} out of range (0-65535)", "crc_ok": False,
+                        "regs": [], "rx_bytes": 0, "tx_bytes": 0})
+            return
+        vs = []
+        if fc in (6, 16) and ds:
             vs = [int(v.strip()) for v in ds.split(",") if v.strip()]
-            if fc==6 and vs: frame += struct.pack(">H", vs[0])
-            elif fc==16 and vs: frame += struct.pack(">H",len(vs))+struct.pack(">B",len(vs)*2)+struct.pack(">"+"H"*len(vs),*vs)
-        from firmforge.tools.modbus_utils import modbus_crc
-        frame += struct.pack("<H", modbus_crc(frame))
+        frame = modbus_encode_frame(slave, fc, addr, count, vs)
         ser.write(frame); tx_total[0] += len(frame)
         time.sleep(0.05)  # wait for slave to receive + respond (~20ms)
         resp = b""
         try:
             resp = ser.read(256)
-        except: pass
+        except Exception:
+            resp = b""
         rx_total[0] += len(resp)
         rh = " ".join(f"{b:02X}" for b in resp) if resp else "(no response)"
         ok = False
@@ -1174,7 +1204,6 @@ def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
             if fc in (3, 4):
                 bc = resp[2]
                 regs = [resp[i] << 8 | resp[i + 1] for i in range(3, min(3 + bc, len(resp) - 2), 2)]
-        resp_q = get_modbus_response_queue()
         resp_q.put({"raw": rh if ok else rh + ' <span style="color:var(--warn)">CRC ERR</span>',
                     "crc_ok": ok, "regs": regs, "rx_bytes": len(resp), "tx_bytes": len(frame)})
         # Push counter update to SSE (modbus doesn't append to lines)
@@ -1184,8 +1213,10 @@ def _exec_modbus(modbus_file, ser, resp_file, tx_total, rx_total):
                 "new": [], "rx": rx_total[0], "tx": tx_total[0],
                 "ts": time.strftime("%Y-%m-%d %H:%M:%S")
             })
-        except: pass
-        return f'<span style="color:var(--tx-clr)">[TX MODBUS]</span> {rh}'
-    except: return None
+        except Exception:
+            pass
+    except Exception as e:
+        resp_q.put({"error": str(e), "crc_ok": False, "regs": [],
+                    "rx_bytes": 0, "tx_bytes": 0})
 
 

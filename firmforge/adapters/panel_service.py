@@ -73,8 +73,7 @@ def start_panel_httpd(root: str) -> int:
     stop_file = os.path.join(data_dir, "serial_live.html.stop")
     pause_file = os.path.join(data_dir, "serial_live.html.pause")
     serial_write_file = os.path.join(data_dir, "serial_write.json")
-    modbus_request_file = os.path.join(data_dir, "modbus_request.json")
-    modbus_response_file = os.path.join(data_dir, "modbus_response.json")
+    serial_config_file = os.path.join(data_dir, "serial_config.json")
 
     class _PanelHandler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
@@ -139,8 +138,26 @@ def start_panel_httpd(root: str) -> int:
                 self._json({"ok": True, "resumed": True})
 
             elif self.path == "/serial-send":
-                self._save_body(serial_write_file)
-                self._json({"ok": True})
+                ok = self._save_body(serial_write_file)
+                self._json({"ok": ok})
+
+            elif self.path == "/serial-config":
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length)
+                try:
+                    import json as _j
+                    cfg = _j.loads(body)
+                    baud = int(cfg.get("baud", 9600))
+                    parity = str(cfg.get("parity", "None"))
+                except Exception:
+                    self._json({"ok": False, "error": "invalid config"})
+                    return
+                try:
+                    with open(serial_config_file, "w") as f:
+                        _j.dump({"baud": baud, "parity": parity}, f)
+                    self._json({"ok": True})
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e)})
 
             elif self.path == "/modbus":
                 length = int(self.headers.get("Content-Length", "0"))
@@ -165,6 +182,9 @@ def start_panel_httpd(root: str) -> int:
                 except _queue.Empty:
                     error = "timeout — no response from slave"
                     rx_bytes = 0; tx_bytes = 0
+                    self._json({"ok": False, "raw": raw_hex, "error": error,
+                                "rx": rx_bytes, "tx": tx_bytes})
+                    return
                 self._json({"ok": True, "raw": raw_hex, "error": error,
                             "rx": rx_bytes, "tx": tx_bytes})
 
@@ -172,7 +192,21 @@ def start_panel_httpd(root: str) -> int:
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"BYE")
-                os._exit(0)
+                # Graceful panel shutdown: stop collector via .stop, then stop httpd.
+                # The host process (incl. MCP) stays alive.
+                try:
+                    with open(pause_file, "w") as f: f.write("x")
+                    with open(stop_file, "w") as f: f.write("x")
+                except Exception:
+                    pass
+                threading.Thread(target=self._quit, daemon=True).start()
+
+        def _quit(self):
+            time.sleep(0.5)
+            try:
+                _panel_httpd.shutdown()
+            except Exception:
+                pass
 
         def _json(self, data):
             import json as _j
@@ -186,8 +220,9 @@ def start_panel_httpd(root: str) -> int:
                 length = int(self.headers.get("Content-Length", "0"))
                 with open(path, "wb") as f:
                     f.write(self.rfile.read(length))
+                return True
             except Exception:
-                pass
+                return False
 
         def end_headers(self):
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")

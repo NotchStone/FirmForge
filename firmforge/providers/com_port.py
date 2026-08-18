@@ -41,25 +41,28 @@ class ComPort:
     """
 
     def __init__(self, port: str, baud: int, timeout: float = 1.0,
-                 dsrdtr: bool = True):
+                 dsrdtr: bool = True, parity: str = "None"):
         self._port = port
         self._baud = baud
         self._timeout = timeout
         self._dsrdtr = dsrdtr
+        self._parity = parity
         self._ser: Any = None
 
     def __enter__(self):
         # 1. Win32Serial — CH340-safe, STC-ISP compatible
         try:
             from firmforge.providers.win32serial import Win32Serial
-            self._ser = Win32Serial(self._port, self._baud, timeout=self._timeout)
+            self._ser = Win32Serial(self._port, self._baud, timeout=self._timeout,
+                                    parity=self._parity)
             self._ser.open()
             return self._ser
         except Exception:
             # 2. pySerial fallback for exotic hardware
             import serial as pyserial
             self._ser = pyserial.Serial(port=self._port, baudrate=self._baud,
-                                        timeout=self._timeout, dsrdtr=self._dsrdtr)
+                                        timeout=self._timeout, dsrdtr=self._dsrdtr,
+                                        parity=self._parity)
             return self._ser
 
     def __exit__(self, *args):
