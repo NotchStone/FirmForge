@@ -12,3 +12,9 @@ Traceback (most recent call last):
   File "C:\MyLab\MCU\firmforge\tools\serial_collector.py", line 20, in <module>
     baud = int(sys.argv[3])
 ValueError: invalid literal for int() with base 10: '--app'
+[14:05:42] EXIT: THREAD CRASH UnboundLocalError: cannot access local variable 'pause_path' where it is not associated with a value
+Traceback (most recent call last):
+  File "C:\MyLab\MCU\firmforge\core\pipeline_runner.py", line 934, in _collector_thread
+    not os.path.exists(pause_path),
+                       ^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'pause_path' where it is not associated with a value

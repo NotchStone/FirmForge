@@ -127,15 +127,19 @@ def start_panel_httpd(root: str) -> int:
 
             elif self.path == "/serial-open":
                 # Resume COM4
+                err = ""
                 try:
                     os.remove(pause_file)
-                except OSError:
-                    pass
+                except OSError as e:
+                    err = f"remove pause failed: {e}"
                 try:
                     os.remove(stop_file)
                 except OSError:
                     pass
-                self._json({"ok": True, "resumed": True})
+                if err:
+                    self._json({"ok": False, "error": err})
+                else:
+                    self._json({"ok": True, "resumed": True})
 
             elif self.path == "/serial-send":
                 ok = self._save_body(serial_write_file)
@@ -163,6 +167,11 @@ def start_panel_httpd(root: str) -> int:
                 length = int(self.headers.get("Content-Length", "0"))
                 body_bytes = self.rfile.read(length)
                 import json as _j, queue as _queue
+                # Serial closed (Close button) — respond immediately, no 5s timeout
+                if os.path.exists(pause_file):
+                    self._json({"ok": False, "raw": "", "error": "serial closed — open COM first",
+                                "rx": 0, "tx": 0})
+                    return
                 try:
                     data = _j.loads(body_bytes)
                 except Exception:
