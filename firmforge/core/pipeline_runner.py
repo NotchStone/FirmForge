@@ -1190,7 +1190,8 @@ def _exec_modbus(ser, tx_total, rx_total):
             return
         vs = []
         if fc in (6, 16) and ds:
-            vs = [int(v.strip()) for v in ds.split(",") if v.strip()]
+            import re as _re
+            vs = [int(v) for v in _re.split(r"[\s,，]+", ds.strip()) if v.strip()]
         frame = modbus_encode_frame(slave, fc, addr, count, vs)
         ser.write(frame); tx_total[0] += len(frame)
         time.sleep(0.05)  # wait for slave to receive + respond (~20ms)
