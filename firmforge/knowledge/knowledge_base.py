@@ -38,8 +38,9 @@ class KnowledgeBase:
             print(f"[{r.score:.4f}] {r.source}: {r.hit.get('name', '?')}")
     """
 
-    def __init__(self, knowledge_dir: Path | str = "./knowledge") -> None:
-        self._dir = Path(knowledge_dir)
+    def __init__(self, knowledge_dir: Path | str | None = None) -> None:
+        from firmforge.core.resources import knowledge_dir as _default_knowledge
+        self._dir = Path(knowledge_dir) if knowledge_dir else _default_knowledge()
         # Reference library caches
         self._ref_cache: dict[str, dict[str, Any]] = {}  # platform -> registers.json
         self._register_index: dict[str, dict[str, Any]] = {}  # reg_name -> register entry

@@ -54,10 +54,11 @@ class PipelineRunner:
 
     def __init__(
         self,
-        boards_dir: str | Path = "./boards",
+        boards_dir: str | Path | None = None,
         workspace: str | Path = ".",
     ) -> None:
-        self._boards_dir = Path(boards_dir)
+        from firmforge.core.resources import boards_dir as _default_boards
+        self._boards_dir = Path(boards_dir) if boards_dir else _default_boards()
         self._workspace = Path(workspace)
         self._ledger = ExperienceLedger(Path(workspace) / ".firmforge" / "ledger.jsonl")
         self._detector = BoardDetector(boards_dir=self._boards_dir)

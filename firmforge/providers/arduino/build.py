@@ -522,14 +522,14 @@ class ArduinoBuildProvider(BuildProvider):
         objcopy = self._toolchain.avr_objcopy
 
         # Arduino Core paths — search B区 packages first, then A区 vendor fallback.
-        # B区 = ~/.firmforge/packages/arduino/avr/<version>/
-        # A区 = vendor/arduino/ (dev fallback when packages not yet downloaded)
+        # B区 = ~/.firmforge/packages/arduino/avr/<version>/ (downloaded by ff setup)
+        # A区 = vendor/arduino/ (bundled fallback inside firmforge/data/vendor)
         # TODO: read version from vendor/manifests/core/arduino_avr_core.yaml
         #       when package_manager is introduced (planned with STM32 expansion).
+        from firmforge.core.resources import vendor_dir as _vendor_dir
         for core_base in [
             os.path.expanduser("~/.firmforge/packages/arduino/avr/1.8.6"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                         "vendor", "arduino"),
+            os.path.join(str(_vendor_dir()), "arduino"),
         ]:
             if os.path.exists(os.path.join(core_base, "cores", "arduino", "Arduino.h")):
                 break

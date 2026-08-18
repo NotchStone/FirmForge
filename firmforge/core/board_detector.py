@@ -73,10 +73,11 @@ class BoardDetector:
 
     def __init__(
         self,
-        boards_dir: Path | str = "./boards",
+        boards_dir: Path | str | None = None,
         known_devices: dict | None = None,
     ) -> None:
-        self._boards_dir = Path(boards_dir)
+        from firmforge.core.resources import boards_dir as _default_boards
+        self._boards_dir = Path(boards_dir) if boards_dir else _default_boards()
         self._known_devices = known_devices or _KNOWN_DEVICES
 
     def detect(
