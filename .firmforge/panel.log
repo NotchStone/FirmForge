@@ -1,4 +1,0 @@
-PANEL_START board=arduino_328p
-INFO:firmforge.panel:Panel HTTP server started on port 9878
-INFO:firmforge.core.pipeline_runner:S5 Verify: 0 sample lines
-VERIFY: True []

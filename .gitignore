@@ -36,3 +36,6 @@ dist/
 docs/datasheets/*.pdf
 htmlcov/
 Thumbs.db
+
+# Serial panel runtime artifacts (regenerated on each run)
+.firmforge/
