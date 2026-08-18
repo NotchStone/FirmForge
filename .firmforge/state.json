@@ -2,14 +2,14 @@
   "stages": {
     "detect": {
       "status": "done",
-      "board_id": "arduino_mega"
+      "board_id": "arduino_328p"
     },
     "review": {
       "status": "done"
     },
     "build": {
       "status": "done",
-      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_mega\\hello_counter\\firmware.hex"
+      "hex": "C:\\Users\\radar\\.firmforge\\cache\\build\\arduino_328p\\modbus_ino_test\\firmware.hex"
     },
     "flash": {
       "status": "done"
@@ -19,9 +19,9 @@
     }
   },
   "fingerprints": {
-    "board_id": "arduino_mega",
-    "port": "COM5",
-    "source": "519e526faa25d50f",
-    "hex": "298517d4ed059b90"
+    "board_id": "arduino_328p",
+    "port": "COM4",
+    "source": "f0c2950358eb6ce3",
+    "hex": "d256ff1db6d327f4"
   }
 }

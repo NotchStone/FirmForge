@@ -146,7 +146,7 @@ function doModbusSend(){
   var data=document.getElementById("modbus-data").value;
   var tsStr=tsNow();
   var pdu=[slave,fc,(addr>>8)&0xFF,addr&0xFF];
-  if(fc==6){pdu.push((count>>8)&0xFF,count&0xFF);}
+  if(fc==6){var v=parseInt(data)||0;pdu.push((v>>8)&0xFF,v&0xFF);}
   else if(fc==16){
     var vals=data.split(",").map(function(x){return parseInt(x.trim())||0;});
     pdu.push((count>>8)&0xFF,count&0xFF,(vals.length*2>>8)&0xFF,vals.length*2&0xFF);
