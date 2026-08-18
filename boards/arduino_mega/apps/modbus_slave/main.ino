@@ -14,6 +14,7 @@ static uint16_t g_regs[MB_REGS];
 static uint16_t g_inputs[MB_REGS];   /* FC04 input registers */
 static uint8_t  g_rx[MB_BUF_SZ];
 static uint16_t g_idx;
+static unsigned long g_last_rx;   /* ms of last byte received (frame gap) */
 
 void setup() {
     Serial.begin(9600);
@@ -41,7 +42,7 @@ static void handle_frame(uint16_t len) {
     if (len < 4) return;
     if (g_rx[0] != MB_SLAVE_ID) return;
 
-    uint16_t rx_crc = g_rx[len - 1] | ((uint16_t)g_rx[len - 2] << 8);
+    uint16_t rx_crc = ((uint16_t)g_rx[len - 1] << 8) | g_rx[len - 2];  // CRC is low-byte-first
     if (modbus_crc(g_rx, len - 2) != rx_crc) return;
 
     uint8_t fc = g_rx[1];
@@ -151,22 +152,14 @@ static void handle_frame(uint16_t len) {
 }
 
 void loop() {
-    /* Read RX directly from USART hardware register — bypass Arduino ISR */
+    /* Frame-gap detection: process when no byte arrives for 5ms.
+     * Bytes may arrive in bursts over USB — never drop a partial frame. */
     while ((UCSR0A & (1 << RXC0)) && g_idx < MB_BUF_SZ) {
         g_rx[g_idx++] = UDR0;
+        g_last_rx = millis();
     }
-    /* If data received, wait for frame gap */
-    if (g_idx > 0) {
-        delay(8);  /* 3.5 chars @ 9600 = ~4ms, use 8ms for safety */
-        uint16_t after = g_idx;
-        while ((UCSR0A & (1 << RXC0)) && after < MB_BUF_SZ) {
-            g_rx[after++] = UDR0;
-        }
-        if (after > g_idx) {
-            g_idx = after;
-        } else {
-            handle_frame(g_idx);
-            g_idx = 0;
-        }
+    if (g_idx > 0 && (millis() - g_last_rx) > 5) {
+        handle_frame(g_idx);
+        g_idx = 0;
     }
 }

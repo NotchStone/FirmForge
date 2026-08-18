@@ -929,6 +929,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             last_write = time.time()
             _start_time = time.time()
             lines: list[str] = []
+            pause_path = os.path.join(data_dir, "serial_live.html.pause")
 
             html = _render_panel(port, baud, lines, 0, 0,
                                  not os.path.exists(pause_path),
@@ -938,8 +939,6 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     f.write(html)
             except Exception:
                 pass
-
-            pause_path = os.path.join(data_dir, "serial_live.html.pause")
 
             while True:
                 # Check .stop (full exit — Stop button or tab close)

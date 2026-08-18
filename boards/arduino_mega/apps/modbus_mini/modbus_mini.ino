@@ -8,6 +8,7 @@ static uint16_t g_regs[MB_REGS];
 static uint16_t g_inputs[MB_REGS];
 static uint8_t  g_rx[MB_BUF_SZ];
 static uint16_t g_idx;
+static unsigned long g_last_rx;   /* ms of last byte received (frame gap) */
 
 void setup() {
     Serial.begin(9600);
@@ -40,7 +41,7 @@ static void send_exception(uint8_t fc, uint8_t code) {
 static void handle_frame(uint16_t len) {
     if (len < 8) return;
     if (g_rx[0] != 1) return;
-    uint16_t rx_crc = g_rx[len - 1] | ((uint16_t)g_rx[len - 2] << 8);
+    uint16_t rx_crc = ((uint16_t)g_rx[len - 1] << 8) | g_rx[len - 2];  // CRC is low-byte-first
     if (modbus_crc(g_rx, len - 2) != rx_crc) return;
 
     uint8_t fc = g_rx[1];
@@ -105,12 +106,13 @@ static void handle_frame(uint16_t len) {
 }
 
 void loop() {
-    while (Serial.available() > 0 && g_idx < MB_BUF_SZ)
+    /* Frame-gap detection: process when no byte arrives for 5ms.
+     * Bytes may arrive in bursts over USB — never drop a partial frame. */
+    while (Serial.available() > 0 && g_idx < MB_BUF_SZ) {
         g_rx[g_idx++] = Serial.read();
-    if (g_idx > 0) {
-        delay(8);  /* frame gap: 3.5 chars @ 9600 = ~4ms, 8ms safe */
-        while (Serial.available() > 0 && g_idx < MB_BUF_SZ)
-            g_rx[g_idx++] = Serial.read();
+        g_last_rx = millis();
+    }
+    if (g_idx > 0 && (millis() - g_last_rx) > 5) {
         handle_frame(g_idx);
         g_idx = 0;
     }
