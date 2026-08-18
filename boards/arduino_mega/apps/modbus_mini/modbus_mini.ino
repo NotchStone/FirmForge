@@ -14,9 +14,10 @@ void setup() {
     Serial.begin(9600);
     Serial.print("OK\r\n");
     for (uint16_t i = 0; i < MB_REGS; i++) {
-        g_regs[i] = 1000 + i;
+        g_regs[i] = 1000 + i;      /* reg[0]=1000, overwritten below */
         g_inputs[i] = 2000 + i;
     }
+    g_regs[0] = 0x1234;            /* fixed test flag — FC03 reads it back */
     g_idx = 0;
 }
 
