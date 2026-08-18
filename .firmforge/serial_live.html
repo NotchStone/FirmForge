@@ -54,7 +54,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <button id="connbtn" onclick="doToggleConn()">Close</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
-  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:2065ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:0ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:0ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:0ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S5:0ms</span></span>
+  <span id="stages"><span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S1:2091ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S2:0ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S3:0ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S4:0ms</span>  <span style="color:#4ade80">&#9989;</span><span style="color:var(--dim)">S5:0ms</span></span>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim);gap:12px">
   <span id="process">S3:build&times;1  S4:flash@115200(retry=0)</span>
@@ -67,17 +67,17 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
 <div class="serial-out" id="serial-out"></div><!--/output-->
 <div class="modbus" id="modbus-panel">
   <div class="mbbar">
-    Slave <input id="modbus-slave" value="1" style="width:40px">
+    Slave <input id="modbus-slave" value="1" style="width:56px">
     FC <select id="modbus-func" onchange="doFcChange()" style="width:165px">
       <option value="3">03 Read Holding Reg</option><option value="4">04 Read Input Reg</option>
       <option value="6">06 Write Single Reg</option><option value="16">16 Write Multiple Reg</option></select>
-    Addr <input id="modbus-addr" value="0" style="width:50px">
-    <span id="modbus-count-wrap">Count <input id="modbus-count" value="1" style="width:40px"></span>
-    <span id="modbus-data-single-row" style="display:none">Data <input id="modbus-data-single" value="0" style="width:70px"></span>
+    Addr <input id="modbus-addr" value="0" style="width:56px">
+    <span id="modbus-count-wrap">Count <input id="modbus-count" value="1" style="width:56px"></span>
+    <span id="modbus-data-single-row" style="display:none">Data <input id="modbus-data-single" value="0" style="width:80px"></span>
     <button onclick="doModbusSend()" style="margin-left:auto">Send</button>
   </div>
   <div class="mbbar" id="modbus-data-multi-row" style="display:none;border-bottom:none">
-    Data <input id="modbus-data-multi" value="0" style="flex:1;min-width:200px" placeholder="val1,val2,...（逗号分隔多值）">
+    Data <input id="modbus-data-multi" value="0" style="flex:1;min-width:200px" placeholder="间隔符号：空格 / 英文逗号 / 中文逗号均可。例如：100 200 300">
   </div>
   <div class="mblog" id="modbus-log"></div>
 </div>
@@ -151,7 +151,7 @@ function doModbusSend(){
   var pdu=[slave,fc,(addr>>8)&0xFF,addr&0xFF];
   if(fc==6){var v=parseInt(data)||0;pdu.push((v>>8)&0xFF,v&0xFF);}
   else if(fc==16){
-    var vals=data.split(",").map(function(x){return parseInt(x.trim())||0;});
+    var vals=data.trim().split(/[\s,，]+/).map(function(x){return parseInt(x)||0;});
     pdu.push((count>>8)&0xFF,count&0xFF,(vals.length*2>>8)&0xFF,vals.length*2&0xFF);
     for(var k=0;k<vals.length;k++){pdu.push((vals[k]>>8)&0xFF,vals[k]&0xFF);}
   }else{pdu.push((count>>8)&0xFF,count&0xFF);}
