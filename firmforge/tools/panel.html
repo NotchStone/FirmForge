@@ -73,10 +73,11 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
       <option value="6">06 Write Single Reg</option><option value="16">16 Write Multiple Reg</option></select>
     Addr <input id="modbus-addr" value="0" style="width:50px">
     <span id="modbus-count-wrap">Count <input id="modbus-count" value="1" style="width:40px"></span>
+    <span id="modbus-data-single-row" style="display:none">Data <input id="modbus-data-single" value="0" style="width:70px"></span>
     <button onclick="doModbusSend()" style="margin-left:auto">Send</button>
   </div>
-  <div class="mbbar" id="modbus-data-row" style="display:none;border-bottom:none">
-    Data <input id="modbus-data" value="0" style="flex:1;min-width:200px" placeholder="val1,val2,...（FC06 单值 / FC16 逗号分隔多值）">
+  <div class="mbbar" id="modbus-data-multi-row" style="display:none;border-bottom:none">
+    Data <input id="modbus-data-multi" value="0" style="flex:1;min-width:200px" placeholder="val1,val2,...（逗号分隔多值）">
   </div>
   <div class="mblog" id="modbus-log"></div>
 </div>
@@ -145,7 +146,7 @@ function doModbusSend(){
   var fc=parseInt(document.getElementById("modbus-func").value)||3;
   var addr=parseInt(document.getElementById("modbus-addr").value)||0;
   var count=parseInt(document.getElementById("modbus-count").value)||1;
-  var data=document.getElementById("modbus-data").value;
+  var data=document.getElementById(fc==16?"modbus-data-multi":"modbus-data-single").value;
   var tsStr=tsNow();
   var pdu=[slave,fc,(addr>>8)&0xFF,addr&0xFF];
   if(fc==6){var v=parseInt(data)||0;pdu.push((v>>8)&0xFF,v&0xFF);}
@@ -227,7 +228,8 @@ function intval(id){return parseInt(document.getElementById(id).innerHTML)||0;}
 function doFcChange(){
   var fc=parseInt(document.getElementById("modbus-func").value);
   document.getElementById("modbus-count-wrap").style.display=(fc==6)?"none":"";
-  document.getElementById("modbus-data-row").style.display=(fc==6||fc==16)?"flex":"none";
+  document.getElementById("modbus-data-single-row").style.display=(fc==6)?"inline":"none";
+  document.getElementById("modbus-data-multi-row").style.display=(fc==16)?"flex":"none";
 }
 var es=new EventSource("/stream");
 es.onmessage=function(e){
