@@ -29,6 +29,7 @@
 .idea/
 .pytest_cache/
 .vscode/
+.venv/
 __pycache__/
 build/
 config/llm.yaml
