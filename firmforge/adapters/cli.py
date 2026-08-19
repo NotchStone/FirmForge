@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from firmforge.core.board_detector import BoardDetector
+from firmforge.core.resources import boards_dir as _bdir
 
 logger = logging.getLogger(__name__)
 
