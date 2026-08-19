@@ -271,6 +271,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_flash.add_argument("board", nargs="?", help="Board ID")
     p_flash.add_argument("--firmware", "-f", help="Path to firmware.hex")
 
+    # ff setup
+    p_setup = subparsers.add_parser(
+        "setup", help="Download & install toolchains (avr-gcc, avrdude) + Arduino Core",
+    )
+
     return parser
 
 
@@ -292,6 +297,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_build(args)
     elif args.command == "flash":
         return cmd_flash(args)
+    elif args.command == "setup":
+        from firmforge.providers.arduino.setup import setup_all
+        return setup_all()
     else:
         parser.print_help()
         return 0

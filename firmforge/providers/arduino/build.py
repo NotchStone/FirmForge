@@ -96,6 +96,15 @@ class ArduinoBuildProvider(BuildProvider):
                     )]
                     return result
 
+                if not self._toolchain.avr_gcc:
+                    result.stderr = ("AVR GCC not found. Run `ff setup` to install "
+                                     "toolchains (avr-gcc, avrdude, Arduino Core).")
+                    result.errors = [BuildDiagnostic(
+                        severity="error", file=str(src),
+                        message=result.stderr, raw=result.stderr,
+                    )]
+                    return result
+
                 result.stdout, result.stderr, rc = self._compile_sources(
                     [str(s) for s in sources], str(firmware_elf), str(firmware_hex)
                 )

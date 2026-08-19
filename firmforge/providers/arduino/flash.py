@@ -120,6 +120,11 @@ class ArduinoFlashProvider(FlashProvider):
     def flash(self, firmware_path: str) -> FlashResult:
         if not os.path.exists(firmware_path):
             return FlashResult(success=False, stderr=f"Firmware not found: {firmware_path}")
+        if not self._toolchain.avrdude:
+            return FlashResult(
+                success=False,
+                stderr="AVRDUDE not found. Run `ff setup` to install toolchains.",
+            )
 
         port = self.detect_port()
         if not port:

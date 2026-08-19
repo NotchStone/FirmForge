@@ -1,15 +1,17 @@
-# AVR GCC 编译器工具链
+# AVR GCC 编译器工具链 — ZakKemble builds (v14.1.0-1)
+# avr-gcc 14.1.0 + binutils 2.42 + libc 2.2.0 + AVRDUDE 7.2 (win/mac bundles)
+# Mirror: https://mirrors.tuna.tsinghua.edu.cn/github-release/ZakKemble/avr-gcc-build/v14.1.0-1/
 tool: avr-gcc
-version: "7.3.0-atmel3.6.1-arduino5"
+version: "14.1.0"
 platforms:
   windows:
-    url: "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-pc-windows.zip"
-    sha256: ""
-  macos:
-    url: "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-apple-darwin14.tar.bz2"
+    url: "https://github.com/ZakKemble/avr-gcc-build/releases/download/v14.1.0-1/avr-gcc-14.1.0-x64-windows.zip"
     sha256: ""
   linux-x86_64:
-    url: "https://downloads.arduino.cc/tools/avr-gcc-7.3.0-atmel3.6.1-arduino5-x86_64-pc-linux-gnu.tar.bz2"
+    url: "https://github.com/ZakKemble/avr-gcc-build/releases/download/v14.1.0-1/avr-gcc-14.1.0-x64-linux.tar.bz2"
+    sha256: ""
+  macos:
+    url: ""  # not provided by ZakKemble — use Homebrew: brew install avr-gcc
     sha256: ""
 
 install:

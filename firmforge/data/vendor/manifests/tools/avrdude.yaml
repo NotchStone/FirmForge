@@ -1,18 +1,23 @@
-# AVRDUDE 烧录工具
+# AVRDUDE 烧录工具 — extracted from the ZakKemble avr-gcc bundle (v14.1.0-1, AVRDUDE 7.2)
+# On Windows/macOS avrdude ships inside the avr-gcc zip; on Linux use the system
+# package: sudo apt install avrdude  (or brew install avrdude on macOS).
 tool: avrdude
-version: "6.3.0-arduino17"
+version: "7.2"
 platforms:
   windows:
-    url: "https://downloads.arduino.cc/tools/avrdude-6.3.0-arduino17-x86_64-pc-windows.zip"
-    sha256: ""
-  macos:
-    url: "https://downloads.arduino.cc/tools/avrdude-6.3.0-arduino17-x86_64-apple-darwin14.tar.bz2"
+    url: "https://github.com/ZakKemble/avr-gcc-build/releases/download/v14.1.0-1/avr-gcc-14.1.0-x64-windows.zip"
     sha256: ""
   linux-x86_64:
-    url: "https://downloads.arduino.cc/tools/avrdude-6.3.0-arduino17-x86_64-pc-linux-gnu.tar.bz2"
+    url: ""  # system package: sudo apt install avrdude
+    sha256: ""
+  macos:
+    url: "https://github.com/ZakKemble/avr-gcc-build/releases/download/v14.1.0-1/avr-gcc-14.1.0-x64-windows.zip"
     sha256: ""
 
 install:
   root: "~/.firmforge/toolchains/avrdude/"
-  bin: "avrdude"
-  conf: "avrdude.conf"
+  bin: "bin/avrdude"
+  conf: "bin/avrdude.conf"
+  # Avrdude is bundled inside the avr-gcc archive — copy bin/avrdude* after
+  # avr-gcc is installed instead of downloading the archive again.
+  from_gcc: true
