@@ -1,0 +1,21 @@
+# Cppcheck — 静态分析（S2 Review Phase 1）
+# Windows: official MSI (extracted via msiexec administrative install)
+# Linux/macOS: use system package (apt install cppcheck / brew install cppcheck)
+tool: cppcheck
+version: "2.21.0"
+platforms:
+  windows:
+    url: "https://github.com/cppcheck-opensource/cppcheck/releases/download/2.21.0/cppcheck-2.21.0-x64-Setup.msi"
+    sha256: ""
+  linux-x86_64:
+    url: ""  # sudo apt install cppcheck
+    sha256: ""
+  macos:
+    url: ""  # brew install cppcheck
+    sha256: ""
+
+install:
+  root: "~/.firmforge/toolchains/cppcheck/"
+  bin: "cppcheck.exe"
+  # Windows MSI — extract via msiexec administrative install instead of unzip
+  msi_extract: true
