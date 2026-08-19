@@ -18,6 +18,7 @@ import logging
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -146,15 +147,50 @@ def install_tool(manifest: Path) -> str:
                        "run `ff setup` after avr-gcc, or install avrdude via system package")
         return ""
     if not entry or not entry.get("url"):
-        logger.warning("%s: no download URL for platform %s", m.get("tool"), plat)
+        logger.warning("%s: no download URL for platform %s — install via system package "
+                       "(apt/brew)", m.get("tool"), plat)
         return ""
     with tempfile.TemporaryDirectory() as td:
         archive = _download(entry["url"], Path(td))
-        _extract(archive, root)
+        if m.get("install", {}).get("msi_extract"):
+            _extract_msi(archive, root)
+        else:
+            _extract(archive, root)
     if bin_rel and not _bin_exists(root, bin_rel):
         logger.warning("%s: installed but %s not found (structure may differ)",
                        m.get("tool"), bin_rel)
     return str(root)
+
+
+def _extract_msi(msi: Path, dest: Path) -> None:
+    """Extract a Windows MSI via msiexec administrative install into dest."""
+    if os.name != "nt":
+        raise RuntimeError("MSI extraction is Windows-only")
+    with tempfile.TemporaryDirectory() as td:
+        target = Path(td) / "out"
+        target.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run(
+            ["msiexec", "/a", str(msi), "/qn", f"TARGETDIR={target}"],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"msiexec failed: {r.returncode} {r.stderr}")
+        # Files land under <TARGETDIR>/PFiles/cppcheck*/ — locate cppcheck.exe and copy
+        for p in target.rglob("cppcheck.exe"):
+            src_root = p.parent
+            dest.mkdir(parents=True, exist_ok=True)
+            for f in src_root.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, dest / f.name)
+            return
+        # fallback: copy the whole extracted tree
+        dest.mkdir(parents=True, exist_ok=True)
+        for p in target.rglob("*"):
+            if p.is_file():
+                rel = p.relative_to(target)
+                dst = dest / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, dst)
 
 
 def install_core(manifest: Path) -> str:
