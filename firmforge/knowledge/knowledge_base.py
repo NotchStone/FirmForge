@@ -100,6 +100,9 @@ class KnowledgeBase:
                 pin_data = json.load(f)
             board_id = pin_data.get("board", pin_file.stem)
             self._pin_map_cache[board_id] = pin_data
+            # Chip alias key: pins.json board label may differ from board_id
+            # (e.g. arduino_uno vs arduino_328p) — allow chip-level lookup.
+            self._pin_map_cache.setdefault(chip.lower(), pin_data)
 
             # Build pin index: arduino_pin -> pin entry
             # pins may be a list of entry dicts OR a dict keyed by pin name

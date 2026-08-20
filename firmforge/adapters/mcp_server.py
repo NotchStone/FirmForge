@@ -201,6 +201,8 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
             return {"error": "No board detected or specified. Run ff_detect first."}
 
         config = BoardDetector().resolve_board(board) or {}
+        if not config:
+            return {"error": f"Board '{board}' not found in board definitions."}
         mcu = config.get("mcu", {})
         chip = mcu.get("chip", "atmega328p").lower()
 
@@ -217,7 +219,7 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
             }
         reg_list = list(registers.values())[:20] if not topic_filter else list(registers.values())
 
-        pins = knowledge_base.get_pin_map(board) if board else {}
+        pins = knowledge_base.get_pin_map(board) or knowledge_base.get_pin_map(chip.lower())
 
         return {
             "board": board,
