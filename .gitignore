@@ -40,3 +40,6 @@ Thumbs.db
 
 # Serial panel runtime artifacts (regenerated on each run)
 .firmforge/
+
+# WorkBuddy private project data
+.workbuddy/
