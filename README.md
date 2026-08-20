@@ -1,69 +1,68 @@
 # FirmForge
 
-**Multi-MCU firmware verification toolchain** — Review → Build → Flash → Verify on real hardware.
+FirmForge is an MCP-based firmware verification toolchain for MCU development with AI coding agents. It provides a five-stage hardware pipeline — Detect, Review, Build, Flash, Verify — and exposes the stages to agents as MCP tools (`ff_detect`, `ff_context`, `ff_build`, `ff_run`, `ff_flash`, `ff_monitor`).
 
-FirmForge is the verification half of an AI-assisted MCU development workflow: an AI coding agent writes the firmware, FirmForge compiles it against a real toolchain, flashes it to the board, and verifies the serial output. It does **not** generate code — it is the trustworthy backstop between "the agent said it works" and "the hardware actually works".
+The toolchain compiles firmware with a real compiler (avr-gcc / ArduinoCore-avr), programs the target with avrdude, and verifies the result via serial readback. Code generation is out of scope.
 
-```
-Detect → Review → Build → Flash → Verify
-```
+## Pipeline
 
-| Stage | What it does | Blocks on failure? |
+| Stage | Description | Failure handling |
 |:--|:--|:--|
-| S1 Detect | Identify board via avrdude chip signature probe (USB VID/PID + workspace inference as fallback) | Yes |
-| S2 Review | Static scan: Cppcheck + register/bitfield reference check + confidence scoring | No (warning) |
-| S3 Build | avr-gcc compile (bare-register C) or Arduino API (ArduinoCore-avr), cache-accelerated | Yes |
-| S4 Flash | avrdude programming (Mega uses `-D` skip-chip-erase) with bootloader reset | Yes |
-| S5 Verify | Serial readback, expected-pattern match, live browser panel | No |
+| S1 Detect | Board identification via avrdude chip-signature probe; USB VID/PID and workspace inference as fallbacks | Blocking |
+| S2 Review | Static analysis: cppcheck, register/bitfield validation against the chip knowledge base, confidence scoring | Non-blocking |
+| S3 Build | Compile to firmware.hex: bare-register C (avr-gcc, `-std=c11`) or Arduino API (ArduinoCore-avr); SHA256-fingerprint caching | Blocking |
+| S4 Flash | avrdude programming (ATmega2560 uses `-D` skip-chip-erase) with bootloader reset | Blocking |
+| S5 Verify | Serial readback with pattern matching; live browser panel | Non-blocking |
 
-## Features
+## Supported Targets
 
-- **Dual compile routes**: bare-register C (`avr-gcc -std=c11`) and Arduino API (`.ino`/`#include <Arduino.h>` with bundled ArduinoCore-avr) — auto-routed by source content
-- **Chip knowledge base**: ATmega2560 (202 registers incl. GCC aliases), ATmega328P (91 registers); register hallucination check before compile
-- **Incremental pipeline**: SHA256 fingerprints of source/hex/port/board drive stage skipping (cold core build ~55s → warm ~3s)
-- **Live serial panel**: browser-based Serial + Modbus RTU (FC03/04/06/16) debugging with frame decode
-- **MCP server**: expose `ff_detect / ff_context / ff_build / ff_run / ff_flash / ff_monitor` to AI agents (CodeBuddy, Cursor, Claude Desktop, ...)
-- **Toolchain auto-install**: `ff setup` downloads avr-gcc/avrdude manifests to `~/.firmforge/toolchains`
+| Board | MCU | Notes |
+|:--|:--|:--|
+| `arduino_mega` | ATmega2560 | 202 registers in knowledge base (incl. GCC aliases) |
+| `arduino_328p` | ATmega328P (UNO/Nano) | 91 registers in knowledge base |
 
-## Install
+Custom boards are supported via `--boards-dir`.
 
-**Option A — pip install from GitHub** (recommended):
+## Installation
+
+Requirements: Python ≥ 3.10. Hardware is required only for the Flash and Verify stages.
 
 ```bash
 pip install git+https://github.com/NotchStone/firmforge.git
-pip install "firmforge[mcp] @ git+https://github.com/NotchStone/firmforge.git"   # with MCP support
-ff setup    # download toolchains (avr-gcc, avrdude, cppcheck, Arduino Core) on first use
+ff setup
 ```
 
-**Option B — wheel from GitHub Releases** (stable versions):
+`ff setup` downloads and installs avr-gcc, avrdude, cppcheck, and ArduinoCore-avr to `~/.firmforge/`. Re-running is idempotent.
+
+For MCP support (agent integration):
 
 ```bash
-pip install https://github.com/NotchStone/firmforge/releases/download/v0.2.0/firmforge-0.2.0-py3-none-any.whl
+pip install "firmforge[mcp] @ git+https://github.com/NotchStone/firmforge.git"
 ```
 
-> Requires Python ≥ 3.10. Windows / macOS / Linux. Hardware needed only for Flash/Verify stages.
->
-> 🌏 **China mirror**: accessing GitHub is slow/unstable? Use the Gitee mirror — see [README_gitee.md](README_gitee.md) for Gitee install instructions.
+Stable wheels are attached to [GitHub Releases](https://github.com/NotchStone/firmforge/releases).
 
-## Quick Start
+A China mirror is available on Gitee: see [README_gitee.md](README_gitee.md) (中文).
+
+## Usage
 
 ```bash
-# 1. Detect connected board
+# Detect connected board
 ff detect
 
-# 2. Compile only (CI-safe, no hardware)
+# Review + compile only (no hardware required)
 ff build arduino_mega --app path/to/source
 
-# 3. Full pipeline on hardware
+# Full pipeline on hardware
 ff run arduino_mega --app path/to/source --expected "Hello World"
 
-# 4. Flash a pre-built hex
+# Flash a pre-built hex
 ff flash arduino_mega --firmware firmware.hex
 ```
 
-Supported boards (bundled definitions): `arduino_mega` (ATmega2560), `arduino_328p` (UNO/Nano, ATmega328P). Bring your own board via `--boards-dir`.
+## MCP Server
 
-## MCP / AI Agent Integration
+Register the server with your agent (CodeBuddy, Cursor, Claude Desktop, ...):
 
 ```json
 {
@@ -77,7 +76,7 @@ Supported boards (bundled definitions): `arduino_mega` (ATmega2560), `arduino_32
 }
 ```
 
-Agent workflow: `ff_context` (read registers/pins before writing code) → write firmware → `ff_run` (compile+flash+verify). Works from any directory — all bundled data lives inside the package.
+Agent workflow: query `ff_context` for register/pin references before writing firmware, then `ff_run` to compile, flash, and verify. Bundled data (board definitions, chip knowledge, toolchain manifests) is resolved from inside the package; the server runs from any working directory.
 
 ## Development
 
