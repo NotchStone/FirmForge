@@ -334,14 +334,17 @@ firmforge/knowledge/
 - 工作区推断（source code 寄存器分析——零硬件依赖）
 - 多板同时连接时独立区分
 
-### 6.3 CH340 全版本驱动兼容
+### 6.3 串口驱动兼容（CH340 全版本）
 
-| 驱动版本 | 策略 |
-|----------|------|
-| 3.5 | pyserial fast path |
-| 3.9 / 4.0 | Win32Serial ctypes fallback，toggle 自愈 |
+**策略：Win32Serial 无条件优先，pySerial 兜底**（不按驱动版本分路径，按打开结果选择）。
 
-`ComPort` 上下文管理器（`providers/com_port.py`）自动选择。
+| 场景 | 策略 |
+|------|------|
+| 常规（Win32Serial 可用） | Win32Serial（Win32 API：CreateFile/SetCommState/ReadFile，模仿 STC-ISP 行为） |
+| Win32Serial 打开失败 / 非 Windows 平台 | pySerial fallback |
+| CH340 驱动锁死（PermissionError 31 等） | `com_port_clean_close`：1200→9600 baud toggle 自愈 |
+
+实现：`ComPort` 上下文管理器（`providers/com_port.py`）——先尝试 Win32Serial（`providers/win32serial.py`），异常时降级 pyserial；`com_port_clean_close()` 通过 Win32 baud toggle 重置 CH340 驱动状态。
 
 ### 6.4 指纹驱动增量管道
 
