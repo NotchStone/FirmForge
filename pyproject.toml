@@ -27,8 +27,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/firmforge/firmforge"
-Repository = "https://github.com/firmforge/firmforge"
-Issues = "https://github.com/firmforge/firmforge/issues"
+Repository = "https://github.com/NotchStone/firmforge"
+Issues = "https://github.com/NotchStone/firmforge/issues"
 
 [project.scripts]
 ff = "firmforge.adapters.cli:main"
