@@ -1,5 +1,7 @@
 # FirmForge
 
+> **English** · [中文（README_CN.md）](README_CN.md)
+
 FirmForge is an MCP-based firmware verification toolchain for MCU development with AI coding agents. It provides a five-stage hardware pipeline — Detect, Review, Build, Flash, Verify — and exposes the stages to agents as MCP tools (`ff_detect`, `ff_context`, `ff_build`, `ff_run`, `ff_flash`, `ff_monitor`).
 
 The toolchain compiles firmware with a real compiler (avr-gcc / ArduinoCore-avr), programs the target with avrdude, and verifies the result via serial readback. Code generation is out of scope.
