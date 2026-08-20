@@ -3,13 +3,19 @@
 5-Stage Pipeline commands:
   ff detect       USB scan + board identification (5-Stage S1: Detect)
   ff detect       Scan USB for connected MCU boards (MCP: ff_detect)
-  ff verify <board> --app <source_dir>  Verify, compile, flash and test MCU code
-  ff flash <board> Flash-only utility
+  ff run <board> --app <dir>     Review → Build → Flash → Verify pipeline
+  ff build <board> --app <dir>   Review + compile only
+  ff flash <board> --firmware <hex>  Flash-only utility
+  ff context [board] [--topic]   Chip knowledge reference (registers/pins/baud)
+  ff setup                        Install toolchains
+
+Machine-readable output: pass --json to any command (for agent/plugin integration).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -20,12 +26,43 @@ from firmforge.core.resources import boards_dir as _bdir
 logger = logging.getLogger(__name__)
 
 
+def _json_out(obj: dict, exit_code: int = 0) -> int:
+    """Print obj as JSON and return exit code (machine-readable output)."""
+    print(json.dumps(obj, ensure_ascii=False, default=str, indent=2))
+    return exit_code
+
+
+def _detect_payload(detector: BoardDetector, result, args) -> dict:
+    """Structured detect result (shared by json mode)."""
+    board_config = None
+    if result.board_id:
+        board_config = detector.resolve_board(result.board_id) or None
+    return {
+        "board_id": result.board_id,
+        "boards": result.boards,
+        "detected": bool(result.board_id),
+        "candidates": [
+            {
+                "board_id": c.board_id,
+                "confidence": c.confidence,
+                "source": c.source,
+                "details": c.details,
+            }
+            for c in result.candidates
+        ],
+        "board_config": board_config,
+    }
+
+
 def cmd_detect(args: argparse.Namespace) -> int:
     """ff detect: USB scan + board identification."""
-    print("FirmForge init: scanning for connected boards...")
-
     detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
     result = detector.detect(user_text=args.intent or "")
+
+    if getattr(args, "json", False):
+        return _json_out(_detect_payload(detector, result, args))
+
+    print("FirmForge init: scanning for connected boards...")
 
     # Multiple boards detected — list all, let caller choose
     if not result.board_id and len(result.boards) > 1:
@@ -89,10 +126,30 @@ def cmd_detect(args: argparse.Namespace) -> int:
     return 1
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    """ff verify: Review → Build → Flash → Test pipeline.
+def _pipeline_payload(result) -> dict:
+    """Serialize PipelineResult to a plain dict (json mode)."""
+    return {
+        "overall_success": result.overall_success,
+        "board": result.board,
+        "total_elapsed_ms": result.total_elapsed_ms,
+        "stages": [
+            {
+                "stage": s.stage,
+                "name": s.name,
+                "success": s.success,
+                "elapsed_ms": s.elapsed_ms,
+                "details": s.details,
+                "error": s.error,
+            }
+            for s in result.stages
+        ],
+    }
 
-    Usage: ff verify <board> --app <source_dir>
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """ff run: Review → Build → Flash → Verify pipeline.
+
+    Usage: ff run <board> --app <source_dir>
     """
     from firmforge.core.pipeline_runner import PipelineRunner
 
@@ -103,6 +160,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     expected = getattr(args, "expected", "")
 
     if not source_dir:
+        if getattr(args, "json", False):
+            return _json_out({"error": "--app <source_dir> is required"}, 1)
         print("Error: --app <source_dir> is required")
         return 1
 
@@ -111,17 +170,20 @@ def cmd_run(args: argparse.Namespace) -> int:
         workspace=workspace,
     )
 
-    print("FirmForge 5-Stage Pipeline")
-    if board_id:
-        print(f"  Board: {board_id}")
-    print(f"  Source: {source_dir}")
-    print()
-
     result = runner.run_full(
         source_dir=source_dir,
         board_id=board_id or None,
         expected=expected,
     )
+
+    if getattr(args, "json", False):
+        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+
+    print("FirmForge 5-Stage Pipeline")
+    if board_id:
+        print(f"  Board: {board_id}")
+    print(f"  Source: {source_dir}")
+    print()
 
     for s in result.stages:
         icon = "PASS" if s.success else "FAIL"
@@ -156,11 +218,16 @@ def cmd_build(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace or ".")
     source_dir = args.app
     if not source_dir:
+        if getattr(args, "json", False):
+            return _json_out({"error": "--app <source_dir> is required"}, 1)
         print("Error: --app <source_dir> is required")
         return 1
 
     runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()), workspace=workspace)
     result = runner.build(source_dir=source_dir, board_id=args.board or None)
+
+    if getattr(args, "json", False):
+        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
 
     for s in result.stages:
         icon = "PASS" if s.success else "FAIL"
@@ -183,6 +250,8 @@ def cmd_flash(args: argparse.Namespace) -> int:
     firmware = args.firmware
 
     if not board_id:
+        if getattr(args, "json", False):
+            return _json_out({"error": "board is required"}, 1)
         print("Usage: ff flash <board> --firmware <path>")
         return 1
 
@@ -194,6 +263,8 @@ def cmd_flash(args: argparse.Namespace) -> int:
         config = detector.resolve_board(board_id)
 
         if not config:
+            if getattr(args, "json", False):
+                return _json_out({"error": f"board '{board_id}' not found"}, 1)
             print(f"Error: board '{board_id}' not found")
             return 1
 
@@ -202,20 +273,38 @@ def cmd_flash(args: argparse.Namespace) -> int:
         # Detect port
         port = flasher.detect_port()
         if not port:
+            if getattr(args, "json", False):
+                return _json_out({"error": "No COM port detected. Connect Arduino and retry."}, 1)
             print("Error: No COM port detected. Connect Arduino and retry.")
             return 1
-        print(f"Port: {port}")
 
         # Auto-detect firmware if not specified
         if not firmware:
             candidates = list(Path(".").rglob("firmware.hex"))
             if not candidates:
+                if getattr(args, "json", False):
+                    return _json_out({"error": "No firmware.hex found. Use --firmware <path>"}, 1)
                 print("Error: No firmware.hex found. Use --firmware <path>")
                 return 1
             firmware = str(candidates[0])
             print(f"Auto-detected firmware: {firmware}")
 
+        if not getattr(args, "json", False):
+            print(f"Port: {port}")
+
         result = flasher.flash(firmware)
+
+        if getattr(args, "json", False):
+            return _json_out({
+                "success": result.success,
+                "board": board_id,
+                "port": port,
+                "firmware": firmware,
+                "bytes_written": result.bytes_written if hasattr(result, "bytes_written") else 0,
+                "elapsed_ms": result.elapsed_ms if hasattr(result, "elapsed_ms") else 0,
+                "error": result.stderr[-500:] if not result.success and hasattr(result, "stderr") else "",
+            }, 0 if result.success else 1)
+
         if result.success:
             print(f"Flash SUCCESS ({result.bytes_written} bytes, {result.elapsed_ms:.0f}ms)")
             return 0
@@ -224,6 +313,8 @@ def cmd_flash(args: argparse.Namespace) -> int:
             return 1
 
     except ImportError as e:
+        if getattr(args, "json", False):
+            return _json_out({"error": f"ArduinoFlashProvider not available: {e}"}, 1)
         print(f"ArduinoFlashProvider not available: {e}")
         return 1
 
@@ -236,7 +327,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--version", action="version",
-        version="FirmForge 0.1.0",
+        version="FirmForge 0.2.0",
+    )
+    parser.add_argument(
+        "--json", action="store_true",
+        help="Output machine-readable JSON (for agent/plugin integration)",
     )
     parser.add_argument(
         "--boards-dir", type=str, default=None,
@@ -276,7 +371,43 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         "setup", help="Download & install toolchains (avr-gcc, avrdude) + Arduino Core",
     )
 
+    # ff context
+    p_ctx = subparsers.add_parser(
+        "context", help="Query chip knowledge reference (registers/pins/baud) for a board",
+    )
+    p_ctx.add_argument("board", nargs="?", help="Board ID (auto-detect if omitted)")
+    p_ctx.add_argument("--topic", default="",
+                       help="Filter by topic (uart/spi/i2c/adc/timer/pwm/gpio)")
+
     return parser
+
+
+def cmd_context(args: argparse.Namespace) -> int:
+    """ff context: chip knowledge reference (registers/pins/baud)."""
+    from firmforge.adapters.mcp_server import _do_context
+
+    payload = _do_context(board=args.board or "", topic=args.topic or "")
+    if getattr(args, "json", False):
+        return _json_out(payload, 0 if "error" not in payload else 1)
+
+    if "error" in payload:
+        print(f"Error: {payload['error']}")
+        return 1
+
+    print(f"Board: {payload.get('board', '?')} | Chip: {payload.get('chip', '?')}")
+    print(f"  Clock: {payload.get('clock_hz', '?')} Hz | Flash: {payload.get('flash_size', '?')}")
+    regs = payload.get("registers", [])
+    print(f"  Registers: {len(regs)} (topic filter: {args.topic or 'all'})")
+    for r in regs[:10]:
+        print(f"    - {r.get('name', '?')} @ {r.get('address', '?')} ({r.get('size', '?')}-bit)")
+    if len(regs) > 10:
+        print(f"    ... and {len(regs) - 10} more")
+    pins = payload.get("pins", {})
+    if pins:
+        print(f"  Pins: {len(pins)}")
+        for name, pin in list(pins.items())[:5]:
+            print(f"    - {name}: {pin}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -300,6 +431,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "setup":
         from firmforge.providers.arduino.setup import setup_all
         return setup_all()
+    elif args.command == "context":
+        return cmd_context(args)
     else:
         parser.print_help()
         return 0
