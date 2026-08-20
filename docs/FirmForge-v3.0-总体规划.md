@@ -25,7 +25,7 @@ FirmForge 不是 Agent。它是被 Agent 调用的**验证工具链**。
               └─ 任何阶段 → ff_detect（探索硬件环境）
 ```
 
-类比：**MCU 领域的 ESLint + Jest**。Source Review 类比 ESLint，Build+Flash+Test 类比 Jest。
+类比：**MCU 领域的 ESLint + Jest**。Source Review 类比 ESLint，Build+Flash+Verify 类比 Jest。
 
 ### 不做什么
 
@@ -44,13 +44,13 @@ FirmForge 不是 Agent。它是被 Agent 调用的**验证工具链**。
 ff_context(board, topic?)      ff_run(board?, app, expected?)
                                ff_build(board?, app)   ← 仅编译，无需硬件
 
-返回：寄存器列表                 流程：Detect → Review → Build → Flash → Test
+返回：寄存器列表                 流程：Detect → Review → Build → Flash → Verify
       引脚映射                        │
       时钟频率                  Source Review（寄存器引用门禁）
       Flash 大小               Confidence Scoring（波特率/引脚评分）
       外设特性                  avr-gcc / arm-none-eabi-gcc 编译
                                avrdude / openocd 烧录
-                               串口回读 → 行为验证
+                               串口回读 → 行为验证（人机共验，不阻断）
 ```
 
 两个触点共享同一个**知识库**（芯片级寄存器参考），一次预防、一次检测。
@@ -58,7 +58,7 @@ ff_context(board, topic?)      ff_run(board?, app, expected?)
 ### 层次架构
 
 ```
-入口层 (Adapters)       CLI: ff detect | ff verify | ff build | ff flash
+入口层 (Adapters)       CLI: ff detect | ff build | ff run | ff flash | ff setup
                         MCP: ff_detect | ff_context | ff_build | ff_run | ff_flash | ff_monitor
                               │
 编排层 (Orchestrator)   pipeline_runner.py  5 阶段调度 + 指纹增量跳过
@@ -88,7 +88,7 @@ board_detector.py         registers.json        providers/arduino/      ← 平�
 
 ---
 
-## 三、MCP 工具集（5 个）
+## 三、MCP 工具集（6 个）
 
 ### `ff_detect`
 ```
@@ -144,21 +144,23 @@ Agent 写代码前调用，确保所有寄存器名/引脚号来自合法集合�
 
 ### `ff_monitor`
 
-串口实时监控面板。独立子进程读串口数据 → 写 serial_live.html → Agent 用 present_files 打开面板。详见 S5 Test 节。
+串口实时监控面板。独立子进程读串口数据 → 写 serial_live.html → Agent 用 present_files 打开面板。详见 S5 Verify 节。
 仅用于已知正确的 hex 文件。
 ```
 
 ---
 
-## 四、CLI 命令（4 个）
+## 四、CLI 命令（5 个）
 
 | 命令 | 对应 MCP | 作用 |
 |------|---------|------|
 | `ff detect` | ff_detect | 扫描板子 |
 | `ff build <board> --app <dir>` | ff_build | 审查+编译 |
-| `ff verify <board> --app <dir> [--expected <pat>]` | ff_run | 全流程验证 |
+| `ff run <board> --app <dir> [--expected <pat>]` | ff_run | 全流程验证 |
 | `ff flash <board> --firmware <hex>` | ff_flash | 独立烧录 |
-| `ff monitor <port> <baud> start/stop` | ff_monitor | 实时串口面板 |
+| `ff setup` | — | 一键安装工具链（avr-gcc/avrdude/cppcheck/ArduinoCore） |
+
+> 注：`ff_monitor` 面板功能由 MCP `ff_monitor` + S5 Verify 面板提供，CLI 侧无独立 monitor 子命令。
 
 ---
 
@@ -248,7 +250,7 @@ S1 为自动阶段——有 board_id 直接解析，无则 BoardDetector 扫描�
 - CH340 全版本驱动兼容
 - 指纹驱动跳过（board/port/hex 均未变化 + flash 之前成功过）
 
-### S5 Test — 串口行为验证
+### S5 Verify — 串口行为验证（人机共验，非阻断）
 
 ```
 打开串口 → 自适应探测波特率 → 读输出 → 匹配预期模式
@@ -257,8 +259,8 @@ S1 为自动阶段——有 board_id 直接解析，无则 BoardDetector 扫描�
 特性：
 - 读取前刷新输入缓冲区
 - 自适应读取窗口：上限 5s，读满 2 行可打印数据提前退出
-- `expected` 参数：正则模式匹配。不匹配 → stage.success = false
-- 无串口输出 + 有 expected → stage.success = false
+- `expected` 参数：正则模式匹配。结果记录于 `stage.details["pattern_match"]`，**不改变 stage.success**
+- **定位**：S5 是流水线最后阶段，自动化采样 + 浏览器实时面板（人）共同验证——烧录成功即阶段 PASS，串口内容由人判断，不因 expected 不匹配阻断
 
 **串口输出展示**：
 
@@ -341,13 +343,13 @@ firmforge/knowledge/
 
 | 指纹变化 | 影响 |
 |----------|------|
-| source 变化 | Review + Build + Flash + Test 重跑 |
-| hex 变化 | Flash + Test 重跑 |
-| port 变化 | Flash + Test 重跑 |
+| source 变化 | Review + Build + Flash + Verify 重跑 |
+| hex 变化 | Flash + Verify 重跑 |
+| port 变化 | Flash + Verify 重跑 |
 | board_id 变化 | 全部重跑 |
 | 所有匹配 | 全部跳过 |
 
-跳过 Flash/Test 需额外条件：state 中记录了 flash=done。
+跳过 Flash/Verify 需额外条件：state 中记录了 flash=done。
 
 ---
 
@@ -362,11 +364,11 @@ firmforge/knowledge/
 | `providers/__init__.py` | +1 行注册表 |
 | `providers/stm32/build.py` | 新建——实现 BuildProvider |
 | `providers/stm32/flash.py` | 新建——实现 FlashProvider |
-| `boards/stm32_xxx/board.yaml` | 新建——板级配置 |
-| `firmforge/knowledge/reference/stm32/<chip>/registers.json` | 新建——芯片寄存器 |
-| `firmforge/knowledge/reference/stm32/<chip>/pins.json` | 新建——芯片引脚 |
-| `vendor/manifests/vendors/stm32_cube_f1.yaml` | 新建——包清单 |
-| `vendor/manifests/tools/{arm_gcc,openocd}.yaml` | 新建——工具链清单 |
+| `firmforge/data/boards/stm32_xxx/board.yaml` | 新建——板级配置 |
+| `firmforge/data/knowledge/reference/stm32/<chip>/registers.json` | 新建——芯片寄存器 |
+| `firmforge/data/knowledge/reference/stm32/<chip>/pins.json` | 新建——芯片引脚 |
+| `firmforge/data/vendor/manifests/vendors/stm32_cube_f1.yaml` | 新建——包清单 |
+| `firmforge/data/vendor/manifests/tools/{arm_gcc,openocd}.yaml` | 新建——工具链清单 |
 
 ---
 
@@ -379,54 +381,50 @@ C:\MyLab\MCU\                        ← A区（git 跟踪）
 │
 ├── firmforge/                       ← Python 核心包（pip 随包发布）
 │   ├── adapters/
-│   │   ├── cli.py                   ← CLI: detect/verify/build/flash
-│   │   └── mcp_server.py            ← MCP: 5 工具 × 5 handler
+│   │   ├── cli.py                   ← CLI: detect/build/run/flash/setup
+│   │   ├── mcp_server.py            ← MCP: 6 工具 × 6 handler
+│   │   └── panel_service.py         ← 串口面板 HTTP 服务（9878-9887）
 │   ├── core/                        ← ★ 核心稳定，新平台永不动
-│   │   ├── pipeline_runner.py       ← 5 阶段调度
+│   │   ├── pipeline_runner.py       ← 5 阶段调度 + 唯一串口采集线程
 │   │   ├── pipeline_state.py        ← state.json 指纹增量
 │   │   ├── board_detector.py        ← USB/COM 扫描 + 板子识别
-│   │   ├── source_reviewer.py       ← Source Review（寄存器幻��检查）
+│   │   ├── source_reviewer.py       ← Source Review（寄存器幻觉检查）
 │   │   ├── confidence_scorer.py     ← 置信度评分
-│   │   └── experience_ledger.py     ← 编译失败记录
+│   │   ├── experience_ledger.py     ← 编译失败记录
+│   │   └── resources.py             ← 包内数据定位（cwd 无关）
 │   ├── infrastructure/
 │   │   ├── hil.py                   ← HIL 框架（预留）
 │   │   ├── platform_config.yaml     ← 平台配置（包路径、工具链版本）
 │   │   └── toolchains_README.md     ← 工具链安装指引
-│   ├── knowledge/                   ← 芯片知识库（Python 包内）
-│   │   ├── knowledge_base.py        ← 知识库查询接口
-│   │   └── registers/               ← 寄存器定义 JSON
+│   ├── knowledge/
+│   │   └── knowledge_base.py        ← 知识库查询接口
+│   ├── data/                        ← ★ 包内数据（随 wheel 分发）
+│   │   ├── boards/                  ← 板定义（board.yaml）+ 示例用例
+│   │   │   ├── arduino_328p/        ← ATmega328P 板定义 + apps
+│   │   │   └── arduino_mega/        ← ATmega2560 板定义 + apps
+│   │   ├── knowledge/               ← 芯片知识库（reference/<platform>/<chip>/）
+│   │   │   ├── api/avr/api.json     ← AVR API 合约（目录占位）
+│   │   │   └── reference/avr/       ← atmega2560/atmega328p registers+pins
+│   │   └── vendor/manifests/        ← ★ 工具链/核心包唯一真相源
+│   │       ├── core/arduino_avr_core.yaml
+│   │       └── tools/{avr_gcc,avrdude,cppcheck}.yaml
+│   ├── tools/                       ← 面板资源 + 工具模块
+│   │   ├── panel.html               ← 串口+Modbus 面板（单文件双标签）
+│   │   ├── serial_collector.py      ← 串口采集（独立子进程）
+│   │   └── modbus_utils.py          ← Modbus CRC/编解码
 │   └── providers/                   ← ★ 平台扩展点
 │       ├── __init__.py              ← 工厂注册表
 │       ├── base.py                  ← 抽象边界（BuildProvider/FlashProvider/TestProvider）
 │       ├── com_port.py              ← 跨平台串口（pyserial + Win32Serial fallback）
 │       └── arduino/                 ← Arduino 实现
 │           ├── build.py             ← avr-gcc 编译（裸编 + ArduinoCore 两路线）
-│           ├── cppcheck.py           ← Cppcheck 静态分析（S2 Phase 1）
+│           ├── cppcheck.py          ← Cppcheck 静态分析（S2 Phase 1）
 │           ├── flash.py             ← avrdude 烧录
+│           ├── setup.py             ← ff setup 工具链安装器（跨平台）
 │           ├── test.py              ← HIL 测试适配器（预留）
 │           └── toolchain.py         ← 工具链路径解析（canonical→PATH→fallbacks）
 │
-├── boards/                          ← 板定义（board.yaml）+ 板专用用例
-│   ├── arduino_328p/
-│   │   ├── board.yaml               ← ATmega328P 板定义
-│   │   └── apps/                    ← 自写板专用测试用例
-│   └── arduino_mega/
-│       ├── board.yaml               ← ATmega2560 板定义
-│       └── apps/
-│
-├── vendor/                          ← 厂商资源索引
-│   ├── manifests/                   ← ★ 唯一真相源
-│   │   ├── core/
-│   │   │   └── arduino_avr_core.yaml   ← L1 核心包（版本、URL、结构）
-│   │   ├── tools/
-│   │   │   ├── avr_gcc.yaml            ← AVR 编译器
-│   │   │   └── avrdude.yaml            ← AVR 烧录器
-│   │   └── vendors/                    ← 厂商包（STM32 预留）
-│   ├── arduino/
-│   │   └── examples/                   ← 144 个官方例程（一致性测试基准）
-│   └── stm32/                          ← ARM 平台（预留）
-│
-├── tests/                           ← 单元测试 + 基准测试（155 passed）
+├── tests/                           ← 单元测试 + 基准测试（214 passed）
 │   ├── test_board_detector.py
 │   ├── test_source_reviewer.py
 │   ├── run_bench_fixed.py
@@ -434,10 +432,10 @@ C:\MyLab\MCU\                        ← A区（git 跟踪）
 │
 ├── docs/
 │   ├── FirmForge-v3.0-总体规划.md      ← 本文档
-│   ├── 目录结构现状与扩展规划.md         ← 目录结构详细说明
+│   ├── panel-architecture.md           ← 串口面板 + Modbus 架构
 │   └── test_benchmark/                 ← 基准测试数据
 │
-└── .gitignore                      ← *.hex *.elf *.o __firmforge_cache__/
+└── .gitignore                      ← *.hex *.elf *.o .firmforge/ dist/ 等
 
 ~/.firmforge/                       ← B区（用户区，ff setup 按需下载）
 ├── toolchains/                     ← 编译器/烧录器二进制
@@ -509,17 +507,22 @@ Core 头文件/库：B区 packages → A区 vendor fallback
 | 构建产物统一到 B区 cache/（A区零污染） | ✅ |
 | board.json → board.yaml 迁移 | ✅ |
 | build artifacts 清理（637 个 .hex/.elf 移除） | ✅ |
-| 155 单元测试全通过 | ✅ |
+| 单元测试全通过（155 → 214） | ✅ 2026-08-19 |
 | flash.py shell=True 消除 + 消重 | ✅ |
 | pyproject.toml 合法化（build-backend + 描述） | ✅ |
 | vendor/ 按平台分组（arduino/ + stm32/） | ✅ |
+| 数据资源迁入包内 firmforge/data/（pip 化，cwd 无关） | ✅ 2026-08-19 |
+| ff setup 工具链安装器（avr-gcc/avrdude/cppcheck/Core） | ✅ 2026-08-19 |
+| 串口面板 + Modbus RTU 面板 | ✅ 2026-08-18 |
+| wheel 构建 + 安装态验证（任意目录 ff run 全链路） | ✅ 2026-08-19 |
+| GitHub/Gitee 双仓发布（README EN/CN） | ✅ 2026-08-20 |
 
 ### 待扩展
 
 - STM32 提供者实现（build.py + flash.py）
 - STM32 芯片知识库（registers.json + pins.json）
-- CI/CD 模式——仅 Review + Build，无需硬件
 - 行为验证 DSL
+- PyPI 发布（命令 `pip install firmforge`，当前走 GitHub/Gitee git+https）
 
 ---
 
@@ -566,8 +569,8 @@ Core 头文件/库：B区 packages → A区 vendor fallback
 | T26 | Core 编译缓存：冷 55s → 热 3s（14x 提升） | ✅ 2026-07-23 已实现 |
 | T27 | 官方 Arduino 例程全量编译测试（Mega2560） | ✅ 90/94 通过（2026-07-23） |
 | T28 | 官方 Arduino 例程串口全链路验证（Mega2560） | ✅ 8/8 通过（2026-07-23） |
-| T29 | 官方 Arduino 例程编译测试（UNO） | ⬜ 待完成（2026-07-24） |
-| T30 | 库例程编译测试（Mega2560 + UNO） | ⬜ 待完成（2026-07-24） |
+| T29 | 官方 Arduino 例程编译测试（UNO） | ✅ 83/89（2026-07-24） |
+| T30 | 库例程编译测试（Mega2560 + UNO） | ✅ 2026-07-24 |
 | T31 | .ino 预处理器三项修复（struct 深度、#if 剥离、C 风格声明收缩） | ✅ 2026-07-23 已修复 |
 | T32 | Core 编译增加 .S 汇编文件支持 | ✅ 2026-07-23 已修复 |
 
@@ -607,7 +610,7 @@ docs/test_benchmark/
 
 ### 测试流程
 1. `ff build <board> --app <example_dir>` — 编译验证
-2. `ff verify <board> --app <example_dir>` — 全链路（串口例程）
+2. `ff run <board> --app <example_dir>` — 全链路（串口例程）
 3. 结果输出到 `docs/test_benchmark/official_examples_{board}_{date}.json`
 
 ---
@@ -619,6 +622,6 @@ docs/test_benchmark/
 | 项目定位 | MCU 代码验证工具链 |
 | 功能描述 | 寄存器门禁 / 引用验证 / 编译烧录测试 |
 | MCP 工具 | ff_detect / ff_context / ff_build / ff_run / ff_flash / ff_monitor |
-| CLI 命令 | ff detect / ff build / ff verify / ff flash |
-| 管道阶段 | Detect → Review → Build → Flash → Test |
-| 禁止使用 | kb (→ knowledge_base), _sm, 端到端, 全流程, 自然语言编程, Agent, 7-Stage Pipeline |
+| CLI 命令 | ff detect / ff build / ff run / ff flash / ff setup |
+| 管道阶段 | Detect → Review → Build → Flash → Verify |
+| 禁止使用 | kb (→ knowledge_base), _sm, 端到端, 全流程, 自然语言编程, Agent, 7-Stage Pipeline, Boot Signature, Citation Gate |
