@@ -2,7 +2,7 @@
 
 > **中文** · [English（README.md）](README.md)
 >
-> 本仓库为 Gitee 镜像，与 GitHub 主仓库 `github.com/NotchStone/firmforge` 内容同步。
+> 本仓库与 GitHub 仓库 `github.com/NotchStone/firmforge` 内容同步。
 
 FirmForge 是基于 MCP 和 CLI 的 MCU 固件验证工具链，面向 AI 编码 Agent 的嵌入式开发流程。工具链提供五阶段硬件流水线——Detect（识别）、Review（审查）、Build（编译）、Flash（烧录）、Verify（验证），并通过 MCP 和 CLI 工具（`ff_detect`、`ff_context`、`ff_build`、`ff_run`、`ff_flash`、`ff_monitor`）向 Agent 开放各阶段能力。
 
