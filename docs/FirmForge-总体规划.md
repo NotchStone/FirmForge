@@ -1,5 +1,6 @@
-# FirmForge v3.0 B+ — 项目总体规划
+# FirmForge v3.1 — 项目总体规划
 
+> **更新**：2026-08-20（v3.0 → v3.1：命名统一 run/Verify、数据目录迁入 firmforge/data、并入串口面板架构章节；文件名固定不带版本号）
 > **定位**：AI Coding Agent 的 MCU 代码硬件对齐工具链。
 > FirmForge 不生成代码、不规划任务——只做两件事：
 > 在 Agent **写代码前**提供合法寄存器/引脚/波特率参考，
@@ -399,6 +400,7 @@ C:\MyLab\MCU\                        ← A区（git 跟踪）
 │   │   └── resources.py             ← 包内数据定位（cwd 无关）
 │   ├── infrastructure/
 │   │   ├── hil.py                   ← HIL 框架（预留）
+│   │   ├── tracing.py               ← 调用追踪/日志
 │   │   ├── platform_config.yaml     ← 平台配置（包路径、工具链版本）
 │   │   └── toolchains_README.md     ← 工具链安装指引
 │   ├── knowledge/
@@ -421,6 +423,7 @@ C:\MyLab\MCU\                        ← A区（git 跟踪）
 │       ├── __init__.py              ← 工厂注册表
 │       ├── base.py                  ← 抽象边界（BuildProvider/FlashProvider/TestProvider）
 │       ├── com_port.py              ← 跨平台串口（pyserial + Win32Serial fallback）
+│       ├── win32serial.py           ← Win32Serial ctypes 实现（CH340 驱动兼容 fallback）
 │       └── arduino/                 ← Arduino 实现
 │           ├── build.py             ← avr-gcc 编译（裸编 + ArduinoCore 两路线）
 │           ├── cppcheck.py          ← Cppcheck 静态分析（S2 Phase 1）
@@ -436,8 +439,7 @@ C:\MyLab\MCU\                        ← A区（git 跟踪）
 │   └── ...
 │
 ├── docs/
-│   ├── FirmForge-v3.0-总体规划.md      ← 本文档
-│   ├── panel-architecture.md           ← 串口面板 + Modbus 架构
+│   ├── FirmForge-总体规划.md           ← 本文档（版本见文件头，文件名固定）
 │   └── test_benchmark/                 ← 基准测试数据
 │
 └── .gitignore                      ← *.hex *.elf *.o .firmforge/ dist/ 等
@@ -465,11 +467,12 @@ C:\MyLab\MCU\                        ← A区（git 跟踪）
 | 工具 | 版本 | 用途 |
 |------|------|------|
 | avr-gcc | 14.1.0 | AVR 编译 |
-| avrdude | 8.1 | AVR 烧录 |
+| avrdude | 7.2/8.1 | AVR 烧录（ZakKemble 包内置 7.2，可系统安装 8.1） |
+| cppcheck | 2.21.0 | S2 Review 静态分析（Windows MSI 提取） |
 | arm-none-eabi-gcc | 14.2.Rel1 | STM32 编译（待集成） |
 | openocd | 0.12.0 | STM32 调试/烧录（待集成） |
 
-安装路径：`~/.firmforge/toolchains/`。运行 `ff setup` 按 `vendor/manifests/tools/*.yaml` 下载。
+安装路径：`~/.firmforge/toolchains/`。运行 `ff setup` 按 `firmforge/data/vendor/manifests/tools/*.yaml` 下载（幂等）。
 
 ### 9.2 平台 SDK（头文件/库 → B区 packages/）
 
