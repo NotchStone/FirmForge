@@ -44,7 +44,7 @@ pip install "firmforge[mcp] @ git+https://github.com/NotchStone/firmforge.git"
 
 Stable wheels are attached to [GitHub Releases](https://github.com/NotchStone/firmforge/releases).
 
-A China mirror is available on Gitee: see [README_gitee.md](README_gitee.md) (中文).
+A China mirror is available on Gitee: see [README_CN.md](README_CN.md) (中文).
 
 ## Usage
 
