@@ -1,0 +1,21 @@
+name: sync-from-gitee
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes
+  workflow_dispatch:          # manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror Gitee → GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone --mirror https://gitee.com/notchstone/firmforge.git /tmp/gitee-mirror
+          cd /tmp/gitee-mirror
+          git push --mirror https://x-access-token:${GH_TOKEN}@github.com/NotchStone/firmforge.git
