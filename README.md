@@ -30,18 +30,20 @@ Detect → Review → Build → Flash → Verify
 **Option A — pip install from GitHub** (recommended):
 
 ```bash
-pip install git+https://github.com/firmforge/firmforge.git
-pip install "firmforge[mcp] @ git+https://github.com/firmforge/firmforge.git"   # with MCP support
+pip install git+https://github.com/NotchStone/firmforge.git
+pip install "firmforge[mcp] @ git+https://github.com/NotchStone/firmforge.git"   # with MCP support
 ff setup    # download toolchains (avr-gcc, avrdude, cppcheck, Arduino Core) on first use
 ```
 
 **Option B — wheel from GitHub Releases** (stable versions):
 
 ```bash
-pip install https://github.com/firmforge/firmforge/releases/download/v0.2.0/firmforge-0.2.0-py3-none-any.whl
+pip install https://github.com/NotchStone/firmforge/releases/download/v0.2.0/firmforge-0.2.0-py3-none-any.whl
 ```
 
 > Requires Python ≥ 3.10. Windows / macOS / Linux. Hardware needed only for Flash/Verify stages.
+>
+> 🌏 **China mirror**: accessing GitHub is slow/unstable? Use the Gitee mirror — see [README_gitee.md](README_gitee.md) for Gitee install instructions.
 
 ## Quick Start
 
