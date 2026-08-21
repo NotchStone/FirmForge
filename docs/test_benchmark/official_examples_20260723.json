@@ -1,0 +1,517 @@
+{
+  "board": "arduino_mega",
+  "tested_at": "2026-07-23T14:31:34",
+  "results": [
+    {
+      "example": "builtin\\01.Basics\\AnalogReadSerial",
+      "category": "01.Basics",
+      "build_pass": true,
+      "build_elapsed_ms": 14175.709009170532,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\01.Basics\\BareMinimum",
+      "category": "01.Basics",
+      "build_pass": true,
+      "build_elapsed_ms": 13930.756092071533,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\01.Basics\\Blink",
+      "category": "01.Basics",
+      "build_pass": true,
+      "build_elapsed_ms": 13914.270639419556,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\01.Basics\\DigitalReadSerial",
+      "category": "01.Basics",
+      "build_pass": true,
+      "build_elapsed_ms": 13901.767253875732,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\01.Basics\\Fade",
+      "category": "01.Basics",
+      "build_pass": true,
+      "build_elapsed_ms": 13850.613832473755,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\01.Basics\\ReadAnalogVoltage",
+      "category": "01.Basics",
+      "build_pass": true,
+      "build_elapsed_ms": 13957.484722137451,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\BlinkWithoutDelay",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13844.778299331665,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\Button",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13888.630867004395,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\Debounce",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 14077.708721160889,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\DigitalInputPullup",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13791.380167007446,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\StateChangeDetection",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13876.508474349976,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\toneKeyboard",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13758.0885887146,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\toneMelody",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13777.49228477478,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\toneMultiple",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13879.387855529785,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\02.Digital\\tonePitchFollower",
+      "category": "02.Digital",
+      "build_pass": true,
+      "build_elapsed_ms": 13829.511404037476,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\03.Analog\\AnalogInOutSerial",
+      "category": "03.Analog",
+      "build_pass": true,
+      "build_elapsed_ms": 14518.938064575195,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\03.Analog\\AnalogInput",
+      "category": "03.Analog",
+      "build_pass": true,
+      "build_elapsed_ms": 14171.516418457031,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\03.Analog\\AnalogWriteMega",
+      "category": "03.Analog",
+      "build_pass": true,
+      "build_elapsed_ms": 14159.065008163452,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\03.Analog\\Calibration",
+      "category": "03.Analog",
+      "build_pass": true,
+      "build_elapsed_ms": 14010.92505455017,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\03.Analog\\Fading",
+      "category": "03.Analog",
+      "build_pass": true,
+      "build_elapsed_ms": 14222.541332244873,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\03.Analog\\Smoothing",
+      "category": "03.Analog",
+      "build_pass": true,
+      "build_elapsed_ms": 14229.272603988647,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\ASCIITable",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14155.57861328125,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\Dimmer",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14166.551113128662,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\Graph",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14143.843412399292,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\Midi",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14070.37878036499,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\MultiSerial",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14000.815868377686,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\PhysicalPixel",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 13995.686292648315,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\ReadASCIIString",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14245.0110912323,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\SerialCallResponse",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14101.357460021973,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\SerialCallResponseASCII",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 13954.128503799438,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\SerialEvent",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 14235.838651657104,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\SerialPassthrough",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 13938.1742477417,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\04.Communication\\VirtualColorMixer",
+      "category": "04.Communication",
+      "build_pass": true,
+      "build_elapsed_ms": 13864.728689193726,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\05.Control\\Arrays",
+      "category": "05.Control",
+      "build_pass": true,
+      "build_elapsed_ms": 13995.615720748901,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\05.Control\\ForLoopIteration",
+      "category": "05.Control",
+      "build_pass": true,
+      "build_elapsed_ms": 14061.003923416138,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\05.Control\\IfStatementConditional",
+      "category": "05.Control",
+      "build_pass": true,
+      "build_elapsed_ms": 13833.575010299683,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\05.Control\\switchCase",
+      "category": "05.Control",
+      "build_pass": true,
+      "build_elapsed_ms": 14078.871726989746,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\05.Control\\switchCase2",
+      "category": "05.Control",
+      "build_pass": true,
+      "build_elapsed_ms": 14471.567153930664,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\05.Control\\WhileStatementConditional",
+      "category": "05.Control",
+      "build_pass": true,
+      "build_elapsed_ms": 14176.49245262146,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\CharacterAnalysis",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 14809.745788574219,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringAdditionOperator",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 14040.682554244995,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringAppendOperator",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13548.516035079956,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringCaseChanges",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13428.69257926941,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringCharacters",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13324.461936950684,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringComparisonOperators",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13400.424718856812,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringConstructors",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13549.162149429321,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringIndexOf",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13612.617254257202,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringLength",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13479.568243026733,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringLengthTrim",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 14429.912567138672,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringReplace",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13745.450735092163,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringStartsWithEndsWith",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13457.716464996338,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringSubstring",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 13442.441701889038,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\08.Strings\\StringToInt",
+      "category": "08.Strings",
+      "build_pass": true,
+      "build_elapsed_ms": 15450.708150863647,
+      "build_error": ""
+    },
+    {
+      "example": "builtin\\09.USB\\KeyboardAndMouseControl",
+      "category": "09.USB",
+      "build_pass": false,
+      "build_elapsed_ms": 501.70445442199707,
+      "build_error": "INFO [firmforge.core.experience_ledger] Lesson recorded: compile_error — pending"
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_clear",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 14510.822296142578,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_crc",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 15565.274715423584,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_get",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 13639.448404312134,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_iteration",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 13565.88077545166,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_put",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 13604.738473892212,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_read",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 13596.489429473877,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_update",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 13866.257905960083,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\EEPROM\\eeprom_write",
+      "category": "EEPROM",
+      "build_pass": true,
+      "build_elapsed_ms": 13699.346542358398,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\SoftwareSerial\\SoftwareSerialExample",
+      "category": "SoftwareSerial",
+      "build_pass": true,
+      "build_elapsed_ms": 13849.679946899414,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\SoftwareSerial\\TwoPortReceive",
+      "category": "SoftwareSerial",
+      "build_pass": true,
+      "build_elapsed_ms": 13898.928880691528,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\SPI\\BarometricPressureSensor",
+      "category": "SPI",
+      "build_pass": true,
+      "build_elapsed_ms": 13980.49020767212,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\SPI\\DigitalPotControl",
+      "category": "SPI",
+      "build_pass": true,
+      "build_elapsed_ms": 14167.024850845337,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\digital_potentiometer",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 13968.279838562012,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\i2c_scanner",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 14068.36986541748,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\master_reader",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 14472.920656204224,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\master_writer",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 13917.934656143188,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\SFRRanger_reader",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 14270.663738250732,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\slave_receiver",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 14464.090824127197,
+      "build_error": ""
+    },
+    {
+      "example": "avr\\Wire\\slave_sender",
+      "category": "Wire",
+      "build_pass": true,
+      "build_elapsed_ms": 14330.78145980835,
+      "build_error": ""
+    }
+  ]
+}
