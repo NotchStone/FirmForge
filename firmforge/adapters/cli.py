@@ -20,6 +20,7 @@ import logging
 import sys
 from pathlib import Path
 
+from firmforge import __version__
 from firmforge.core.board_detector import BoardDetector
 from firmforge.core.resources import boards_dir as _bdir
 
@@ -287,7 +288,8 @@ def cmd_flash(args: argparse.Namespace) -> int:
                 print("Error: No firmware.hex found. Use --firmware <path>")
                 return 1
             firmware = str(candidates[0])
-            print(f"Auto-detected firmware: {firmware}")
+            if not getattr(args, "json", False):
+                print(f"Auto-detected firmware: {firmware}")
 
         if not getattr(args, "json", False):
             print(f"Port: {port}")
@@ -327,11 +329,16 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--version", action="version",
-        version="FirmForge 0.2.0",
+        version=f"FirmForge {__version__}",
     )
     parser.add_argument(
         "--json", action="store_true",
         help="Output machine-readable JSON (for agent/plugin integration)",
+    )
+    parser.add_argument(
+        "--json-mode", action="store_true",
+        help="Resident mode: read JSON command frames from stdin, emit result frames "
+             "(for plugin/daemon integration; commands: detect/context/build/run/flash/exit)",
     )
     parser.add_argument(
         "--boards-dir", type=str, default=None,
@@ -410,6 +417,97 @@ def cmd_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def _emit_frame(req_id, ok, value, code=None, message=""):
+    """Write one result frame (JSON line) to stdout — called outside redirect scope."""
+    frame = {"id": req_id, "type": "result", "ok": bool(ok)}
+    if value is not None:
+        frame["value"] = value
+    if code:
+        frame["code"] = code
+    if message:
+        frame["message"] = message
+    print(json.dumps(frame, ensure_ascii=False, default=str))
+
+
+def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
+    """Build an argparse.Namespace for a json-mode command (json forced on)."""
+    ns = argparse.Namespace(
+        command=cmd, json=True,
+        boards_dir=cargs.get("boards_dir"),
+        workspace=cargs.get("workspace") or ".",
+    )
+    if cmd == "detect":
+        ns.intent = cargs.get("intent", "")
+    elif cmd == "context":
+        ns.board = cargs.get("board", "")
+        ns.topic = cargs.get("topic", "")
+    elif cmd == "run":
+        ns.board = cargs.get("board")
+        ns.app = cargs.get("app")
+        ns.expected = cargs.get("expected", "")
+    elif cmd == "build":
+        ns.board = cargs.get("board")
+        ns.app = cargs.get("app")
+    elif cmd == "flash":
+        ns.board = cargs.get("board")
+        ns.firmware = cargs.get("firmware")
+    return ns
+
+
+def _json_mode_loop() -> int:
+    """Resident loop: read JSON command frames from stdin, dispatch to cmd_*,
+    wrap printed JSON output into result frames. Runs until an 'exit' frame."""
+    import contextlib
+    import io
+
+    handlers = {
+        "detect": cmd_detect,
+        "context": cmd_context,
+        "build": cmd_build,
+        "run": cmd_run,
+        "flash": cmd_flash,
+    }
+
+    for raw in sys.stdin:
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError:
+            _emit_frame(None, False, None, "PROTOCOL", "invalid JSON frame")
+            continue
+        req_id = req.get("id")
+        cmd = req.get("cmd")
+        cargs = req.get("args") or {}
+
+        if cmd == "exit":
+            return 0
+        if cmd not in handlers:
+            _emit_frame(req_id, False, None, "UNKNOWN_CMD",
+                        f"unknown command '{cmd}'; supported: detect, context, build, run, flash, exit")
+            continue
+
+        args = _namespace(cmd, cargs)
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = handlers[cmd](args)
+        except Exception as exc:  # 基础设施失败 → error 帧，进程继续存活
+            _emit_frame(req_id, False, None, "INTERNAL", f"{type(exc).__name__}: {exc}")
+            continue
+
+        out = buf.getvalue().strip()
+        try:
+            value = json.loads(out) if out else {}
+        except json.JSONDecodeError:
+            _emit_frame(req_id, False, None, "STDOUT",
+                        f"non-JSON output from '{cmd}': {out[:200]}")
+            continue
+        _emit_frame(req_id, rc == 0, value)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main entry point for ff CLI."""
     logging.basicConfig(
@@ -419,6 +517,9 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = setup_argument_parser()
     args = parser.parse_args(argv)
+
+    if args.json_mode:
+        return _json_mode_loop()
 
     if args.command == "detect":
         return cmd_detect(args)
