@@ -7,6 +7,8 @@ Provider registry -- add one entry per new platform:
   _REGISTRY = {
       "arduino": { "build": "firmforge.providers.arduino.build:ArduinoBuildProvider",
                    "flash": "firmforge.providers.arduino.flash:ArduinoFlashProvider" },
+      "stm32":   { "build": "firmforge.providers.stm32.build:Stm32BuildProvider",
+                   "flash": "firmforge.providers.stm32.flash:Stm32FlashProvider" },
   }
 """
 
@@ -28,6 +30,10 @@ _PROVIDER_REGISTRY: dict[str, dict[str, str]] = {
     "arduino": {
         "build": "firmforge.providers.arduino.build:ArduinoBuildProvider",
         "flash": "firmforge.providers.arduino.flash:ArduinoFlashProvider",
+    },
+    "stm32": {
+        "build": "firmforge.providers.stm32.build:Stm32BuildProvider",
+        "flash": "firmforge.providers.stm32.flash:Stm32FlashProvider",
     },
 }
 

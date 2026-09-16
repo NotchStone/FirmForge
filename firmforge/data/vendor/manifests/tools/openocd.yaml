@@ -23,13 +23,23 @@ platforms:
 
 install:
   external: true
+  # probe 条目语义 = **直接包含可执行文件的那一层目录**（见 setup._locate_external）。
+  # xPack 布局是 <root>/bin/openocd.exe + <root>/openocd/scripts/，
+  # 所以这里必须写到 `bin`，不能只写安装根。
   probe:
-    - "~/AppData/Local/mcu-tools/openocd"
-    - "C:/Program Files/OpenOCD"
+    - "~/AppData/Local/mcu-tools/openocd/bin"
+    - "C:/Program Files/OpenOCD/bin"
     - "/usr/local/bin"
     - "/usr/bin"
   binaries:
     - "openocd"
+  # OpenOCD 需要 -s 指定脚本目录（interface/*.cfg / target/*.cfg）。
+  # 相对安装根解析，两种布局都覆盖：
+  #   xPack  <root>/openocd/scripts      （实测本机）
+  #   经典   <root>/share/openocd/scripts
+  scripts_dir_candidates:
+    - "../openocd/scripts"
+    - "../share/openocd/scripts"
   purpose: "STM32 SWD 烧录 + 调试（DAPLink / CMSIS-DAP）"
-  targets: "scripts/target/*.cfg（333 个，含 26 个 stm32*）；STM32H743ZITx 见 stm32h7x.cfg"
+  targets: "scripts/target/*.cfg；STM32H743ZITx 见 stm32h7x.cfg；探针 interface/cmsis-dap.cfg"
   register: "docs/路径分区标准.md §3.1 E3"

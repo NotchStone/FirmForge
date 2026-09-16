@@ -820,9 +820,13 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             _total_lines = [0]
 
             # Start collector thread (daemon — dies with MCP process)
+            # 回读波特率取自板卡声明（board.yaml::serial.baudrate）。AVR 板卡
+            # 未声明时回落到 9600 —— 与历史行为一致，不改变既有 AVR 结果。
+            _serial_cfg = config.get("serial") or {}
+            read_baud = int(_serial_cfg.get("baudrate", 9600) or 9600)
             t = threading.Thread(
                 target=self._collector_thread,
-                args=(html_path, port, 9600, sample_ready, _sample_lines, _total_lines, stages_summary, process_summary),
+                args=(html_path, port, read_baud, sample_ready, _sample_lines, _total_lines, stages_summary, process_summary),
                 daemon=True,
             )
             t.start()

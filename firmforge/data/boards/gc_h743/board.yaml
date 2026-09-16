@@ -1,0 +1,162 @@
+board_name: GC-H743
+platform: stm32
+board_type: stm32_board
+# HAL 范式：板卡外设覆盖广（以太网 / CAN / SDIO / 摄像头），裸写寄存器
+# 的边际收益不足以抵消错误率，走 ST HAL + CMSIS。
+paradigm: hal
+
+mcu:
+  series: stm32h7
+  chip: STM32H743ZIT6
+  family: cortex-m7
+  core: Cortex-M7
+  package: LQFP144
+  # DBGMCU DEV_ID 0x450 覆盖 H742/743/753/750，**不能单独区分** 743，
+  # 所以 STM32 路线不做"芯片签名直读"式 Detect，走板卡声明 + SWD 探针。
+  dev_id: "0x450"
+
+specs:
+  flash: 2 MB
+  ram: 1 MB
+  clock: 480 MHz
+  hse: 25 MHz
+  lse: 32.768 kHz
+  io_voltage: 3.3 V
+  # 数据来源：ST 官方产品页 stm32h743zi + 数据手册 DS12110 Table 2
+  # （STM32H743xI features，所有料号一列）。总计 1056 KB + 4 KB 备份。
+memories:
+  - {name: ITCM,  start: "0x00000000", size: 64 KB,  domain: core,  note: 指令 TCM}
+  - {name: DTCM,  start: "0x20000000", size: 128 KB, domain: core,  note: 数据 TCM，零等待}
+  - {name: AXI,   start: "0x24000000", size: 512 KB, domain: D1,    note: 主 SRAM}
+  - {name: SRAM1, start: "0x30000000", size: 128 KB, domain: D2}
+  - {name: SRAM2, start: "0x30020000", size: 128 KB, domain: D2}
+  - {name: SRAM3, start: "0x30040000", size: 32 KB,  domain: D2}
+  - {name: SRAM4, start: "0x38000000", size: 64 KB,  domain: D3}
+  - {name: BKPSRAM, start: "0x38800000", size: 4 KB, domain: backup}
+
+pins:
+  led1: PE7
+  buzzer: PB10
+  debug_uart:
+    peripheral: USART1
+    tx: PA9
+    rx: PA10
+    bridge: CH340N            # 板载 USB 转串口，原理图网络名 USB_RX / USB_TX
+  swd:
+    swdio: PA13
+    swclk: PA14
+    connector: "CN1 (2.5 mm 6P: 1=GND 2=NRST 3=3V3 4=SWDIO 5=SWCLK 6=GND)"
+    swo: false
+  i2c2: {sda: PF0, scl: PF1, purpose: "24C64 EEPROM"}
+  mdio: {mdc: PC1, mdio: PA2}
+  ethernet:
+    phy: LAN8720A
+    reset: PB2
+    interrupt: PA6
+    ref_clk: "X3 50 MHz"
+
+# --------------------------------------------------------------------------
+# 编译（S3）
+# --------------------------------------------------------------------------
+build:
+  # 厂商 SDK 三件套 —— B 区 ~/.firmforge/packages/stm32/<package>/<version>/
+  # 刻意不用 STM32CubeH7 元包（434 MB）：90% 内容是本板用不到的其它板级工程。
+  # `repo` 只用于「缺包时把取包地址印出来」，不参与构建。
+  sdk:
+    device:
+      package: cmsis_device_h7
+      version: "1.10.7"
+      repo: STMicroelectronics/cmsis_device_h7
+    hal:
+      package: stm32h7xx_hal_driver
+      version: "1.11.6"
+      repo: STMicroelectronics/stm32h7xx_hal_driver
+    cmsis_core:
+      package: cmsis_5
+      version: "5.9.0"
+      repo: ARM-software/CMSIS_5
+      # 只需要 CMSIS/Core/Include（约 6 个头文件），整包 ZIP 另含大量 pack 文档
+
+  # CMSIS 器件头要求先定义料号宏，否则 stm32h7xx.h 会 #error
+  defines: [STM32H743xx, USE_HAL_DRIVER]
+
+  # 相对 sdk.device 根
+  startup: "Source/Templates/gcc/startup_stm32h743xx.s"
+  system:  "Source/Templates/system_stm32h7xx.c"
+
+  # 相对本板卡目录（data/boards/gc_h743/）—— 承诺级文件，随项目入库
+  linker_script: "linker/gc_h743.ld"
+  hal_conf: "include/stm32h7xx_hal_conf.h"
+
+  # HAL 模块 → 展开为 hal/Src/stm32h7xx_hal_<m>.c，并额外总是编 stm32h7xx_hal.c。
+  # 这份列表必须与 hal_conf.h 里的 *_MODULE_ENABLED 一致（有测试守着）。
+  #
+  # 为什么这几个不能省（踩过才知道）：
+  #   flash  —— HAL_RCC_ClockConfig 内部调 HAL_FLASH_SetLatency，不编会链接失败
+  #   pwr_ex —— HAL_PWREx_ConfigSupply 在 pwr_ex.c 里，不在 pwr.c
+  hal_modules: [cortex, rcc, rcc_ex, gpio, uart, dma, exti, flash, pwr, pwr_ex]
+
+  fpu: fpv5-d16
+  float_abi: hard
+  c_standard: gnu11
+  cpp_standard: gnu++17
+  optimize: "-Og"
+
+  # 板级支持源码（相对本板卡目录），随每个 app 一起编进去。
+  # 首版为空：MVP 先用 HSI 跑通链路，480 MHz 时钟树留待 clock 文件落地。
+  support: []
+
+# --------------------------------------------------------------------------
+# 烧录（S4）
+# --------------------------------------------------------------------------
+flash:
+  tool: openocd
+  # 相对 openocd scripts 目录
+  interface_cfg: interface/cmsis-dap.cfg
+  target_cfg: target/stm32h7x.cfg
+  transport: swd
+  speed_khz: 2000
+  verify: true
+  reset_after: true
+  # DAPLink 的 MSC 拖 .hex 通道**无回读校验**，只作 OpenOCD 完全不通时的人工兜底，
+  # 不接入自动流程。
+
+# --------------------------------------------------------------------------
+# 验证（S5）—— 经板载 CH340N 走 USART1
+# --------------------------------------------------------------------------
+serial:
+  port_hint: CH340               # 与 AVR 路线不同：这里**只用于回读**，不用于烧录
+  baudrate: 115200
+  data_bits: 8
+  parity: none
+  stop_bits: 1
+
+features:
+  gpio: true
+  uart: true
+  spi: true
+  i2c: true
+  pwm: true
+  adc: true
+  dac: true
+  timer: true
+  interrupt: true
+  dma: true
+  can: true
+  ethernet: true
+  usb: true
+
+constraints:
+  isr_forbidden: [blocking_calls, malloc]
+  # PA13/PA14 被 SWD 占用，普通 GPIO 用途需先禁用调试口
+  pin_avoid: [PA13, PA14]
+  peripheral_rules:
+    i2c: must_open_drain
+    # 480 MHz 下 Flash 需 7 个等待周期（VOS0 + 4.5 WS 以上），由时钟初始化负责
+
+schematic_source: manual_entry
+# 本板在项目内统一称 **GC-H743**，按主控型号命名，**不引用任何厂商型号/品牌**。
+# 板级引脚事实来自原理图提取，见 .workbuddy/memory/MEMORY-REFERENCE.md §七
+board_ref:
+  board: "GC-H743"
+  basis: "STM32H743ZIT6 通用 H7 板（LQFP144 / 2 MB Flash / 480 MHz）"

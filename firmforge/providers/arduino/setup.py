@@ -124,12 +124,18 @@ def _extract(archive: Path, dest: Path) -> None:
 
 
 def _bin_exists(root: Path, bin_rel: str) -> bool:
-    """True if bin_rel (or bin_rel.exe on Windows) exists under root."""
+    """True if bin_rel (or bin_rel.exe on Windows) is a **file** under root.
+
+    必须用 `is_file()` 而非 `exists()`：xPack 版 OpenOCD 的安装根下有一个
+    与可执行文件同名的子目录（`openocd/openocd/`），`exists()` 会把它当成
+    命中，于是探测"成功"返回了**不带 `bin/` 的那一层**，真正运行时才会
+    报找不到可执行文件 —— 错得很晚、也很难归因。2026-09-16 实测踩到。
+    """
     p = root / bin_rel
-    if p.exists():
+    if p.is_file():
         return True
     if os.name == "nt" and not bin_rel.lower().endswith(".exe"):
-        return (root / (bin_rel + ".exe")).exists()
+        return (root / (bin_rel + ".exe")).is_file()
     return False
 
 

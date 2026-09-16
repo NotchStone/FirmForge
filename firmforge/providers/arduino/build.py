@@ -22,6 +22,7 @@ from firmforge.infrastructure import paths
 from firmforge.providers.base import (
     BuildProvider, BuildResult, BuildDiagnostic,
 )
+from firmforge.providers.gcc_diagnostics import parse_gcc_diagnostics
 from firmforge.providers.arduino.toolchain import resolve_toolchain
 
 logger = logging.getLogger(__name__)
@@ -45,21 +46,19 @@ def _sdk_cache_key(core_base: str) -> str:
 
 
 def _clean_stale_artifacts() -> None:
-    """Remove stale intermediate build artifacts from cache.
+    """Remove stale preprocessed `.ino` temp files from cache.
 
-    Cleans .elf files (intermediate, hex is the deliverable) and preprocessed
-    .ino temp files. Uses os.remove to bypass sandbox safe-delete hooks.
+    Uses os.remove to bypass sandbox safe-delete hooks.
+
+    注意：这里**不再清理 `.elf`**。原先的 `build/**/*.elf` 全局扫会把 STM32
+    路线的调试 ELF 一起删掉（两者产物都落在 `cache/build/<board>/<app>/`）。
+    AVR 的中间 ELF 改为在 `build()` 里按已知路径精确删除。
     """
-    cache = paths.cache_dir()
-    for pattern, desc in [
-        ("build/**/*.elf", ".elf intermediate"),
-        ("preprocess/*.ino", "preprocessed .ino"),
-    ]:
-        for f in cache.glob(pattern):
-            try:
-                os.remove(str(f))
-            except OSError:
-                pass
+    for f in paths.preprocess_cache_dir().glob("*.ino"):
+        try:
+            os.remove(str(f))
+        except OSError:
+            pass
 
 
 class ArduinoBuildProvider(BuildProvider):
@@ -146,58 +145,21 @@ class ArduinoBuildProvider(BuildProvider):
 
         finally:
             # Guaranteed: never leave intermediate artifacts behind.
-            # .elf is discarded (only .hex is needed for flash).
+            # .elf is discarded (only .hex is needed for flash) — deleted by
+            # exact path, never by glob, so the STM32 route's ELFs survive.
             # Preprocessed .ino temp files are discarded (source is untouched).
             _clean_stale_artifacts()
+            try:
+                os.remove(str(firmware_elf))
+            except OSError:
+                pass
 
     def parse_build_errors(self, stderr: str) -> list[BuildDiagnostic]:
         """Parse compiler stderr into structured diagnostics.
 
-        Handles gcc-style error messages:
-          filename:line:column: error: message
-          filename:line:column: warning: message
-          undefined reference to `symbol'
+        Shared with the STM32 route — see `providers/gcc_diagnostics.py`.
         """
-        diagnostics: list[BuildDiagnostic] = []
-
-        # Pattern 1: file:line:col: severity: message
-        pattern1 = re.compile(
-            r'^(.+?):(\d+):(\d+):\s*(error|warning):\s*(.+)$',
-            re.MULTILINE,
-        )
-        for match in pattern1.finditer(stderr):
-            diagnostics.append(BuildDiagnostic(
-                severity=match.group(4),
-                file=match.group(1).strip(),
-                line=int(match.group(2)),
-                column=int(match.group(3)),
-                message=match.group(5).strip(),
-                raw=match.group(0).strip(),
-            ))
-
-        # Pattern 2: undefined reference
-        if "undefined reference" in stderr:
-            for line in stderr.splitlines():
-                if "undefined reference" in line:
-                    diagnostics.append(BuildDiagnostic(
-                        severity="error",
-                        message=line.strip(),
-                        raw=line.strip(),
-                    ))
-
-        # Pattern 3: ld returned exit status (linker failure)
-        if "ld returned" in stderr or "collect2" in stderr:
-            lines = stderr.splitlines()
-            for i, line in enumerate(lines):
-                if "ld returned" in line or "collect2" in line:
-                    context = "\n".join(lines[max(0, i-3):i+3])
-                    diagnostics.append(BuildDiagnostic(
-                        severity="error",
-                        message=line.strip(),
-                        raw=context.strip(),
-                    ))
-
-        return diagnostics
+        return parse_gcc_diagnostics(stderr)
 
     def get_toolchain_version(self) -> str:
         try:

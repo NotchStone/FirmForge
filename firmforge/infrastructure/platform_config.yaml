@@ -28,3 +28,34 @@ firmforge:
   python: "3.13.14"
   pyserial: "3.5"
   pytest: "9.1.1"
+
+# --------------------------------------------------------------------------
+# STM32 路线（Cortex-M7 / GC-H743）—— 与 arduino 段并列的第二条编译路线
+#
+# 两个工具都是**例外 E3**（厂商安装器放好的外部工具，FirmForge 不下载不搬运），
+# 声明在 data/vendor/manifests/tools/{arm_gcc,openocd}.yaml，本段只登记版本。
+# --------------------------------------------------------------------------
+stm32:
+  # --- 编译器：ARM 官方安装器装进 Program Files，重装一次 ~700 MB ---
+  arm_gcc: "14.2.Rel1"
+  arm_gcc_canonical_path: "~/.firmforge/toolchains/arm-none-eabi-gcc/"
+  arm_gcc_detected_path: "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
+
+  # --- 烧录：xPack OpenOCD，bin/ 与 openocd/scripts/ 同级 ---
+  openocd: "0.12.0"
+  openocd_canonical_path: "~/.firmforge/toolchains/openocd/"
+  openocd_detected_path: "~/AppData/Local/mcu-tools/openocd/bin"
+  # OpenOCD 脚本目录相对安装根解析，见 openocd.yaml 的 scripts_dir_candidates
+
+  # --- 厂商 SDK 三件套（唯一可整块删除重下的部分）---
+  stm32_packages_root: "~/.firmforge/packages/stm32/"
+  cmsis_device_h7: "1.10.7"        # STMicroelectronics/cmsis_device_h7
+  stm32h7xx_hal_driver: "1.11.6"   # STMicroelectronics/stm32h7xx_hal_driver
+  cmsis_5: "5.9.0"                 # ARM-software/CMSIS_5（只用 CMSIS/Core/Include）
+
+  # --- 已确认的板级事实（与 board.yaml 重复是刻意的：这里是"路线级"清单，
+  #     board.yaml 是"板卡级"声明；两者不一致时以 board.yaml 为准）---
+  probe_interface: "interface/cmsis-dap.cfg"   # DAPLink = CMSIS-DAP 协议
+  probe_target: "target/stm32h7x.cfg"
+  float_abi: "hard"
+  # 目标不是"支持 N 个型号"，而是「新芯片从 0 到可编译的工时」

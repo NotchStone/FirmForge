@@ -21,10 +21,12 @@ platforms:
 
 install:
   external: true            # ff setup 只探测，不安装（见 _locate_external）
+  # probe 条目语义 = **直接包含可执行文件的那一层目录**
+  # （`_locate_external` 用 probe 目录 + binaries 名拼路径）。
   probe:
     - "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
     - "C:/Program Files/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
-    - "~/AppData/Local/mcu-tools/arm-none-eabi-gcc"
+    - "~/AppData/Local/mcu-tools/arm-none-eabi-gcc/bin"
     - "/usr/bin"
     - "/usr/local/bin"
   binaries:
