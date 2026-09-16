@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "knowledge/schema/pins.schema.json",
   "$id": "knowledge/reference/avr/pins_mega2560.json",
   "board": "arduino_mega",
   "mcu": "ATmega2560",

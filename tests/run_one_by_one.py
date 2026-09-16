@@ -11,7 +11,7 @@ def run_one(rid, paradigm):
     if not d.is_dir():
         return None
     
-    state = ROOT / ".firmforge" / "state.json"
+    state = ROOT / ".ff-run" / "state.json"
     if state.exists(): state.write_text("{}")
     
     t0 = time.time()

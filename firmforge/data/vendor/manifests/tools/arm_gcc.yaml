@@ -1,0 +1,36 @@
+# ARM GNU Toolchain (Cortex-M/A) — STM32 路线编译器
+#
+# 例外 E3（标准 §3.1）：本机由 ARM 官方安装器放在 Program Files，
+# FirmForge **不下载、不搬运**，只声明版本与探测路径。
+# 删掉它要重新运行 ARM 官方安装包（约 700 MB），所以登记在案，
+# 否则日后会被当成重复垃圾清掉。
+tool: arm-none-eabi-gcc
+version: "14.2.Rel1"
+type: external
+
+platforms:
+  windows:
+    url: "https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
+    sha256: ""
+  linux-x86_64:
+    url: "https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
+    sha256: ""
+  macos:
+    url: "https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads"
+    sha256: ""
+
+install:
+  external: true            # ff setup 只探测，不安装（见 _locate_external）
+  probe:
+    - "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
+    - "C:/Program Files/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
+    - "~/AppData/Local/mcu-tools/arm-none-eabi-gcc"
+    - "/usr/bin"
+    - "/usr/local/bin"
+  binaries:
+    - "arm-none-eabi-gcc"
+    - "arm-none-eabi-g++"
+    - "arm-none-eabi-objcopy"
+    - "arm-none-eabi-size"
+  purpose: "STM32 / Cortex-M 编译（与 avr-gcc 并列的第二条编译路线）"
+  register: "docs/路径分区标准.md §3.1 E3"

@@ -16,6 +16,8 @@ import time
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
+from firmforge.infrastructure import paths
+
 logger = logging.getLogger("firmforge.panel")
 
 _panel_httpd = None
@@ -55,7 +57,7 @@ def get_modbus_response_queue():
 
 
 def start_panel_httpd(root: str) -> int:
-    """Start HTTP server serving .firmforge/ on port 9878. Returns port.
+    """Start HTTP server serving the workspace runtime dir on port 9878. Returns port.
     Singleton: each call shuts down the old server and creates a fresh one.
     """
     global _panel_httpd
@@ -69,7 +71,7 @@ def start_panel_httpd(root: str) -> int:
     class _ThreadedPanelServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
 
-    data_dir = os.path.join(root, ".firmforge")
+    data_dir = str(paths.runtime_dir(root))
     stop_file = os.path.join(data_dir, "serial_live.html.stop")
     pause_file = os.path.join(data_dir, "serial_live.html.pause")
     serial_write_file = os.path.join(data_dir, "serial_write.json")

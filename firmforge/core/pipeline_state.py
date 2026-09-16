@@ -1,4 +1,4 @@
-"""Pipeline state file (.firmforge/state.json) — fingerprint-driven incremental.
+"""Pipeline state file (`.ff-run/state.json`) — fingerprint-driven incremental.
 
 Agent repeatedly calls ff verify --app <dir>. This module records what
 happened last time (fingerprints of inputs) so we skip stages whose
@@ -16,6 +16,8 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from firmforge.infrastructure import paths
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +79,14 @@ def fingerprint_match(
 
 
 class PipelineState:
-    """Read/write .firmforge/state.json for incremental pipeline execution."""
+    """Read/write `.ff-run/state.json` for incremental pipeline execution.
+
+    `<workspace>/.ff-run/` is the A 区 runtime directory (标准 §4 `runtime` 类）：
+    删除它不影响功能，只会丢失增量缓存。
+    """
 
     def __init__(self, workspace: Path) -> None:
-        self._path = workspace / ".firmforge" / _STATE_FILE_NAME
+        self._path = paths.runtime_dir(workspace) / _STATE_FILE_NAME
         self._data: dict[str, Any] = self._load()
 
     def _load(self) -> dict[str, Any]:
@@ -148,6 +154,6 @@ class PipelineState:
 
     @staticmethod
     def clear(workspace: Path) -> None:
-        path = workspace / ".firmforge" / _STATE_FILE_NAME
+        path = paths.runtime_dir(workspace) / _STATE_FILE_NAME
         if path.exists():
             path.unlink()

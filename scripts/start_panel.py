@@ -13,7 +13,7 @@ stages = [PipelineStage(1, "Detect", True, det_ms, {"board": board_id}, None)]
 
 state = {}
 try:
-    state = json.loads(Path(".firmforge/state.json").read_text(encoding="utf-8"))
+    state = json.loads(Path(".ff-run/state.json").read_text(encoding="utf-8"))
 except Exception:
     pass
 stg = state.get("stages", {})

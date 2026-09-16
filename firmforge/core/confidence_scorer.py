@@ -241,7 +241,7 @@ class ConfidenceScorer:
                     # Fallback for backward compat: infer from chip
                     chip = (board_config or {}).get("mcu", {}).get("chip", "")
                     if "328P" in chip or "328" in chip:
-                        board_id = "arduino_uno"
+                        board_id = "arduino_328p"
                     elif "2560" in chip:
                         board_id = "arduino_mega"
                     else:
@@ -330,7 +330,7 @@ class ConfidenceScorer:
                     score=100.0,
                     source="reference",
                     resolved=True,
-                    note=f"Pin {pin_num} = PORT{pin['port']} bit {pin['bit']}",
+                    note=f"Pin {pin_num} = {pin.get('register') or 'PORT' + pin['port']} bit {pin['bit']}",
                 ))
             elif board_config:
                 # Check against board.json pins

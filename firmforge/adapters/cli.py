@@ -346,7 +346,7 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--workspace", "-w", type=str, default=".",
-        help="Workspace directory for .firmforge/ artifacts",
+        help="Workspace directory for runtime artifacts (.ff-run/)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")

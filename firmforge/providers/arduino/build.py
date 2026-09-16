@@ -18,12 +18,30 @@ import time
 from pathlib import Path
 from typing import Any
 
+from firmforge.infrastructure import paths
 from firmforge.providers.base import (
     BuildProvider, BuildResult, BuildDiagnostic,
 )
 from firmforge.providers.arduino.toolchain import resolve_toolchain
 
 logger = logging.getLogger(__name__)
+
+_SDK_VERSION_RE = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
+
+
+def _sdk_cache_key(core_base: str) -> str:
+    """Derive the cache-isolation segment for a given Arduino Core source root.
+
+    B 区 layout ends with the version (`.../packages/arduino/avr/1.8.6`) →
+    use it directly. The dev-mode vendor fallback (`.../data/vendor/arduino`)
+    has no version segment, so use `<name>-dev` instead: sharing one cache
+    directory with the B 区 SDK would cause pointless rebuild thrashing,
+    since the two trees have different source content.
+    """
+    name = Path(core_base).name
+    if _SDK_VERSION_RE.match(name):
+        return name
+    return f"{name}-dev" if name else "unknown"
 
 
 def _clean_stale_artifacts() -> None:
@@ -32,7 +50,7 @@ def _clean_stale_artifacts() -> None:
     Cleans .elf files (intermediate, hex is the deliverable) and preprocessed
     .ino temp files. Uses os.remove to bypass sandbox safe-delete hooks.
     """
-    cache = Path.home() / ".firmforge" / "cache"
+    cache = paths.cache_dir()
     for pattern, desc in [
         ("build/**/*.elf", ".elf intermediate"),
         ("preprocess/*.ino", "preprocessed .ino"),
@@ -64,13 +82,20 @@ class ArduinoBuildProvider(BuildProvider):
 
         Args:
             source_dir: Directory containing source files + optional Makefile
-            output_dir: Output directory for firmware.hex (default: source_dir)
+            output_dir: Output directory for firmware.hex.
+                When None, `paths.resolve_output_dir` decides: artifacts land in
+                B 区 `cache/build/<board>/<app>/` if source_dir is inside a git
+                workspace, else alongside the sources (temp dirs / unit tests).
+                This is the hard guard against R2 violations (derived artifacts
+                inside the A 区 source tree).
 
         Returns:
             BuildResult with success/failure and structured diagnostics.
         """
         src = Path(source_dir).resolve()
-        out = Path(output_dir or source_dir).resolve()
+        board_id = str(self._board_config.get("board_id", "") or "")
+        out = paths.resolve_output_dir(src, output_dir,
+                                       board_id=board_id, app_name=src.name)
         out.mkdir(parents=True, exist_ok=True)
 
         firmware_elf = out / "firmware.elf"
@@ -489,9 +514,7 @@ class ArduinoBuildProvider(BuildProvider):
 
             # Write preprocessed content to cache — NEVER modify source.
             # This matches Arduino IDE behavior: compile from processed copy.
-            from pathlib import Path
-            cache_root = Path.home() / ".firmforge" / "cache"
-            temp_dir = str(cache_root / "preprocess")
+            temp_dir = str(paths.preprocess_cache_dir())
             os.makedirs(temp_dir, exist_ok=True)
             temp_src = os.path.join(temp_dir, os.path.basename(src))
             with open(temp_src, "w", encoding="utf-8") as f:
@@ -537,7 +560,7 @@ class ArduinoBuildProvider(BuildProvider):
         #       when package_manager is introduced (planned with STM32 expansion).
         from firmforge.core.resources import vendor_dir as _vendor_dir
         for core_base in [
-            os.path.expanduser("~/.firmforge/packages/arduino/avr/1.8.6"),
+            str(paths.packages_dir() / "arduino" / "avr" / "1.8.6"),
             os.path.join(str(_vendor_dir()), "arduino"),
         ]:
             if os.path.exists(os.path.join(core_base, "cores", "arduino", "Arduino.h")):
@@ -619,12 +642,19 @@ class ArduinoBuildProvider(BuildProvider):
         all_stderr = ""
 
         # ── Core & Library Precompilation Cache ─────────────────────────
-        # Core .o files are compiled once per MCU and stored alongside
-        # the SDK packages. Source hash checking ensures automatic rebuild
-        # when upstream SDK files change.
-        # Layout: packages/arduino/avr/1.8.6/build/{mcu}/core.a
+        # Core .o files are compiled once per MCU. SHA256 of every source is
+        # recorded in manifest.json and decides reuse — content hashing is
+        # immune to mtime churn and git checkouts.
+        #
+        # Layout: <B 区>/cache/sdk/arduino/avr/1.8.6/{mcu}/
+        #             core.a · manifest.json · <source-tree>.o
+        #
+        # 为什么不在 packages/ 里（标准 §5 R6）：packages/ 的语义是
+        # 「厂家物，可整块删除重下」，而 core.a 删掉要重编约 55 秒，是派生物。
+        # 两者生命周期不同，混住会让「packages/ 能不能安全删掉」失去答案。
         import hashlib
-        build_cache_dir = Path(core_base) / "build" / self._mcu
+        build_cache_dir = (paths.sdk_cache_dir() / "arduino" / "avr"
+                           / _sdk_cache_key(core_base) / self._mcu)
         build_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Manifest: {source_name: sha256} for all cached objects

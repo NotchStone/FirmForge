@@ -19,10 +19,12 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from firmforge.infrastructure import paths
+
 logger = logging.getLogger(__name__)
 
 # Canonical toolchain root (planning §4.2)
-CANONICAL_TOOLCHAIN_ROOT = Path.home() / ".firmforge" / "toolchains"
+CANONICAL_TOOLCHAIN_ROOT = paths.toolchains_dir()
 
 
 @dataclass

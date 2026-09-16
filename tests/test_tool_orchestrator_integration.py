@@ -23,7 +23,7 @@ from firmforge.knowledge.knowledge_base import KnowledgeBase
 def temp_workspace():
     with tempfile.TemporaryDirectory() as tmp:
         ws = Path(tmp)
-        (ws / ".firmforge").mkdir(exist_ok=True)
+        (ws / ".ff-run").mkdir(exist_ok=True)
         yield ws
 
 

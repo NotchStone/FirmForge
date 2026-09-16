@@ -11,7 +11,7 @@ BOARD = "arduino_328p"
 
 def run_verify(app_dir):
     t0 = time.time()
-    state = ROOT / ".firmforge" / "state.json"
+    state = ROOT / ".ff-run" / "state.json"
     if state.exists(): state.write_text("{}")
     try:
         r = subprocess.run([PYTHON, "-m", "firmforge", "run", BOARD, "--app", str(app_dir)],

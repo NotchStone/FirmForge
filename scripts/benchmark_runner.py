@@ -16,8 +16,12 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from firmforge.infrastructure import paths
+
 WORKSPACE = Path(__file__).resolve().parent.parent
-EXAMPLES_BASE = Path.home() / ".firmforge" / "examples" / "arduino"
+EXAMPLES_BASE = paths.examples_dir() / "arduino"
 
 def _results_file(board: str) -> Path:
     date = time.strftime("%Y%m%d")

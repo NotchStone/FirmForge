@@ -16,13 +16,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from firmforge.core.pipeline_runner import PipelineRunner
 from firmforge.core.experience_ledger import ExperienceLedger
+from firmforge.infrastructure import paths
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
 BOARD_ID = "arduino_mega"
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "vendor" / "arduino" / "examples"
 WORKSPACE = Path(__file__).resolve().parent.parent
-LEDGER_PATH = WORKSPACE / ".firmforge" / "ledger.jsonl"
+LEDGER_PATH = paths.runtime_dir(WORKSPACE) / "ledger.jsonl"
 
 # Examples that produce serial output — can be build+flash+test
 SERIAL_EXAMPLES = [
@@ -144,7 +145,7 @@ def main():
     flash_pass = 0
     for name in SERIAL_EXAMPLES:
         # Clear state to force full pipeline
-        state_file = WORKSPACE / ".firmforge" / "state.json"
+        state_file = paths.runtime_dir(WORKSPACE) / "state.json"
         if state_file.exists():
             state_file.unlink()
 
@@ -170,7 +171,7 @@ def main():
     print(f"{'='*60}")
 
     # Save results JSON
-    report_path = WORKSPACE / ".firmforge" / "batch_results.json"
+    report_path = paths.runtime_dir(WORKSPACE) / "batch_results.json"
     report = {
         "board": BOARD_ID,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),

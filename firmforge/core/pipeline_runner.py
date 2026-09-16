@@ -20,6 +20,7 @@ from firmforge.core.board_detector import BoardDetector
 from firmforge.core.source_reviewer import SourceReviewer, SourceReviewResult
 from firmforge.core.confidence_scorer import ConfidenceScorer, ConfidenceReport
 from firmforge.core.pipeline_state import PipelineState, compute_fingerprints
+from firmforge.infrastructure import paths
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class PipelineRunner:
         from firmforge.core.resources import boards_dir as _default_boards
         self._boards_dir = Path(boards_dir) if boards_dir else _default_boards()
         self._workspace = Path(workspace)
-        self._ledger = ExperienceLedger(Path(workspace) / ".firmforge" / "ledger.jsonl")
+        self._ledger = ExperienceLedger(paths.runtime_dir(workspace) / "ledger.jsonl")
         self._detector = BoardDetector(boards_dir=self._boards_dir)
         self._source_reviewer: SourceReviewer | None = None
         self._sr_chip: str | None = None  # chip of the cached source_reviewer
@@ -363,7 +364,7 @@ class PipelineRunner:
         output = s5.details.get("serial_output", "") if s5.details else ""
         baud = s5.details.get("matched_baud", 0) if s5.details else 0
         port = s5.details.get("port", "?") if s5.details else "?"
-        html_path = Path(self._workspace) / ".firmforge" / "serial_live.html"
+        html_path = paths.runtime_dir(self._workspace) / "serial_live.html"
         html_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             html_path.write_text(self._build_serial_html(output, baud, port, source_dir), encoding="utf-8")
@@ -697,12 +698,11 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 return stage
 
             builder = get_build_provider(config.get("platform", "arduino"), config)
-            # Output builds to ~/.firmforge/cache/build/<board>/<app>/
-            # Never pollute source directories with build artifacts.
-            from pathlib import Path
-            cache_root = Path.home() / ".firmforge" / "cache"
+            # Artifacts go to B 区 `cache/build/<board>/<app>/`, never into the
+            # A 区 source tree (标准 §5 R2：派生物不得物理位于承诺级目录).
             app_name = Path(source_dir).name
-            output_dir = str(cache_root / "build" / (board_id or "unknown") / app_name)
+            output_dir = str(paths.build_cache_dir()
+                             / (board_id or "unknown") / app_name)
             build_result = builder.build(source_dir, output_dir=output_dir)
 
             stage.success = build_result.success
@@ -805,7 +805,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 stage.elapsed_ms = (time.time() - t0) * 1000
                 return stage
 
-            html_path = str(root / ".firmforge" / "serial_live.html")
+            html_path = str(paths.runtime_dir(root) / "serial_live.html")
             stop_path = html_path + ".stop"
 
             # Remove stale stop file
@@ -852,11 +852,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 from firmforge.adapters.mcp_server import _start_monitor_httpd
                 http_port = _start_monitor_httpd(str(root))
                 if http_port:
-                    goto_panel = str(root / ".firmforge" / "goto_panel.html")
+                    goto_panel = str(paths.runtime_dir(root) / "goto_panel.html")
                     with open(goto_panel, "w", encoding="utf-8") as f:
                         f.write(f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>')
                     stage.details["panel_url"] = f"http://127.0.0.1:{http_port}/serial_live.html"
-                    stage.details["panel_file"] = ".firmforge/goto_panel.html"
+                    stage.details["panel_file"] = (
+                        f"{paths.RUNTIME_DIR_NAME}/goto_panel.html")
             except Exception:
                 pass
 
@@ -881,7 +882,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     @staticmethod
     def _load_serial_config(data_dir: str, default_baud: int = 9600,
                             default_parity: str = "None") -> tuple[int, str]:
-        """Read .firmforge/serial_config.json (panel baud/parity), else defaults."""
+        """Read <runtime>/serial_config.json (panel baud/parity), else defaults."""
         import json
         try:
             with open(os.path.join(data_dir, "serial_config.json"), encoding="utf-8") as f:
@@ -1077,7 +1078,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # Thread crash — log but don't kill MCP process
             try:
                 import traceback
-                log_dir = str(Path(html_path).parent) if html_path else ".firmforge"
+                log_dir = str(Path(html_path).parent) if html_path else paths.RUNTIME_DIR_NAME
                 with open(os.path.join(log_dir, "exit_trace.log"), "a") as f:
                     f.write(f"[{time.strftime('%H:%M:%S')}] EXIT: THREAD CRASH {type(e).__name__}: {e}\n")
                     f.write(traceback.format_exc())

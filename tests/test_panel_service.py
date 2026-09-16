@@ -12,8 +12,8 @@ from firmforge.adapters import panel_service as ps
 def server(temp_dir):
     """Start the panel HTTP server against a temp dir; yield (port, dir)."""
     import time
-    (temp_dir / ".firmforge").mkdir(exist_ok=True)
-    (temp_dir / ".firmforge" / "serial_live.html").write_text(
+    (temp_dir / ".ff-run").mkdir(exist_ok=True)
+    (temp_dir / ".ff-run" / "serial_live.html").write_text(
         "<html><body>FirmForge test panel</body></html>", encoding="utf-8")
     port = ps.start_panel_httpd(str(temp_dir))
     assert port, "panel server failed to bind"
@@ -57,7 +57,7 @@ class TestPanelRoutes:
         port, tmp = server
         out = _post(port, "/serial-send", {"text": "hello", "hex": False, "crlf": True})
         assert out["ok"] is True
-        f = tmp / ".firmforge" / "serial_write.json"
+        f = tmp / ".ff-run" / "serial_write.json"
         assert f.exists()
         data = json.loads(f.read_text())
         assert data["text"] == "hello"
@@ -66,7 +66,7 @@ class TestPanelRoutes:
         port, tmp = server
         out = _post(port, "/serial-config", {"baud": 57600, "parity": "Even"})
         assert out["ok"] is True
-        f = tmp / ".firmforge" / "serial_config.json"
+        f = tmp / ".ff-run" / "serial_config.json"
         assert f.exists()
         cfg = json.loads(f.read_text())
         assert cfg == {"baud": 57600, "parity": "Even"}
@@ -79,11 +79,11 @@ class TestPanelRoutes:
     def test_serial_close_creates_pause(self, server):
         port, tmp = server
         _post(port, "/serial-close")
-        assert (tmp / ".firmforge" / "serial_live.html.pause").exists()
+        assert (tmp / ".ff-run" / "serial_live.html.pause").exists()
 
     def test_serial_open_removes_pause(self, server):
         port, tmp = server
-        pause = tmp / ".firmforge" / "serial_live.html.pause"
+        pause = tmp / ".ff-run" / "serial_live.html.pause"
         pause.write_text("x")
         _post(port, "/serial-open")
         assert not pause.exists()

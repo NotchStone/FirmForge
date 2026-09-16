@@ -14,6 +14,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from firmforge.infrastructure import paths
+
 logger = logging.getLogger(__name__)
 
 # Suppressions that match the target environment (AVR bare-metal)
@@ -123,7 +125,7 @@ def _find_cppcheck() -> Path | None:
         return Path(found)
 
     # 2. Check FirmForge toolchain directory
-    toolchain = Path.home() / ".firmforge" / "toolchains" / "cppcheck"
+    toolchain = paths.toolchains_dir() / "cppcheck"
     exe = toolchain / "cppcheck.exe"
     if exe.exists():
         return exe

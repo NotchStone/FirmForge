@@ -1,11 +1,15 @@
 """Toolchain installer — `ff setup`.
 
-Downloads and installs AVR toolchains (avr-gcc, avrdude) and the Arduino AVR
-Core bundle from Arduino's official downloads, into the FirmForge canonical
-paths:
+Downloads and installs AVR toolchains (avr-gcc, avrdude, cppcheck) and the
+Arduino AVR Core bundle from official sources, into the FirmForge B 区
+(用户级，`~/.firmforge/`；可用 `FIRMFORGE_HOME` 环境变量重定向):
 
-  tools  -> ~/.firmforge/toolchains/<tool>/
-  core   -> ~/.firmforge/packages/arduino/avr/<version>/
+  tools  -> <B 区>/toolchains/<tool>/
+  core   -> <B 区>/packages/arduino/avr/<version>/
+
+Installs are vendor goods (标准 §4 `vendor` 类）：可整块删除后重新下载。
+因此每个子树安装完成后会写出 `manifest.json` 声明其内容（标准 §5 R3），
+让「这块能不能安全删掉重下」有一个可读的答案。
 
 Idempotent: already-installed tools are skipped. Cross-platform (Windows /
 macOS / Linux) via the manifests in firmforge/data/vendor/manifests/.
@@ -14,6 +18,7 @@ macOS / Linux) via the manifests in firmforge/data/vendor/manifests/.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import platform
@@ -27,10 +32,28 @@ import zipfile
 from pathlib import Path
 
 from firmforge.core.resources import manifests_dir
+from firmforge.infrastructure import paths
 
 logger = logging.getLogger(__name__)
 
-_FIRMFORGE_HOME = Path(os.path.expanduser("~/.firmforge"))
+#: 各子树的期望生命周期 —— 写进 manifest.json，供人工与 `ff doctor` 核对
+_SUBTREE_LIFECYCLE = {
+    "toolchains": "vendor",
+    "packages": "vendor",
+    "examples": "vendor",
+    "sources": "vendor",
+    "config": "user-state",
+}
+
+#: 生命周期标签的人话解释。分区有一个已知代价：用户看不出「数据从哪来」。
+#: 这行解释是那个代价的补偿 —— 清理目录前先读它。
+_LIFECYCLE_MEANING = {
+    "vendor": "厂家/第三方产物 —— 可整块删除，由 ff setup 重新下载",
+    "derived": "派生物 —— 可删除，下次构建时自动重新生成",
+    "user-state": "用户态 —— 删掉要重新填写，不要当缓存清理",
+    "committed": "承诺级 —— 已入库，删掉需要重新编写",
+    "runtime": "运行时 —— 会话级临时产物，进程退出即无意义",
+}
 
 
 def _platform_key() -> str:
@@ -110,6 +133,39 @@ def _bin_exists(root: Path, bin_rel: str) -> bool:
     return False
 
 
+def _resolve_root(install: dict, default: Path) -> Path:
+    """Install root: the manifest's `root` wins (may contain `~`), else default.
+
+    Going through this helper keeps every install path derived from
+    `paths.firmforge_home()`, so `FIRMFORGE_HOME` redirection works everywhere
+    (a manifest that pins an absolute `~/.firmforge/...` path would silently
+    escape the override).
+    """
+    raw = install.get("root")
+    if raw:
+        return Path(os.path.expanduser(str(raw)))
+    return default
+
+
+def _locate_external(install: dict) -> Path | None:
+    """Probe for a toolchain FirmForge does not install (例外 E3）。
+
+    Checks the manifest's explicit probe paths first, then falls back to PATH
+    via the declared binary names. Returns the containing directory, or None.
+    """
+    for raw in install.get("probe", []):
+        p = Path(os.path.expanduser(str(raw)))
+        if p.is_dir():
+            for exe in install.get("binaries", []):
+                if _bin_exists(p, exe):
+                    return p
+    for exe in install.get("binaries", []):
+        found = shutil.which(exe)
+        if found:
+            return Path(found).parent
+    return None
+
+
 def install_tool(manifest: Path) -> str:
     """Install one toolchain from its manifest. Returns install root or ''."""
     import yaml
@@ -117,14 +173,30 @@ def install_tool(manifest: Path) -> str:
     plat = _platform_key()
     entry = m.get("platforms", {}).get(plat) or m.get("platforms", {}).get("linux-x86_64")
     install = m.get("install", {})
-    root = Path(os.path.expanduser(install.get("root", f"~/.firmforge/toolchains/{m.get('tool')}/")))
+
+    # 例外 E3（标准 §3.1）：系统/厂商安装器已经放好的外部工具链。
+    # FirmForge 不下载、不搬运，只探测与登记。探测失败不算 setup 失败 ——
+    # 安装那套工具不是 FirmForge 的职责，AVR 路线也不该被它拖累。
+    if install.get("external"):
+        target = _locate_external(install)
+        if target:
+            logger.info("%s: external toolchain found at %s",
+                        m.get("tool"), target)
+            return str(target)
+        logger.warning("%s: external toolchain not found — %s\n"
+                       "  probe paths: %s",
+                       m.get("tool"), install.get("purpose", ""),
+                       ", ".join(str(p) for p in install.get("probe", [])))
+        return "external"
+
+    root = _resolve_root(install, paths.toolchains_dir() / str(m.get("tool", "")))
     bin_rel = install.get("bin", "")
     if bin_rel and _bin_exists(root, bin_rel):
         logger.info("%s already installed, skip", m.get("tool"))
         return str(root)
     # Avrdude is bundled inside the avr-gcc archive — extract instead of download.
     if m.get("install", {}).get("from_gcc"):
-        gcc_root = Path(os.path.expanduser("~/.firmforge/toolchains/avr-gcc/"))
+        gcc_root = paths.toolchains_dir() / "avr-gcc"
         src_bin = gcc_root / "bin"
         if src_bin.exists():
             root.mkdir(parents=True, exist_ok=True)
@@ -198,7 +270,7 @@ def install_core(manifest: Path) -> str:
     import yaml
     m = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     install = m.get("install", {})
-    root = Path(os.path.expanduser(install.get("root", "~/.firmforge/packages/arduino/avr/")))
+    root = _resolve_root(install, paths.packages_dir() / "arduino" / "avr")
     structure = install.get("structure", {})
     # Already present?
     marker = Path(root) / structure.get("cores", "cores/arduino") / "Arduino.h"
@@ -228,7 +300,8 @@ def install_core(manifest: Path) -> str:
             logger.error("Arduino Core URL not found in package index")
             return ""
         archive = _download(core_url, Path(td))
-        core_root = Path(os.path.expanduser(install.get("root", "~/.firmforge/packages/arduino/avr/1.8.6/")))
+        core_root = _resolve_root(
+            install, paths.packages_dir() / "arduino" / "avr" / "1.8.6")
         core_root.mkdir(parents=True, exist_ok=True)
         _extract(archive, core_root)
         if not (core_root / structure.get("cores", "cores/arduino") / "Arduino.h").exists():
@@ -237,8 +310,90 @@ def install_core(manifest: Path) -> str:
     return str(root)
 
 
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _scan_subtree(path: Path) -> dict:
+    """Cheap inventory of one subtree: top-level entries + file/byte totals.
+
+    Deliberately does NOT hash every file — `toolchains/` alone holds 4324
+    files, and a full SHA256 sweep would add seconds to every `ff setup` for
+    little gain. Per-file integrity, where it actually matters, lives in the
+    upstream `*.yaml` manifests' `sha256` field.
+    """
+    entries: list[dict] = []
+    files = 0
+    total = 0
+    if not path.is_dir():
+        return {"entries": entries, "files": 0, "bytes": 0}
+    for child in sorted(path.iterdir()):
+        if child.name == "manifest.json":
+            continue
+        if child.is_dir():
+            cf = cb = 0
+            for p in child.rglob("*"):
+                try:
+                    if p.is_file():
+                        cf += 1
+                        cb += p.stat().st_size
+                except OSError:
+                    continue
+            entries.append({"name": child.name, "type": "dir",
+                            "files": cf, "bytes": cb})
+            files += cf
+            total += cb
+        else:
+            try:
+                size = child.stat().st_size
+            except OSError:
+                size = 0
+            entries.append({"name": child.name, "type": "file",
+                            "files": 1, "bytes": size})
+            files += 1
+            total += size
+    return {"entries": entries, "files": files, "bytes": total}
+
+
+def write_subtree_manifest(subtree: str) -> Path | None:
+    """Write `<B 区>/<subtree>/manifest.json` declaring what lives there.
+
+    标准 §5 R3：每个 `vendor` 子树必须带声明文件。这不是形式主义 ——
+    B 区可以被整块 `rm -rf` 后重建，而这个「可删除」的承诺只有在
+    「删了会丢什么」有据可查时才成立。没有它，日后清理的人只能靠猜，
+    而猜错的代价是重下 650 MB 工具链。
+    """
+    root = paths.firmforge_home() / subtree
+    if not root.is_dir():
+        return None
+    lifecycle = _SUBTREE_LIFECYCLE.get(subtree, "unknown")
+    scan = _scan_subtree(root)
+    payload = {
+        "subtree": subtree,
+        "lifecycle": lifecycle,
+        "meaning": _LIFECYCLE_MEANING.get(lifecycle, ""),
+        "firmforge_home": str(paths.firmforge_home()),
+        "generated_at": _utc_now(),
+        "generated_by": "firmforge.providers.arduino.setup.write_subtree_manifest",
+        "files": scan["files"],
+        "bytes": scan["bytes"],
+        "entries": scan["entries"],
+    }
+    out = root / "manifest.json"
+    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                   encoding="utf-8")
+    logger.info("manifest written: %s (%d entries, %d files)",
+                out, len(scan["entries"]), scan["files"])
+    return out
+
+
 def setup_all() -> int:
-    """Install all toolchains + core. Returns 0 on full success."""
+    """Install all toolchains + core, then declare every B 区 subtree.
+
+    Returns 0 on full success.
+    """
+    paths.ensure_layout()
     manifests = manifests_dir()
     ok = True
     for tool_manifest in sorted((manifests / "tools").glob("*.yaml")):
@@ -248,6 +403,8 @@ def setup_all() -> int:
     if core_manifest.exists():
         if not install_core(core_manifest):
             ok = False
+    for subtree in _SUBTREE_LIFECYCLE:
+        write_subtree_manifest(subtree)
     return 0 if ok else 1
 
 

@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess, sys, json, time
 
 WORKSPACE = Path(__file__).resolve().parent.parent
-STATE = WORKSPACE / ".firmforge" / "state.json"
+STATE = WORKSPACE / ".ff-run" / "state.json"
 RESULTS = WORKSPACE / "docs" / "test_benchmark" / f"nl_results_mega2560_{time.strftime('%Y%m%d')}.json"
 TEST_DIR = WORKSPACE / "boards" / "arduino_mega" / "nl_tests"
 

@@ -1,45 +1,53 @@
+# ============================================================
+# FirmForge .gitignore
+# 分组依据：docs/路径分区标准.md §0.1「删掉它，要做什么才能恢复」
+# 规则集合自 2026-09-16 起未变，仅重排 + 修正注释（原注释块与规则错位）
+# ============================================================
 
-# *.hex  — intentionally NOT ignored (final deliverable)
-# Datasheets (large binaries, download on demand)
-# FirmForge build artifacts
-# FirmForge final artifacts (keep .hex for re-flash)
-# FirmForge workspace intermediate
-# IDE / Editor
-# OS
-# Python
-# Security: API keys and local secrets
-# Test
+# --- 派生物：机器重新跑一遍即得，不入库 ---
 *.d
-*.egg-info/
+*.o
 *.elf
 *.hex
-*.key
-*.o
-*.pyc
-*.pyo
-*.secret
-*.swo
-*.swp
-*_secret.yaml
-.coverage
-.DS_Store
-.eggs/
-.env
-.env.*
-.idea/
-.pytest_cache/
-.vscode/
-.venv/
-__pycache__/
 build/
-config/llm.yaml
 dist/
-docs/datasheets/*.pdf
-htmlcov/
-Thumbs.db
 
-# Serial panel runtime artifacts (regenerated on each run)
+# --- 运行时：会话级，进程退出即无意义 ---
+# 项目内运行时目录（标准 §4 `runtime` 类）。命名规约 N1：不得与用户级
+# ~/.firmforge/ 同名 —— 同名会造成「同名不同物」的排查陷阱（标准 §1 证据 #1）。
+.ff-run/
+# 迁移期兼容：旧名目录的残留，改名完成后可移除本行
 .firmforge/
 
-# WorkBuddy private project data
+# --- 厂家物 / 大体积可重下：不入库 ---
+docs/datasheets/*.pdf
+
+# --- 用户态与密钥：绝不能进仓库 ---
+config/llm.yaml
+*.key
+*.secret
+*_secret.yaml
+.env
+.env.*
+
+# --- 工具与 IDE ---
+*.egg-info/
+.eggs/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+.venv/
+
+# --- 系统 ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# --- WorkBuddy 私有项目数据（非 FF 管辖）---
 .workbuddy/

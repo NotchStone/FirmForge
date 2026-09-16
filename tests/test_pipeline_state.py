@@ -44,8 +44,8 @@ class TestPipelineState:
         state.mark_failed("flash", "avrdude timeout")
         state.save()
 
-        assert Path(tmp_path, ".firmforge", "state.json").exists()
-        data = json.loads(Path(tmp_path, ".firmforge", "state.json").read_text())
+        assert Path(tmp_path, ".ff-run", "state.json").exists()
+        data = json.loads(Path(tmp_path, ".ff-run", "state.json").read_text())
         assert data["stages"]["build"]["status"] == "done"
         assert data["stages"]["flash"]["status"] == "failed"
         assert data["last_error"]["stage"] == "flash"
@@ -54,6 +54,6 @@ class TestPipelineState:
         state = PipelineState(Path(tmp_path))
         state.mark_done("detect")
         state.save()
-        assert Path(tmp_path, ".firmforge", "state.json").exists()
+        assert Path(tmp_path, ".ff-run", "state.json").exists()
         PipelineState.clear(Path(tmp_path))
-        assert not Path(tmp_path, ".firmforge", "state.json").exists()
+        assert not Path(tmp_path, ".ff-run", "state.json").exists()

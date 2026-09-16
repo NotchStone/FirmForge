@@ -465,9 +465,10 @@ def _do_monitor(port: str = "", baud: int = 9600,
     import sys
     from pathlib import Path
     import time
+    from firmforge.infrastructure import paths
     root = _add_project_root_to_path()
-    html_path = os.path.join(str(root), ".firmforge", "serial_live.html")
-    goto_path = os.path.join(str(root), ".firmforge", "goto_panel.html")
+    html_path = str(paths.runtime_dir(root) / "serial_live.html")
+    goto_path = str(paths.runtime_dir(root) / "goto_panel.html")
 
     if action == "stop":
         stop_file = html_path + ".stop"
@@ -513,8 +514,8 @@ def _do_monitor(port: str = "", baud: int = 9600,
         return {
             "status": "started", "port": port, "baud": baud,
             "panel_url": f"http://127.0.0.1:{http_port}/serial_live.html" if http_port else "",
-            "panel_file": ".firmforge/goto_panel.html",
-            "data_file": ".firmforge/serial_live.html",
+            "panel_file": f"{paths.RUNTIME_DIR_NAME}/goto_panel.html",
+            "data_file": f"{paths.RUNTIME_DIR_NAME}/serial_live.html",
         }
 
     return {"status": "error", "message": f"unknown action: {action}"}

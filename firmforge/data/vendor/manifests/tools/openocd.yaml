@@ -1,0 +1,35 @@
+# OpenOCD — STM32 SWD 烧录与调试（xPack build 0.12.0）
+#
+# 例外 E3（标准 §3.1）：本机位于 ~/AppData/Local/mcu-tools/openocd，
+# 不在 B 区内。FirmForge 只声明与探测，不下载不搬运。
+#
+# 与 avrdude 的分工：avrdude 走 ISP/UART（AVR），OpenOCD 走 SWD/JTAG
+# （ARM）。DAPLink 是 CMSIS-DAP 协议，OpenOCD 需要 cmsis-dap interface cfg；
+# 若 OpenOCD 不通，pyOCD 是 DAPLink 的主场（备用通道）。
+tool: openocd
+version: "0.12.0"
+type: external
+
+platforms:
+  windows:
+    url: "https://github.com/xpack-dev-tools/openocd-xpack/releases"
+    sha256: ""
+  linux-x86_64:
+    url: "https://github.com/xpack-dev-tools/openocd-xpack/releases"
+    sha256: ""
+  macos:
+    url: "https://github.com/xpack-dev-tools/openocd-xpack/releases"
+    sha256: ""
+
+install:
+  external: true
+  probe:
+    - "~/AppData/Local/mcu-tools/openocd"
+    - "C:/Program Files/OpenOCD"
+    - "/usr/local/bin"
+    - "/usr/bin"
+  binaries:
+    - "openocd"
+  purpose: "STM32 SWD 烧录 + 调试（DAPLink / CMSIS-DAP）"
+  targets: "scripts/target/*.cfg（333 个，含 26 个 stm32*）；STM32H743ZITx 见 stm32h7x.cfg"
+  register: "docs/路径分区标准.md §3.1 E3"

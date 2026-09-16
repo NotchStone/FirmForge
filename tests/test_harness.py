@@ -12,7 +12,7 @@ INO_DIR = ROOT / "boards" / "arduino_mega" / "apps" / "test_ino"
 
 def run_verify(app_dir):
     t0 = time.time()
-    state = ROOT / ".firmforge" / "state.json"
+    state = ROOT / ".ff-run" / "state.json"
     if state.exists(): state.write_text("{}")
     try:
         r = subprocess.run([PYTHON, "-m", "firmforge", "run", "arduino_mega", "--app", app_dir],

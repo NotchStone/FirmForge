@@ -33,7 +33,7 @@ for name in targets:
         print(f"[SKIP] {name} — not found")
         continue
     
-    state = ROOT / ".firmforge" / "state.json"
+    state = ROOT / ".ff-run" / "state.json"
     if state.exists(): state.write_text("{}")
     
     t0 = time.time()
