@@ -1,13 +1,16 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "knowledge/schema/registers.schema.json",
   "$id": "knowledge/reference/avr/atmega2560/registers.json",
   "platform": "arduino",
   "mcu": "ATmega2560",
   "mcu_series": "avr",
   "version": "2.0.0",
-  "source": "ATmega2560 datasheet (Microchip DS40002591B)",
+  "source": "ATmega640/1280/1281/2560/2561 datasheet (Atmel 2549) + avr-libc iomxx0_1.h",
   "description": "ATmega2560 complete register map — all 11 ports, 6 timers, 4 USARTs, SPI, TWI, ADC",
   "license": "Fair use - datasheet reference data",
+  "_revision": [
+    "2026-09-16: 按 avr-libc iomxx0_1.h + Atmel 2549 数据手册交叉修正 —— 端口 H–L 地址 12 条 (0x35..0x43 → 0x100..0x10B)；EEAR 口径 (0x21 → 0x41)；ASSR 位号 6 条 (整块错位)；UCSR0B/1B/2B/3B 位名 8 条 (TXBx8 → TXB8x)；顶层 source 由查无此号的 DS40002591B 改为已核实的 Atmel 2549。"
+  ],
   "register_groups": {
     "gpio": {
       "description": "General Purpose I/O — 11 ports (A-L, no port I)",
@@ -140,73 +143,73 @@
         },
         {
           "name": "PINH",
-          "address": "0x35",
+          "address": "0x100",
           "size": 8,
           "description": "Port H Input Pins"
         },
         {
           "name": "DDRH",
-          "address": "0x36",
+          "address": "0x101",
           "size": 8,
           "description": "Port H Data Direction"
         },
         {
           "name": "PORTH",
-          "address": "0x37",
+          "address": "0x102",
           "size": 8,
           "description": "Port H Data"
         },
         {
           "name": "PINJ",
-          "address": "0x3B",
+          "address": "0x103",
           "size": 8,
           "description": "Port J Input Pins"
         },
         {
           "name": "DDRJ",
-          "address": "0x3C",
+          "address": "0x104",
           "size": 8,
           "description": "Port J Data Direction"
         },
         {
           "name": "PORTJ",
-          "address": "0x3D",
+          "address": "0x105",
           "size": 8,
           "description": "Port J Data"
         },
         {
           "name": "PINK",
-          "address": "0x3E",
+          "address": "0x106",
           "size": 8,
           "description": "Port K Input Pins"
         },
         {
           "name": "DDRK",
-          "address": "0x3F",
+          "address": "0x107",
           "size": 8,
           "description": "Port K Data Direction"
         },
         {
           "name": "PORTK",
-          "address": "0x40",
+          "address": "0x108",
           "size": 8,
           "description": "Port K Data"
         },
         {
           "name": "PINL",
-          "address": "0x41",
+          "address": "0x109",
           "size": 8,
           "description": "Port L Input Pins"
         },
         {
           "name": "DDRL",
-          "address": "0x42",
+          "address": "0x10A",
           "size": 8,
           "description": "Port L Data Direction"
         },
         {
           "name": "PORTL",
-          "address": "0x43",
+          "address": "0x10B",
           "size": 8,
           "description": "Port L Data"
         }
@@ -1853,18 +1856,25 @@
           "description": "Asynchronous Status Register",
           "fields": [
             {
-              "name": "TCR2AUB",
+              "name": "TCR2BUB",
               "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Control B Update Busy"
+            },
+            {
+              "name": "TCR2AUB",
+              "bit": 1,
               "access": "rw",
               "reset": 0,
               "description": "TC2 Control A Update Busy"
             },
             {
-              "name": "TCR2BUB",
-              "bit": 1,
+              "name": "OCR2BUB",
+              "bit": 2,
               "access": "rw",
               "reset": 0,
-              "description": "TC2 Control B Update Busy"
+              "description": "Output Compare 2B Update Busy"
             },
             {
               "name": "OCR2AUB",
@@ -1874,29 +1884,22 @@
               "description": "Output Compare 2A Update Busy"
             },
             {
-              "name": "OCR2BUB",
-              "bit": 4,
-              "access": "rw",
-              "reset": 0,
-              "description": "Output Compare 2B Update Busy"
-            },
-            {
               "name": "TCN2UB",
-              "bit": 5,
+              "bit": 4,
               "access": "rw",
               "reset": 0,
               "description": "TC2 Update Busy"
             },
             {
               "name": "AS2",
-              "bit": 6,
+              "bit": 5,
               "access": "rw",
               "reset": 0,
               "description": "Asynchronous TC2"
             },
             {
               "name": "EXCLK",
-              "bit": 7,
+              "bit": 6,
               "access": "rw",
               "reset": 0,
               "description": "Enable External Clock"
@@ -2241,14 +2244,14 @@
           "description": "USART0 Control & Status B",
           "fields": [
             {
-              "name": "TXB08",
+              "name": "TXB80",
               "bit": 0,
               "access": "rw",
               "reset": 0,
               "description": "Transmit Data Bit 8"
             },
             {
-              "name": "RXB08",
+              "name": "RXB80",
               "bit": 1,
               "access": "rw",
               "reset": 0,
@@ -2451,14 +2454,14 @@
           "description": "USART1 Control & Status B",
           "fields": [
             {
-              "name": "TXB18",
+              "name": "TXB81",
               "bit": 0,
               "access": "rw",
               "reset": 0,
               "description": "Transmit Data Bit 8"
             },
             {
-              "name": "RXB18",
+              "name": "RXB81",
               "bit": 1,
               "access": "rw",
               "reset": 0,
@@ -2661,14 +2664,14 @@
           "description": "USART2 Control & Status B",
           "fields": [
             {
-              "name": "TXB28",
+              "name": "TXB82",
               "bit": 0,
               "access": "rw",
               "reset": 0,
               "description": "Transmit Data Bit 8"
             },
             {
-              "name": "RXB28",
+              "name": "RXB82",
               "bit": 1,
               "access": "rw",
               "reset": 0,
@@ -2871,14 +2874,14 @@
           "description": "USART3 Control & Status B",
           "fields": [
             {
-              "name": "TXB38",
+              "name": "TXB83",
               "bit": 0,
               "access": "rw",
               "reset": 0,
               "description": "Transmit Data Bit 8"
             },
             {
-              "name": "RXB38",
+              "name": "RXB83",
               "bit": 1,
               "access": "rw",
               "reset": 0,
@@ -3514,7 +3517,7 @@
         },
         {
           "name": "EEAR",
-          "address": "0x21",
+          "address": "0x41",
           "size": 16,
           "description": "EEPROM Address Register (16-bit alias)",
           "source": "avr-gcc <iomxx0_1.h>"

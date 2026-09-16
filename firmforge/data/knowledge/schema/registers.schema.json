@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge/schema/registers.schema.json",
+  "title": "FirmForge Register Map",
+  "description": "芯片寄存器映射的合约。knowledge_base.py 用宽松的 .get('register_groups', {}) 解析 —— 格式写错不会抛异常，只会静默返回空，进而让 S2 寄存器审查全部变成漏检。本 schema 是那个静默失败的唯一拦截点，也是「批处理生成 + 机器判定合格」得以成立的前提（标准 §9.2）。",
+  "type": "object",
+  "required": ["platform", "mcu", "mcu_series", "version", "register_groups"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "本文件遵循的 schema。生成器应写 'knowledge/schema/registers.schema.json'。"
+    },
+    "$id": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string",
+      "minLength": 1,
+      "description": "平台标识，与 providers/__init__.py 注册表一致（arduino / stm32 ...）。"
+    },
+    "mcu": {
+      "type": "string",
+      "minLength": 1,
+      "description": "精确型号，如 ATmega2560。**同 die 的不同料号应各自成文**（数据可重复，见标准 §9）。"
+    },
+    "mcu_series": {
+      "type": "string",
+      "minLength": 1,
+      "description": "家族标识（avr / stm32h7 ...），用于路由寄存器命名风格。"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "本文件格式版本，非芯片版本。格式变更时递增，生成器与 lock.json 共同依赖它。"
+    },
+    "source": {
+      "type": "string",
+      "description": "数据来源。真机验证过的写器件手册编号；从器件头生成的写头文件名。"
+    },
+    "description": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "register_groups": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "按外设分组。key 为组名（gpio / tc0 / usart0 ...）。",
+      "additionalProperties": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "_schema_rules": {
+      "type": "object",
+      "description": "生成规则自述，供人工核对（排序策略、别名来源等）。不属于数据。"
+    }
+  },
+  "$defs": {
+    "group": {
+      "type": "object",
+      "required": ["registers"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "registers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/register"
+          }
+        }
+      }
+    },
+    "register": {
+      "type": "object",
+      "required": ["name", "address"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "寄存器名，须是合法 C 标识符 —— 它会原样出现在被审查的源码里。"
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9A-Fa-f]{1,8}$",
+          "description": "**字符串**形式的十六进制地址（如 '0x20'）。不用整数：@ 形式与内存映射地址混用时会丢信息。"
+        },
+        "size": {
+          "type": "integer",
+          "enum": [8, 16, 32],
+          "description": "位宽。缺省视为 8。"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "单个寄存器的来源标记（datasheet / avr-gcc alias 等）。与顶层 source 并存：同一份文件里可能混有两类来源。"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["name", "bit"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "bit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31,
+          "description": "位偏移。32 位寄存器为 0–31，故上限 31 而非 7。"
+        },
+        "access": {
+          "enum": ["r", "w", "rw", "ro", "wo"],
+          "description": "读写权限。AVR 数据手册通常不标，统一记 rw。"
+        },
+        "reset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "复位值。"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

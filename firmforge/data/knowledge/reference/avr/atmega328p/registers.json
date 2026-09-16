@@ -1,13 +1,16 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "knowledge/schema/registers.schema.json",
   "$id": "knowledge/reference/avr/atmega328p/registers.json",
   "platform": "arduino",
   "mcu": "ATmega328P",
   "mcu_series": "avr",
   "version": "2.0.0",
-  "source": "ATmega328P datasheet (Microchip DS40002061B)",
+  "source": "ATmega328P datasheet (Microchip DS40002061B) + avr-libc iom328p.h",
   "description": "ATmega328P complete register map — all peripherals with bit-field definitions",
   "license": "Fair use - datasheet reference data",
+  "_revision": [
+    "2026-09-16: 按 avr-libc iom328p.h + Microchip DS40002061B 交叉修正 —— EEAR 口径 (0x21 → 0x41)；ASSR 位号 6 条 (整块错位)；MCUCR.BODSE (7 → 5)；删除 UBRR0H.URSEL0 —— ATmega328P 无此位。"
+  ],
   "register_groups": {
     "gpio": {
       "description": "General Purpose I/O — Ports B, C, D",
@@ -740,18 +743,25 @@
           "description": "Asynchronous Status Register",
           "fields": [
             {
-              "name": "TCR2AUB",
+              "name": "TCR2BUB",
               "bit": 0,
+              "access": "rw",
+              "reset": 0,
+              "description": "TC2 Control Register B Update Busy"
+            },
+            {
+              "name": "TCR2AUB",
+              "bit": 1,
               "access": "rw",
               "reset": 0,
               "description": "TC2 Control Register A Update Busy"
             },
             {
-              "name": "TCR2BUB",
-              "bit": 1,
+              "name": "OCR2BUB",
+              "bit": 2,
               "access": "rw",
               "reset": 0,
-              "description": "TC2 Control Register B Update Busy"
+              "description": "Output Compare 2B Update Busy"
             },
             {
               "name": "OCR2AUB",
@@ -761,29 +771,22 @@
               "description": "Output Compare 2A Update Busy"
             },
             {
-              "name": "OCR2BUB",
-              "bit": 4,
-              "access": "rw",
-              "reset": 0,
-              "description": "Output Compare 2B Update Busy"
-            },
-            {
               "name": "TCN2UB",
-              "bit": 5,
+              "bit": 4,
               "access": "rw",
               "reset": 0,
               "description": "TC2 Update Busy"
             },
             {
               "name": "AS2",
-              "bit": 6,
+              "bit": 5,
               "access": "rw",
               "reset": 0,
               "description": "Asynchronous TC2"
             },
             {
               "name": "EXCLK",
-              "bit": 7,
+              "bit": 6,
               "access": "rw",
               "reset": 0,
               "description": "Enable External Clock Input"
@@ -1253,16 +1256,7 @@
           "name": "UBRR0H",
           "address": "0xC5",
           "size": 8,
-          "description": "USART Baud Rate High",
-          "fields": [
-            {
-              "name": "URSEL0",
-              "bit": 7,
-              "access": "rw",
-              "reset": 0,
-              "description": "Register Select"
-            }
-          ]
+          "description": "USART Baud Rate High"
         },
         {
           "name": "UBRR0L",
@@ -1681,7 +1675,7 @@
         },
         {
           "name": "EEAR",
-          "address": "0x21",
+          "address": "0x41",
           "size": 16,
           "description": "EEPROM Address (16-bit alias)",
           "source": "avr-gcc <iom328p.h>"
@@ -1864,18 +1858,18 @@
               "description": "Pull-up Disable"
             },
             {
+              "name": "BODSE",
+              "bit": 5,
+              "access": "rw",
+              "reset": 0,
+              "description": "BOD Sleep Enable"
+            },
+            {
               "name": "BODS",
               "bit": 6,
               "access": "rw",
               "reset": 0,
               "description": "BOD Sleep"
-            },
-            {
-              "name": "BODSE",
-              "bit": 7,
-              "access": "rw",
-              "reset": 0,
-              "description": "BOD Sleep Enable"
             }
           ]
         },
