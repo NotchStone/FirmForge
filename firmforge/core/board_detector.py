@@ -195,12 +195,25 @@ class BoardDetector:
         board_id: str,
         boards_dir: Path | None = None,
     ) -> dict[str, Any] | None:
-        """Resolve board_id to board definition (board.yaml or board.json)."""
+        """Resolve board_id to board definition (board.yaml or board.json).
+
+        **`board_id` 的唯一注入点。** 项目约定：**目录名即板卡身份** ——
+        板卡文件自身不声明 `board_id`（三个板卡一致）。在这里注入，使得
+        「配置知道自己是谁」成为不变量，而非调用方需要记得做的事：
+        管道 S1/S3/S4/S5、CLI、MCP 拿到的都直接可用。
+
+        此前只有 `_stage_detect` 注入过，而 S3/S4/S5 各自重新调用本方法，
+        注入随即丢失 —— STM32 的板级文件定位（`.ld` / `hal_conf.h` /
+        `include/`）因此拿到 `None`，错误一路拖到编译器才暴露。
+        """
         bd = Path(boards_dir or self._boards_dir)
         for filename in ("board.yaml", "board.json"):
             board_path = bd / board_id / filename
             if board_path.exists():
-                return self._load_board_file(board_path)
+                config = self._load_board_file(board_path)
+                if isinstance(config, dict):
+                    config["board_id"] = board_id
+                return config
         logger.warning("board.yaml/board.json not found for %s at %s",
                        board_id, bd / board_id)
         return None

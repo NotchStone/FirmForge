@@ -135,6 +135,18 @@ class Stm32BuildProvider(BuildProvider):
             return result
 
         sdk = self._resolve_sdk()
+        if sdk.problems:
+            # 缺件在构建前报清楚，别让编译器替它报 —— 否则报出来的是
+            # "fatal error: stm32h7xx_hal_conf.h: No such file or directory"，
+            # 离真实原因（板卡目录没定位到）隔了好几层。与 AVR 路线同语义，
+            # 见 _format_sdk_problems。
+            result.stderr = self._format_sdk_problems(sdk.problems)
+            result.errors = [BuildDiagnostic(severity="error",
+                                             message=result.stderr,
+                                             raw=result.stderr)]
+            result.elapsed_ms = (time.time() - start) * 1000
+            return result
+
         user_sources = self._collect_sources(src, out)
         if not user_sources:
             result.stderr = f"No source files {_SOURCE_EXTS} found in {src}"
@@ -202,12 +214,20 @@ class Stm32BuildProvider(BuildProvider):
         lay.cmsis_core_root = _pkg("cmsis_core")
 
         board_id = str(self._board_config.get("board_id", "") or "")
-        board_dir = boards_dir() / board_id if board_id else None
-        if not board_dir or not board_dir.is_dir():
+        board_dir: Path | None = None
+        if not board_id:
+            # 正常路径下 board_id 由 BoardDetector.resolve_board() 注入（唯一
+            # 注入点）；走到这里说明 provider 是被直接构造的，缺板卡身份。
             lay.problems.append(
-                f"板卡目录不存在：{boards_dir() / board_id if board_id else '(未提供 board_id)'}")
+                "配置缺少 board_id —— 板级文件（链接脚本 / hal_conf.h / "
+                "include/）无法定位。经管道或 resolve_board() 取配置即可避免。")
         else:
-            lay.board_dir = board_dir
+            board_dir = boards_dir() / board_id
+            if not board_dir.is_dir():
+                lay.problems.append(f"板卡目录不存在：{board_dir}")
+                board_dir = None
+            else:
+                lay.board_dir = board_dir
 
         # -- 板级文件（相对板卡目录）--------------------------------------
         for attr, key in (("linker_script", "linker_script"),
@@ -280,6 +300,17 @@ class Stm32BuildProvider(BuildProvider):
         if not src.is_dir():
             return f"Source directory not found: {src}"
         return ""
+
+    @staticmethod
+    def _format_sdk_problems(problems: list[str]) -> str:
+        """SDK / 板级文件不完整时给出可操作说明。
+
+        与 AVR 路线同语义：`arduino/build.py` 里 avr-gcc 缺失、`Arduino.h`
+        找不到，都是在构建前直接返回一句"缺什么、怎么办"。区别只是 STM32
+        一次性解析三件套 + 板级文件，所以把 AVR 的多处内联检查合并成
+        一次消费 `_SdkLayout.problems`。
+        """
+        return "STM32 SDK / 板级文件不完整：\n  - " + "\n  - ".join(problems)
 
     # ------------------------------------------------------------------
     # 编译

@@ -312,3 +312,50 @@ class TestBuildDiagnostics:
         error = result.errors[0]
         assert "error" in error.severity.lower()
         assert result.firmware_path is None
+
+
+# ---------------------------------------------------------------------------
+# 真实入口：配置链完整性
+#
+# 2026-10-10：STM32 侧因 fixture 手工补 `board_id` 掩盖了一次 P0 —— 测试与
+# 生产路径脱节，28 项全绿而 CLI 入口实际不可用。AVR 不依赖 board_id 所以没
+# 暴露，但"只走手写 config"这个覆盖缺口是**共同**的，这里补上。
+# ---------------------------------------------------------------------------
+
+
+class TestRealEntryConfig:
+    """用 `resolve_board()` 的真实配置验证字段契约（不再只手写 dict）。"""
+
+    def test_avr_boards_route_through_registry(self):
+        """两块 AVR 板卡经真实入口取配置，platform 必须能路由到 arduino。"""
+        from firmforge.core.board_detector import BoardDetector
+        from firmforge.providers import get_build_provider, get_flash_provider
+
+        detector = BoardDetector()
+        for bid in ("arduino_mega", "arduino_328p"):
+            cfg = detector.resolve_board(bid)
+            assert cfg is not None, f"{bid} 经真实入口解析失败"
+            assert cfg["board_id"] == bid
+            assert cfg["platform"] == "arduino"
+            assert get_build_provider(cfg["platform"], cfg) is not None
+            assert get_flash_provider(cfg["platform"], cfg) is not None
+
+    def test_f_cpu_read_from_real_config(self):
+        """`_parse_f_cpu` 读的是 `specs.clock` —— 用真实配置钉住字段名。"""
+        from firmforge.core.board_detector import BoardDetector
+        from firmforge.providers.arduino.build import ArduinoBuildProvider
+
+        cfg = BoardDetector().resolve_board("arduino_mega")
+        assert ArduinoBuildProvider._parse_f_cpu(cfg) == 16_000_000
+
+    def test_chip_to_mcu_and_variant_from_real_config(self):
+        """`mcu.chip` → `-mmcu` / variant 的映射在真实配置上成立。"""
+        from firmforge.core.board_detector import BoardDetector
+        from firmforge.providers.arduino.build import ArduinoBuildProvider
+
+        detector = BoardDetector()
+        expected = {"arduino_mega": "atmega2560", "arduino_328p": "atmega328p"}
+        for bid, mcu in expected.items():
+            builder = ArduinoBuildProvider(detector.resolve_board(bid))
+            assert builder._mcu == mcu, f"{bid} → -mmcu={builder._mcu}"
+            assert builder._resolve_variant() in ("mega", "standard")

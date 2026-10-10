@@ -12,12 +12,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 import pytest
-import yaml
 
+from firmforge.core.board_detector import BoardDetector
 from firmforge.core.resources import boards_dir
 from firmforge.providers import get_build_provider, get_flash_provider
 from firmforge.providers.gcc_diagnostics import parse_gcc_diagnostics
@@ -35,10 +36,16 @@ BOARD_ID = "gc_h743"
 
 @pytest.fixture(scope="module")
 def board_cfg() -> dict:
-    raw = yaml.safe_load(
-        (boards_dir() / BOARD_ID / "board.yaml").read_text(encoding="utf-8"))
-    raw["board_id"] = BOARD_ID
-    return raw
+    """**走真实入口**取配置 —— 不手工补任何字段。
+
+    2026-10-10 的 P0 教训：旧 fixture 手工 `raw["board_id"] = BOARD_ID`，
+    28 项测试因此全绿；而生产路径（`_stage_build` 重读配置）拿不到该字段，
+    板级文件定位失败。测试与实现形成了假绿闭环 —— 现在两者共用
+    `resolve_board()`（board_id 的唯一注入点）。
+    """
+    cfg = BoardDetector().resolve_board(BOARD_ID)
+    assert cfg is not None, f"无法经真实入口解析板卡 {BOARD_ID}"
+    return cfg
 
 
 def board_dir() -> Path:
@@ -378,3 +385,72 @@ def test_arduino_route_shares_the_same_parser() -> None:
     stderr = "sketch.ino:7:3: error: expected ';' before '}' token"
     assert ([d.message for d in ArduinoBuildProvider.parse_build_errors(None, stderr)]
             == [d.message for d in parse_gcc_diagnostics(stderr)])
+
+
+# --------------------------------------------------------------------------
+# 7. 配置链完整性 —— 2026-10-10 P0 的回归护栏
+#
+# 事故：`_stage_build` 各自重新 `resolve_board()`，S1 注入的 board_id 丢失
+# → `_resolve_sdk()` 定位不到板卡目录 → 错误一路拖到编译器，报的是
+#   "fatal error: stm32h7xx_hal_conf.h: No such file or directory"。
+# 下面四条把这个链条的每一环都钉住。
+# --------------------------------------------------------------------------
+
+
+def test_resolve_board_injects_dir_name_as_board_id() -> None:
+    """`resolve_board()` 是 board_id 的**唯一注入点**（目录名即板卡身份）。"""
+    cfg = BoardDetector().resolve_board(BOARD_ID)
+    assert cfg is not None
+    assert cfg["board_id"] == BOARD_ID
+
+
+def test_resolve_board_prefers_dir_name_over_file_field(tmp_path: Path) -> None:
+    """板卡文件里即便写了别的 board_id，也以**目录名**为准（单一权威）。"""
+    d = tmp_path / "demo_board"
+    d.mkdir()
+    (d / "board.json").write_text(
+        json.dumps({"board_id": "wrong", "platform": "stm32"}),
+        encoding="utf-8")
+    cfg = BoardDetector(boards_dir=tmp_path).resolve_board(
+        "demo_board", boards_dir=tmp_path)
+    assert cfg is not None
+    assert cfg["board_id"] == "demo_board"
+
+
+def test_sdk_layout_resolves_without_problems(board_cfg: dict) -> None:
+    """真实配置 → `_resolve_sdk()` 零 problems，板级文件全部命中。
+
+    这是 P0 的直接护栏：链接脚本、hal_conf.h、统一 include 目录，
+    一个都不能少。SDK 未安装时跳过（本层不该依赖下载态）。
+    """
+    builder = Stm32BuildProvider(board_cfg)
+    lay = builder._resolve_sdk()
+    if any("SDK 未安装" in p for p in lay.problems):
+        pytest.skip("本机未安装 STM32 SDK（B 区 packages/stm32/）")
+    assert lay.problems == [], f"SDK / 板级文件解析有问题：{lay.problems}"
+    assert Path(lay.linker_script).is_file(), "链接脚本未解析"
+    assert Path(lay.hal_conf).is_file(), "hal_conf.h 未解析"
+    joined = [p.replace("\\", "/") for p in lay.includes]
+    assert any(p.endswith("/include") for p in joined), \
+        f"头文件搜索路径缺板级 include：{lay.includes}"
+
+
+def test_build_consumes_sdk_problems(board_cfg: dict, tmp_path: Path,
+                                    monkeypatch) -> None:
+    """`build()` 必须消费 `_SdkLayout.problems` —— 构建前就报清楚。
+
+    此前不消费，编译器报的是"找不到头文件"，与真实原因隔了好几层。
+    与 AVR 路线同语义（缺件在构建前返回可操作说明）。
+    """
+    cfg = {k: v for k, v in board_cfg.items() if k != "board_id"}
+    builder = Stm32BuildProvider(cfg)
+    monkeypatch.setattr(builder, "_preflight", lambda src: "")  # 隔离工具链
+    src = tmp_path / "app"
+    src.mkdir()
+    (src / "main.c").write_text("int main(void){return 0;}", encoding="utf-8")
+
+    result = builder.build(str(src))
+    assert not result.success
+    assert "board_id" in result.stderr
+    assert "SDK / 板级文件不完整" in result.stderr
+    assert result.errors

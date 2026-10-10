@@ -461,9 +461,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             stage.elapsed_ms = (time.time() - t0) * 1000
             return stage
 
-        # Inject board_id into config for downstream consumers
-        config["board_id"] = board_id
-
+        # board_id 已由 resolve_board() 注入（唯一注入点），此处不再重复。
         stage.success = True
         stage.details = {"board_id": board_id, "config": config}
         stage.elapsed_ms = (time.time() - t0) * 1000
@@ -659,7 +657,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             )
             if not source_code.strip():
                 return None
-            # Enrich board_config with board_id for knowledge_base pin lookup
+            # board_id 已由 resolve_board() 注入；此处只需补 knowledge_base
+            # 引脚查询用的别名键（`board_alias_<alias>`）。board_id 的赋值
+            # 保留为幂等防御，兼容直接传入裸 config 的调用方（如测试）。
             enriched_config = dict(board_config or {})
             if board_id:
                 enriched_config["board_id"] = board_id
