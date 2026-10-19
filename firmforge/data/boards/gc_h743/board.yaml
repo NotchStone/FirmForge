@@ -155,7 +155,8 @@ constraints:
     # 480 MHz 下 Flash 需 7 个等待周期（VOS0 + 4.5 WS 以上），由时钟初始化负责
 
 schematic_source: manual_entry
-# 本板在项目内统一称 **GC-H743**，按主控型号命名，**不引用任何厂商型号/品牌**。
+# 本板在项目内统一称 **GC-H743**：**GC = General Control（通用控制）**，H743 = 主控型号；
+# **不引用任何厂商型号/品牌**。
 # 板级引脚事实来自原理图提取，见 .workbuddy/memory/MEMORY-REFERENCE.md §七
 board_ref:
   board: "GC-H743"
