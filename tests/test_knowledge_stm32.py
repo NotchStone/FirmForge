@@ -214,8 +214,8 @@ KNOWN_UNADJUDICATED_MISMATCHES = {
 
 @pytest.fixture(scope="module")
 def stm32_report() -> parity.Stm32Parity:
-    svd = parity._find_svd("STM32H743x.svd", REPO_ROOT)
-    header = parity._default_cmsis_include() / "stm32h743xx.h"
+    svd = parity.find_svd("STM32H743x.svd", REPO_ROOT)
+    header = parity.default_cmsis_include() / "stm32h743xx.h"
     if svd is None:
         pytest.skip("SVD 不在 ~/.firmforge/cache/knowledge/_sources/")
     if not header.is_file():

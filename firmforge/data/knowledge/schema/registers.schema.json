@@ -110,6 +110,10 @@
           "type": "string",
           "description": "单个寄存器的来源标记（datasheet / avr-gcc alias 等）。与顶层 source 并存：同一份文件里可能混有两类来源。"
         },
+        "address_source": {
+          "enum": ["svd", "header"],
+          "description": "地址经已裁定缺陷修正后取的是哪一边。缺省 = 两边一致。SVD 有多处「漏保留区导致后续寄存器整体偏移」的缺陷（如 Flash.PRAR_PRG2 差 0x100），照抄会让 S2 拿错地址比对。"
+        },
         "fields": {
           "type": "array",
           "items": {
@@ -150,6 +154,28 @@
         },
         "description": {
           "type": "string"
+        },
+        "svd_name": {
+          "type": "string",
+          "description": "SVD 里的原名（仅当与 name 不同时出现）。STM32 路线的 name 取**器件头宏基名**（源码里出现的是它，如 GPIO_MODER_MODER0_Pos 去掉 _Pos），SVD 的叫法（MODE0）留在这里供回溯。"
+        },
+        "name_source": {
+          "enum": ["norm", "digit", "prefix", "numbered"],
+          "description": "名字的命中档位。缺省 = exact（精确键）。norm/digit/prefix 是降级兜底，出现即说明两边命名口径不一致，核对时可优先看这些条目。"
+        },
+        "bit_source": {
+          "enum": ["svd", "header"],
+          "description": "位号经已裁定缺陷修正后，取的是哪一边的值。缺省 = 两边一致。"
+        },
+        "header_bit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31,
+          "description": "器件头给出的位号。仅在与 SVD 位号冲突且**未在裁定表登记**时出现 —— 这种数据是可疑的，比对报告会报，见 parity."
+        },
+        "bit_conflict": {
+          "type": "boolean",
+          "description": "位号冲突未裁定标记。true 表示 SVD 与器件头给出的位号不同、且不在已裁定缺陷表里，数据里保留 SVD 值但必须人工确认。"
         }
       }
     }

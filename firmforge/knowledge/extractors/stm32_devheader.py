@@ -227,6 +227,10 @@ class DeviceHeader:
                      必须是「整段前缀」：`TEFL` **不能**匹配 `TEFLL`
                      （那是一位转置、量级完全不同的两个字段），
                      只能匹配 `TEFL_XXX` 这种在后面加词的形式。
+        ``numbered`` 同寄存器 + **尾随编号相同**（SVD `MODE0` vs 器件头
+                     `MODER0`；SVD `PUPDR0` vs 器件头 `PUPD0`）。只兜
+                     拼法差异，不兜语义差异 —— 编号不带的字段不参与，
+                     所以 SVD 逐位展开的 `SADD1..9` 不会被配到 `SADD`。
         ``none``    查不到
         ``ambiguous`` 查到多值且实例前缀筛不掉 —— 真的判不了，必须报告
 
@@ -238,8 +242,31 @@ class DeviceHeader:
         报成冲突。宁可返回 `none`（进"命名口径未登记"清单，看得见），
         也不能拿别的外设的位号充数。
         """
-        for stage in ("exact", "norm", "digit", "prefix"):
-            index = (self.field_pos if stage in ("exact", "prefix")
+        macro, bit, stage = self._lookup(register, field, instance,
+                                         peripheral, group)
+        return (bit, stage) if macro else (None, stage)
+
+    def lookup_field_macro(self, register: str, field: str, instance: str,
+                           peripheral: str, group: str
+                           ) -> tuple[str | None, int | None, str]:
+        """同 `lookup_field`，但同时给出**器件头里的宏基名**。
+
+        生成知识库用的是它：源码里出现的是 `GPIO_MODER_MODER0_Pos`，
+        所以数据里要记 `GPIO_MODER_MODER0`（`_Pos` 已由解析器剥掉），
+        而不是 SVD 的叫法 `MODE0`。SVD 名另存 `svd_name` 供回溯。
+        """
+        return self._lookup(register, field, instance, peripheral, group)
+
+    def _lookup(self, register: str, field: str, instance: str,
+                peripheral: str, group: str
+                ) -> tuple[str | None, int | None, str]:
+        """四级档主循环，返回 ``(宏基名, 位号, 方式)``。
+
+        单拆一个方法，是为了让「查位号」与「查宏名」共用同一套档位与去重
+        规则 —— 两处各写一遍必然漂移（先例：GCC 诊断解析曾 avr/arm 各一份）。
+        """
+        for stage in ("exact", "norm", "digit", "prefix", "numbered"):
+            index = (self.field_pos if stage in ("exact", "prefix", "numbered")
                      else self.field_pos_norm)
             keys = [(r, f)
                     for r in _reg_keys(register, peripheral, group, stage)
@@ -252,13 +279,21 @@ class DeviceHeader:
                 if not cands:
                     continue
                 if len(cands) == 1:
-                    return cands[0], stage
-                return None, "ambiguous"
-        return None, "none"
+                    return cands[0][0], cands[0][1], stage
+                return None, None, "ambiguous"
+        return None, None, "none"
 
     def _pool(self, index: dict, key: tuple[str, str], stage: str,
-              instance: str, peripheral: str, group: str) -> list[int]:
-        """取该键下、属于本外设、且通过档位约束的位号集合（去重）。"""
+              instance: str, peripheral: str, group: str
+              ) -> list[tuple[str, int]]:
+        """取该键下、属于本外设、且通过档位约束的位域 ``(宏基名, 位号)``。
+
+        **按位号去重，不按宏名**：同一个 bit 常挂两个宏名
+        （`USART_ISR_RXNE` 与 `USART_ISR_RXNE_RXFNE` 是同一位的两种叫法）。
+        若按宏名计数，`len(cands) == 1` 这个「唯一命中」判定会凭空变严，
+        把原本唯一的命中报成 `ambiguous`。同一位号取**最短**宏名 ——
+        最短的通常是没有附加模式后缀的本名。
+        """
         if stage == "prefix":
             # 词边界前缀：`ISR.RXNE` 要找 `ISR.RXNE_RXFNE`，但 `ISR.TEFL`
             # 不能找 `ISR.TEFLL`（后者是一位转置，不是加词）。
@@ -267,6 +302,33 @@ class DeviceHeader:
                      for k, mm in index.items() if k[0] == key[0]
                      for n, v in mm.items()
                      if _is_token_prefix(want, k[1].split("_"))}
+        elif stage == "numbered":
+            # 同寄存器、**尾随编号相同**且**基名互为前缀**的位域。
+            # 只兜拼法差异，不兜语义差异：
+            #   SVD `MODE0`   ↔ 器件头 `MODER0`   （MODER 以 MODE 开头）✓
+            #   SVD `PUPDR0`  ↔ 器件头 `PUPD0`    （PUPDR 以 PUPD 开头）✓
+            #   SVD `DEDT0`   ↔ 器件头 `M0`       （DEDT / M 无前缀关系）✗
+            # 最后一条实测会误配到 bit 12（M0 是 USART 的字长位），所以
+            # 「基名互为前缀 + 短者至少 3 字符」是硬约束，不能省。
+            want_num = re.search(r"(\d+)$", key[1])
+            if want_num is None:
+                return []
+            num = want_num.group(1)
+            want_base = key[1][:want_num.start()]
+            if len(want_base) < 3:
+                return []
+            cands = {}
+            for k, mm in index.items():
+                if k[0] != key[0]:
+                    continue
+                m = re.search(r"(\d+)$", k[1])
+                if not m or m.group(1) != num:
+                    continue
+                base = k[1][:m.start()]
+                if (len(base) >= 3
+                        and (base.startswith(want_base)
+                             or want_base.startswith(base))):
+                    cands.update(mm)
         else:
             cands = index.get(key, {})
         scoped = {n: v for n, v in cands.items()
@@ -277,7 +339,11 @@ class DeviceHeader:
             # 只认单 bit 字段（理由见 docstring）
             scoped = {n: v for n, v in scoped.items()
                       if self.field_width.get(n, 1) == 1}
-        return sorted(set(scoped.values()))
+        best: dict[int, str] = {}
+        for macro, bit in sorted(scoped.items(),
+                                 key=lambda kv: (len(kv[0]), kv[0])):
+            best.setdefault(bit, macro)
+        return sorted(((m, b) for b, m in best.items()), key=lambda x: x[1])
 
 
 def _split_plus(expr: str) -> tuple[str, str] | None:

@@ -46,15 +46,27 @@ Ethernet MAC / USB OTG HS / JPEG。
 **这不是「同 die」的证据，是 ST 的数据缺陷。** 所以生成器只负责产数据，
 「对不对」由 `stm32_devheader`（器件头）做第二来源比对 —— 见
 `firmforge/knowledge/parity.py` 的 `compare_stm32()`。
+
+生成时用器件头做什么
+--------------------
+SVD 给**结构**（哪个寄存器在哪个地址、有哪些位），器件头给**名字与位号的
+最终裁决**：源码里出现的是 `GPIO_MODER_MODER0_Pos`，不是 SVD 的 `MODE0`。
+两边名字对上的，数据里存宏基名（`GPIO_MODER_MODER0`），SVD 名留 `svd_name`；
+位号不一致的按 `parity.STM32_KNOWN_ISSUES` 裁定，未裁定的打 `bit_conflict`
+标记 —— **不静默选一边**（静默选错等于把缺陷藏进数据里）。
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
+
+import firmforge.knowledge.extractors.stm32_devheader as dev
 
 #: 生成器版本 —— 参与 lock.json 的失效判定。
 #: **改提取逻辑必须递增它**，否则「改了规则但缓存没失效」会变成幽灵 bug。
@@ -263,6 +275,244 @@ def qualified_name(peripheral: str, register: str,
 
 
 # --------------------------------------------------------------------------
+# 第二来源对齐（器件头）
+# --------------------------------------------------------------------------
+
+
+def _pattern_match(pattern: str, value: str) -> bool:
+    """一个 `*` 的通配，**位置任意**。
+
+    `AWD*CR` 必须能匹配 `AWD3CR` —— 只支持尾部 `*` 的话，缺陷表里这 3 条
+    （ADC1/2/3 的 AWD*CR）全部失效，会给数据打上 3 个假冲突。
+    """
+    if "*" not in pattern:
+        return pattern == value
+    head, _, tail = pattern.partition("*")
+    return (len(value) >= len(head) + len(tail)
+            and value.startswith(head) and value.endswith(tail))
+
+
+def _known_issues() -> list[Any]:
+    """已裁定缺陷表 —— 延迟导入。
+
+    `parity` 顶层会 import `extractors` 包，包又 import 本模块；顶层反向
+    import 会成环（拿到的 `STM32_KNOWN_ISSUES` 还没定义）。
+    """
+    from firmforge.knowledge.parity import STM32_KNOWN_ISSUES
+    return STM32_KNOWN_ISSUES
+
+
+def _structural_peripherals() -> Any:
+    """建模粒度与器件头不同的外设（MDMA / DMA / HRTIM …）。
+
+    这些外设的寄存器被器件头拉平或分段，位域名对不上是**结构差异**，
+    与「命名口径不一致」要分开计 —— 混在一起会让报告失真。
+    """
+    from firmforge.knowledge.parity import STRUCTURAL_DIFFERENCES
+    return STRUCTURAL_DIFFERENCES
+
+
+def _adjudicate(known: list[Any], peripheral: str, register: str, kind: str,
+                field: str, svd_val: int, hdr_val: int) -> Any | None:
+    """通用裁定查询。``kind`` 取 base / offset / bit / bit_shift。
+
+    `bit` 类按**绝对值**对（小整数，稳定），其余按**增量**对
+    （`header - svd`）—— 增量才是缺陷本体，绝对地址随芯片变。
+    """
+    for ki in known:
+        if ki.peripheral != peripheral or ki.kind != kind:
+            continue
+        if not _pattern_match(ki.register, register):
+            continue
+        if kind == "bit":
+            if ki.field and not _pattern_match(ki.field, field):
+                continue
+            if (svd_val, hdr_val) != (ki.svd_value, ki.header_value):
+                continue
+        elif hdr_val - svd_val != ki.delta:
+            continue
+        return ki
+    return None
+
+
+def _adjudicate_bit(known: list[Any], peripheral: str, register: str,
+                    field: str, svd_bit: int, header_bit: int) -> Any | None:
+    """位号不一致：先按 `bit`（逐字段绝对值）对，再按 `bit_shift`
+    （整寄存器平移，BDMA 的 ISR/IFCR 偏 4）兜底。"""
+    for kind in ("bit", "bit_shift"):
+        ki = _adjudicate(known, peripheral, register, kind, field,
+                         svd_bit, header_bit)
+        if ki is not None:
+            return ki
+    return None
+
+
+def _member_offset(header: Any, struct: str, register: str,
+                   peripheral: str, group: str) -> tuple[str | None, int | None]:
+    """结构体里找同名成员，返回 ``(成员名, 偏移)``。
+
+    SVD 对部分外设把前缀写进寄存器名（`FDCAN_CCCR`），器件头成员是裸名，
+    所以按 `register_name_variants` 逐个试。
+    """
+    members = header.members(struct)
+    for variant in dev.register_name_variants(register, peripheral, group):
+        if variant in members:
+            return variant, members[variant]
+    return None, None
+
+
+def align_fields_with_header(parsed: dict[str, Any], header: Any, *,
+                             known_issues: list[Any] | None = None
+                             ) -> dict[str, Any]:
+    """把位域名换成**器件头里的宏基名**，位号冲突按裁定表定夺。
+
+    为什么要换名字：SVD 写 `GPIO.MODE0`，源码里出现的是
+    `GPIO_MODER_MODER0_Pos`。数据里留 SVD 名，S2 就永远对不上源码 token。
+    原名不丢 —— 存进 `svd_name`，用于回溯与两侧口径对照。
+
+    位号不一致时**不静默取一边**：
+
+    =========================  ============================================
+    ``bit_source: "header"``   裁定表判 SVD 错 → 取器件头值
+    ``bit_source: "svd"``      裁定表判器件头错 → 取 SVD 值
+    ``bit_conflict: true``     表里没有 → 保留 SVD 值 + 记 ``header_bit``，
+                               并计入 ``bits_conflict``，在交付统计里显形
+    =========================  ============================================
+
+    最后一条是兜底：将来若新增未裁定冲突，数据不会静默变「干净」，
+    而是带标记出来等人工处理。
+
+    返回对齐统计（写进 ``_generator.header.alignment``）。
+    """
+    known = _known_issues() if known_issues is None else known_issues
+    structural = _structural_peripherals()
+    stats: dict[str, Any] = {
+        "peripherals_mapped": 0,
+        "peripherals_unmapped": [],
+        "fields_aligned": 0,
+        "fields_renamed": 0,
+        # 名字没换成宏基名的三种原因，**必须分开计**：
+        #   unmatched   —— 器件头有位域宏、但名字对不上（真问题，要人工看）
+        #   structural  —— 该外设建模粒度与器件头不同（预期内，见
+        #                  parity.STRUCTURAL_DIFFERENCES）
+        #   not_modeled —— 器件头根本没给这个寄存器定义位域宏（覆盖性事实）
+        # 合并计会把上万条正常条目报成问题（首跑实测 10157）。
+        "fields_unmatched": 0,
+        "fields_structural": 0,
+        "fields_not_modeled": 0,
+        "fields_no_instance": 0,
+        "fields_ambiguous": 0,
+        # 寄存器地址：SVD 的 13 条缺陷里有多条是「漏保留区 / 偏移写错」，
+        # 不修就是 S2 拿错地址比对（PRAR_PRG2 曾整段差 0x100）。
+        "registers_corrected": 0,
+        "registers_conflict": 0,
+        "register_conflicts": [],
+        "bits_corrected": 0,
+        "bits_conflict": 0,
+        "corrections": [],
+        "conflicts": [],
+    }
+
+    for per in parsed["peripherals"]:
+        instance, how = dev.map_peripheral(header, per["name"])
+        per["header_instance"] = instance
+        per["header_mapping"] = how
+        if instance is None:
+            stats["peripherals_unmapped"].append(f"{per['name']}({how})")
+            # 内核外设 / 器件头无实例：这些位域本来就没有对应的宏，
+            # 归「无实例」而不是「命名问题」—— 否则 13 个内核外设会把
+            # unmatched 灌成 1500+，把真正要看的那 697 条淹掉。
+            stats["fields_no_instance"] += sum(
+                len(r.get("fields", ())) for r in per["registers"])
+            continue
+
+        stats["peripherals_mapped"] += 1
+        is_structural = per["name"] in structural
+        hbase = header.base_address(instance)
+        struct = header.instances[instance].struct
+        for reg in per["registers"]:
+            # --- 寄存器地址：按裁定表修正（漏保留区 / 偏移写错） ---------
+            if hbase is not None:
+                _, moff = _member_offset(header, struct, reg["name"],
+                                         per["name"], per["group_name"])
+                if moff is not None:
+                    svd_abs = per["base_address"] + reg["offset"]
+                    # **不加段内偏移**：结构体成员偏移已从器件头外设起点
+                    # 算起、天然含段偏移（Ethernet_MTL 的 MTLOMR 在 ETH
+                    # 结构体里就是 0xC00）。加了会重复计算，首跑实测把
+                    # Ethernet 的 8 个寄存器全报成假冲突。
+                    hdr_abs = hbase + moff
+                    if hdr_abs != svd_abs:
+                        ki = _adjudicate(known, per["name"], reg["name"],
+                                         "offset", "", svd_abs, hdr_abs)
+                        if ki is not None and ki.blame == "svd":
+                            reg["offset"] = hdr_abs - per["base_address"]
+                            reg["address_source"] = "header"
+                            stats["registers_corrected"] += 1
+                        elif ki is None:
+                            stats["registers_conflict"] += 1
+                            stats["register_conflicts"].append(
+                                f"{per['name']}.{reg['name']}: "
+                                f"svd 0x{svd_abs:X} vs header 0x{hdr_abs:X}")
+
+            fields = reg.get("fields")
+            if not fields:
+                continue
+            for fld in fields:
+                svd_name, svd_bit = fld["name"], fld["bit"]
+                macro, header_bit, stage = header.lookup_field_macro(
+                    reg["name"], svd_name, instance, per["name"],
+                    per["group_name"])
+                if macro is None:
+                    if stage == "ambiguous":
+                        stats["fields_ambiguous"] += 1
+                        continue
+                    variants = dev.register_name_variants(
+                        reg["name"], per["name"], per["group_name"])
+                    if not header.has_pos_macros(*variants):
+                        stats["fields_not_modeled"] += 1
+                    elif is_structural:
+                        stats["fields_structural"] += 1
+                    else:
+                        stats["fields_unmatched"] += 1
+                    continue
+
+                stats["fields_aligned"] += 1
+                if macro != svd_name:
+                    fld["name"] = macro
+                    fld["svd_name"] = svd_name
+                    stats["fields_renamed"] += 1
+                if stage != "exact":
+                    fld["name_source"] = stage
+
+                if header_bit is None or header_bit == svd_bit:
+                    continue
+                ki = _adjudicate_bit(known, per["name"], reg["name"],
+                                     svd_name, svd_bit, header_bit)
+                if ki is not None:
+                    if ki.blame == "header":
+                        fld["bit_source"] = "svd"
+                    else:
+                        fld["bit"] = header_bit
+                        fld["bit_source"] = "header"
+                    stats["bits_corrected"] += 1
+                    stats["corrections"].append(
+                        f"{per['name']}.{reg['name']}.{svd_name}: "
+                        f"{svd_bit} -> {fld['bit']}（判"
+                        f"{'器件头' if ki.blame == 'header' else 'SVD'}错）")
+                else:
+                    fld["header_bit"] = header_bit
+                    fld["bit_conflict"] = True
+                    stats["bits_conflict"] += 1
+                    stats["conflicts"].append(
+                        f"{per['name']}.{reg['name']}.{svd_name}: "
+                        f"svd {svd_bit} vs header {header_bit}")
+            fields.sort(key=lambda f: f["bit"])
+
+    return stats
+
+
+# --------------------------------------------------------------------------
 # 产出
 # --------------------------------------------------------------------------
 
@@ -274,16 +524,28 @@ def extract_stm32_registers(
     mcu_series: str = "stm32h7",
     platform: str = "stm32",
     chip_slug: str | None = None,
+    header_path: Path | str | None = None,
+    known_issues: list[Any] | None = None,
 ) -> dict[str, Any]:
-    """生成一份 registers.json 骨架。
+    """生成一份 registers.json。
 
     分组 key = 外设实例名（SVD 的权威层级，不是猜的）。
     寄存器 `name` 是裸名；绝对地址 = 外设基址 + 寄存器偏移。
+
+    给了 `header_path` 就走第二来源对齐（位域名取器件头宏基名、位号按
+    裁定表定夺）；不给则只产 SVD 原始骨架 —— 那种数据的位域名源码里
+    根本不会出现，**只配调试，不该入库**。
     """
     svd_path = Path(svd_path)
     t0 = time.time()
     parsed = parse_svd(svd_path)
     slug = chip_slug or mcu.lower()
+    alignment: dict[str, Any] | None = None
+    if header_path is not None:
+        header_path = Path(header_path)
+        alignment = align_fields_with_header(
+            parsed, dev.parse_device_header(header_path),
+            known_issues=known_issues)
 
     groups: dict[str, dict[str, Any]] = {}
     n_regs = n_fields = 0
@@ -300,6 +562,10 @@ def extract_stm32_registers(
                 entry["access"] = reg["access"]
             if "reset" in reg:
                 entry["reset"] = reg["reset"]
+            # 地址被裁定修正过就留痕 —— 否则「数据里的地址与 SVD 不同」
+            # 这件事无从追溯，下次比对会以为生成器算错了。
+            if reg.get("address_source"):
+                entry["address_source"] = reg["address_source"]
             if reg.get("fields"):
                 entry["fields"] = reg["fields"]
                 n_fields += len(reg["fields"])
@@ -337,6 +603,19 @@ def extract_stm32_registers(
             "svd_version": parsed["version"],
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "elapsed_ms": round((time.time() - t0) * 1000, 1),
+            "header": ({
+                "file": header_path.name,
+                "sha256": sha256_of(header_path),
+                "parser_version": dev.PARSER_VERSION,
+                "alignment": {
+                    **alignment,
+                    # 明细只留头部：正常应全是空列表，非空时前 50 条足够
+                    # 定位问题；全量以比对报告（parity）为准。
+                    "corrections": alignment["corrections"][:50],
+                    "conflicts": alignment["conflicts"][:50],
+                    "register_conflicts": alignment["register_conflicts"][:50],
+                },
+            } if header_path is not None else None),
             "counts": {
                 "peripherals": len(groups),
                 "registers": n_regs,
@@ -360,7 +639,148 @@ def default_svd_name(mcu_series: str = "stm32h7") -> str:
     return "STM32H743x.svd"
 
 
-def golden_registers_path(mcu: str, repo_root: Path) -> Path:
-    """本芯片知识库文件的目标路径（B 区，见 paths.knowledge_cache_dir）。"""
+def registers_path(mcu: str, platform: str = "stm32") -> Path:
+    """本芯片知识库文件的目标路径（B 区，见 `paths.knowledge_cache_dir`）。"""
     from firmforge.infrastructure import paths
-    return paths.knowledge_cache_dir() / "stm32" / mcu.lower() / "registers.json"
+    return (paths.knowledge_cache_dir() / platform / mcu.lower()
+            / "registers.json")
+
+
+def write_registers(result: dict[str, Any], path: Path | str) -> Path:
+    """写出 registers.json（UTF-8、不转义中文、末尾换行）。"""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def _display_path(path: Path) -> str:
+    """lock 里记 `~/...` 而不是绝对路径 —— 换机器后仍可读。"""
+    path = Path(path).resolve()
+    try:
+        return "~/" + path.relative_to(Path.home().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def build_lock(result: dict[str, Any], *, output_path: Path | str,
+               inputs: list[Path | str], params: dict[str, Any]
+               ) -> dict[str, Any]:
+    """lock.json —— derived 目录可被安全丢弃的唯一依据（分区标准 R6）。
+
+    四样指纹缺一不可：输入（源文件 SHA256）、生成器版本、参数指纹、
+    输出 SHA256。任一不符即视为失效：源变了要重生成，生成器改了要重生成，
+    参数（芯片 / 是否对齐）变了也要重生成。
+    """
+    out = Path(output_path)
+    inp = {_display_path(Path(p)): sha256_of(p) for p in inputs}
+    params_hash = hashlib.sha256(
+        json.dumps(params, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema": "knowledge/lock/v1",
+        "kind": "derived",
+        "generator": "firmforge.knowledge.extractors.stm32_registers",
+        "generator_version": EXTRACTOR_VERSION,
+        "params": params,
+        "params_hash": params_hash,
+        "inputs": inp,
+        "output": out.name,
+        "output_sha256": sha256_of(out),
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "counts": result.get("_generator", {}).get("counts", {}),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """命令行入口。
+
+    Usage::
+
+        python -m firmforge.knowledge.extractors.stm32_registers \\
+            [--mcu stm32h743zit6] [--svd PATH] [--header PATH] [--out PATH]
+    """
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="从厂商 CMSIS-SVD 生成 STM32 寄存器知识库（B 区）")
+    ap.add_argument("--mcu", default="stm32h743zit6")
+    ap.add_argument("--svd", type=Path, help="SVD 路径（缺省查 B 区缓存）")
+    ap.add_argument("--header", type=Path, help="器件头路径（缺省查 packages）")
+    ap.add_argument("--out", type=Path, help="输出路径（缺省 B 区 cache）")
+    ap.add_argument("--no-align", action="store_true",
+                    help="跳过器件头对齐（仅调试；产物位域名是 SVD 名）")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    args = ap.parse_args(argv)
+
+    from firmforge.knowledge.parity import (
+        STM32_DEVICES, default_cmsis_include, find_svd)
+
+    if args.mcu not in STM32_DEVICES:
+        print(f"未登记的器件: {args.mcu}（见 parity.STM32_DEVICES）",
+              file=sys.stderr)
+        return 2
+    svd_name, header_name = STM32_DEVICES[args.mcu]
+
+    svd = Path(args.svd) if args.svd else find_svd(svd_name, Path.cwd())
+    if svd is None or not svd.is_file():
+        print(f"找不到 SVD: {svd_name}（先下载到 B 区 cache/knowledge/_sources/）",
+              file=sys.stderr)
+        return 2
+
+    header: Path | None = None
+    if not args.no_align:
+        header = (Path(args.header) if args.header
+                  else default_cmsis_include() / header_name)
+        if not header.is_file():
+            print(f"找不到器件头: {header}", file=sys.stderr)
+            return 2
+
+    result = extract_stm32_registers(svd, mcu=args.mcu, header_path=header)
+    out = Path(args.out) if args.out else registers_path(args.mcu)
+    write_registers(result, out)
+
+    params = {"mcu": args.mcu, "mcu_series": "stm32h7",
+              "align": header is not None}
+    inputs: list[Path] = [svd] + ([header] if header else [])
+    lock = build_lock(result, output_path=out, inputs=inputs, params=params)
+    lock_path = out.parent / "lock.json"
+    lock_path.write_text(json.dumps(lock, ensure_ascii=False, indent=2) + "\n",
+                         encoding="utf-8")
+
+    counts = result["_generator"]["counts"]
+    align = (result["_generator"].get("header") or {}).get("alignment") or {}
+    if args.as_json:
+        print(json.dumps({"output": str(out), "lock": str(lock_path),
+                          "counts": counts, "alignment": align},
+                         ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"寄存器 {counts['registers']} / 位域 {counts['fields']} "
+          f"/ 外设 {counts['peripherals']}")
+    if align:
+        print(f"器件头对齐: 命中 {align['fields_aligned']}，"
+              f"改名 {align['fields_renamed']}")
+        print(f"  名字未对上的原因: 真命名问题 {align['fields_unmatched']}，"
+              f"结构差异 {align['fields_structural']}，"
+              f"器件头未建模 {align['fields_not_modeled']}，"
+              f"无实例 {align['fields_no_instance']}，"
+              f"歧义 {align['fields_ambiguous']}")
+        print(f"位号: 修正 {align['bits_corrected']}，"
+              f"未裁定冲突 {align['bits_conflict']}")
+        print(f"寄存器地址: 修正 {align['registers_corrected']}，"
+              f"未裁定冲突 {align['registers_conflict']}")
+        for conflict in align["register_conflicts"]:
+            print(f"  ! {conflict}")
+        for conflict in align["conflicts"]:
+            print(f"  ! {conflict}")
+        if align["peripherals_unmapped"]:
+            print("器件头无实例: " + ", ".join(align["peripherals_unmapped"]))
+    print(f"输出: {out}")
+    print(f"lock: {lock_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -24,7 +24,9 @@ Exit: 0 = 全部通过, 1 = 有失败, 2 = 运行环境缺依赖
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -37,8 +39,48 @@ def find_repo_root(start: Path) -> Path:
     raise SystemExit("not inside a git work tree")
 
 
+def _stm32_address_conflicts(payload: dict) -> list[str]:
+    """STM32 的同址多寄存器：SVD 用「一地址多视图」表达模式相关寄存器。
+
+    `TIMx.CCMR1_Output` / `CCMR1_Input`（同一寄存器的输出/输入两种解释）、
+    `OTG_*_Host` / `OTG_*_Device`（主机/设备模式）都同址，这是 SVD 的
+    合法写法，不是地址写错 —— 用 AVR 那套「16 位别名」判据会把它们
+    全部报成冲突（首跑实测 12 条）。
+
+    真正要报的是**同一外设内、名字只差编号**的同址条目：那意味着某个
+    寄存器的偏移算错了（Flash 的 PRAR_PRG1 / PRAR_PRG2 相差 0x100，
+    SVD 却写成同址）。生成器已按裁定表修正这类缺陷，这里是兜底。
+    """
+    out: list[str] = []
+    for gname, group in payload.get("register_groups", {}).items():
+        by_addr: dict[str, list[str]] = {}
+        for reg in group.get("registers", []) or []:
+            by_addr.setdefault(str(reg.get("address", "")), []).append(
+                str(reg.get("name", "")))
+        for addr, names in sorted(by_addr.items()):
+            if len(names) < 2:
+                continue
+            stems: list[str] = []
+            for name in names:
+                num = re.search(r"(\d+)$", name)
+                if num and len(num.group(1)) > 1 and num.group(1).startswith("0"):
+                    # 前导零编号（SPDIFRX 的 `DR_00` / `DR_01` / `DR_10`）
+                    # 是 SVD 的同址视图写法，不是「第 0/1 个」编号，
+                    # 保留全名，不参与归并。
+                    stems.append(name)
+                else:
+                    stems.append(re.sub(r"\d+$", "", name))
+            if len(set(stems)) < len(set(names)):
+                out.append(f"[{gname}] 地址 {addr} 上有名字仅差编号的寄存器: "
+                           f"{', '.join(names)}")
+    return out
+
+
 def address_conflicts(payload: dict) -> list[str]:
-    """同一地址被多个**不同**寄存器占用 —— 金标准内部自相矛盾。
+    """同一地址被多个**不同**寄存器占用 —— 数据内部自相矛盾。
+
+    按平台分流：AVR 用 16 位别名规则，STM32 用「视图」规则
+    （见 `_stm32_address_conflicts`）。
 
     合法例外：16 位寄存器与其字节视图同址，这是 avr-libc 的惯例 ——
     `EEAR` = `_SFR_IO16(0x21)` 与 `EEARL` = `_SFR_IO8(0x21)` 同址；
@@ -53,6 +95,9 @@ def address_conflicts(payload: dict) -> list[str]:
     （记成 0x35..0x43）的**副作用**，会让 S2 寄存器审查把端口访问
     误判成 EEPROM 访问。地址表内部矛盾，比单个地址写错更该拦。
     """
+    if str(payload.get("platform", "")).lower().startswith("stm32"):
+        return _stm32_address_conflicts(payload)
+
     by_addr: dict[str, list[tuple[str, int]]] = {}
     for group in payload.get("register_groups", {}).values():
         for reg in group.get("registers", []) or []:
@@ -74,10 +119,80 @@ def address_conflicts(payload: dict) -> list[str]:
     return out
 
 
+def b_zone_root() -> Path | None:
+    """B 区知识库根目录（`~/.firmforge/cache/knowledge`）。
+
+    这里放的是**生成器派生物**（known / buildable 级），不进 git；但正因为
+    它不进 git、review 时看不见，才更需要同一个校验器把关 —— 生成器改了
+    规则、缓存没失效，是这条链路上最容易出现的静默错误。
+    """
+    try:
+        from firmforge.infrastructure import paths
+        return paths.knowledge_cache_dir()
+    except Exception:                       # 单独运行、未装包时退到默认位置
+        cand = Path.home() / ".firmforge" / "cache" / "knowledge"
+        return cand if cand.is_dir() else None
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def lock_problems(out_dir: Path) -> list[str]:
+    """`lock.json` 自校验：输入指纹、输出指纹、生成器版本。
+
+    分区标准 R6 要求每个 derived 目录带 lock —— 它是「这个目录能不能
+    直接删掉重生成」的唯一依据。lock 与产物对不上，说明生成后文件被
+    手改过，或源已经变了而缓存没重建。
+    """
+    lock = out_dir / "lock.json"
+    if not lock.exists():
+        return ["缺 lock.json（derived 目录必须带，见分区标准 R6）"]
+
+    try:
+        data = json.loads(lock.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [f"lock.json 不是合法 JSON: {exc}"]
+
+    problems: list[str] = []
+    for raw, want in (data.get("inputs") or {}).items():
+        p = Path(raw.replace("~", str(Path.home()), 1))
+        if not p.is_file():
+            problems.append(f"lock.inputs 指向的文件不存在: {raw}")
+        elif sha256_of(p) != want:
+            problems.append(f"lock.inputs 指纹不符（源已变）: {raw}")
+
+    out_name = data.get("output")
+    if out_name:
+        out = out_dir / out_name
+        if not out.is_file():
+            problems.append(f"lock.output 指向的文件不存在: {out_name}")
+        elif sha256_of(out) != data.get("output_sha256"):
+            problems.append("output_sha256 与文件不符（生成后被改过）")
+
+    try:
+        from firmforge.knowledge.extractors.stm32_registers import (
+            EXTRACTOR_VERSION)
+        gen = data.get("generator_version")
+        if gen and gen != EXTRACTOR_VERSION:
+            problems.append(
+                f"生成器已升级（lock={gen}，当前={EXTRACTOR_VERSION}）"
+                f"—— 数据需重新生成")
+    except Exception:
+        pass
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json", action="store_true", dest="as_json",
                     help="machine-readable output")
+    ap.add_argument("--a-only", action="store_true",
+                    help="只校验 A 区（跳过 ~/.firmforge 的生成物）")
     args = ap.parse_args()
 
     try:
@@ -103,8 +218,19 @@ def main() -> int:
 
     results: list[dict] = []
 
-    for doc in sorted(ref_root.rglob("*.json")):
-        rel = doc.relative_to(data_root).as_posix()
+    targets: list[tuple[Path, str]] = [
+        (doc, doc.relative_to(data_root).as_posix())
+        for doc in sorted(ref_root.rglob("*.json"))
+    ]
+    b_root = None if args.a_only else b_zone_root()
+    b_docs: set[Path] = set()
+    if b_root is not None and b_root.is_dir():
+        for doc in sorted(b_root.rglob("registers.json")):
+            b_docs.add(doc)
+            targets.append(
+                (doc, "B区/" + doc.relative_to(b_root).as_posix()))
+
+    for doc, rel in targets:
         rec: dict = {"file": rel, "errors": [], "semantic": []}
         results.append(rec)
 
@@ -141,6 +267,8 @@ def main() -> int:
 
         if doc.name == "registers.json":
             rec["semantic"].extend(address_conflicts(payload))
+            if doc in b_docs:
+                rec["semantic"].extend(lock_problems(doc.parent))
 
     # --- cross-file: registers.mcu must agree with pins.mcu ---------------
     for chip_dir in sorted(p for p in ref_root.iterdir() if p.is_dir()):
