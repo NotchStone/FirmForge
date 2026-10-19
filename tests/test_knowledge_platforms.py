@@ -20,11 +20,13 @@ from pathlib import Path
 import pytest
 
 from firmforge.core.source_reviewer import SourceReviewer
+from firmforge.infrastructure.paths import scoped_chip_dir
 from firmforge.knowledge.knowledge_base import KnowledgeBase
 from firmforge.knowledge.platforms import (
     BOARD_PLATFORM_TO_LIBRARY,
     DEFAULT_LIBRARY,
     PARADIGM_TO_LIBRARY,
+    device_series,
     library_platform,
 )
 
@@ -60,14 +62,22 @@ def _write_json(path: Path, payload: dict) -> Path:
     return path
 
 
-def _a_zone(root: Path, platform: str, chip: str) -> Path:
-    """A 区芯片目录（``<root>/reference/<platform>/<chip>/``）。"""
-    return root / "reference" / platform / chip
+def _a_zone(root: Path, platform: str, chip: str,
+            series: str | None = None) -> Path:
+    """A 区芯片目录（``<root>/reference/<平台>/<系列>/<芯片>/``）。
+
+    系列缺省按芯片名推断，与生产代码同一规则 —— 测试里再写一遍折叠
+    逻辑，改层级时就会「测试通过、程序找不到」。
+    """
+    return scoped_chip_dir(root / "reference", platform,
+                           series or device_series(None, chip), chip)
 
 
-def _b_zone(root: Path, platform: str, chip: str) -> Path:
-    """B 区芯片目录（``<root>/<platform>/<chip>/``，root 即 cache/knowledge）。"""
-    return root / platform / chip
+def _b_zone(root: Path, platform: str, chip: str,
+            series: str | None = None) -> Path:
+    """B 区芯片目录（``<root>/<平台>/<系列>/<芯片>/``，root 即 cache/knowledge）。"""
+    return scoped_chip_dir(root, platform,
+                           series or device_series(None, chip), chip)
 
 
 class _RecordingKB(KnowledgeBase):
@@ -75,11 +85,12 @@ class _RecordingKB(KnowledgeBase):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.calls: list[tuple[str, str | None]] = []
+        self.calls: list[tuple[str, str | None, str | None]] = []
 
     def load_reference(self, platform: str = "avr",  # type: ignore[override]
-                       chip: str | None = None) -> bool:
-        self.calls.append((platform, chip))
+                       chip: str | None = None,
+                       series: str | None = None) -> bool:
+        self.calls.append((platform, chip, series))
         return True
 
 
@@ -205,7 +216,7 @@ class TestZoneLookup:
                            search_cache=False)
         assert kb.load_reference("stm32", chip="stm32h743zit6") is False
         assert kb.reference_sources("stm32", "stm32h743zit6") == [
-            ("A", a_root / "reference" / "stm32" / "stm32h743zit6")]
+            ("A", _a_zone(a_root, "stm32", "stm32h743zit6"))]
 
     def test_both_zones_missing(self, tmp_path):
         kb = KnowledgeBase(knowledge_dir=tmp_path / "a", cache_dir=tmp_path / "b")
@@ -337,13 +348,13 @@ class TestBoardRouting:
         kb = _RecordingKB(knowledge_dir=tmp_path, cache_dir=tmp_path,
                           search_cache=False)
         SourceReviewer.for_board(kb, paradigm="hal", chip="stm32h743zit6")
-        assert kb.calls == [("stm32", "stm32h743zit6")]
+        assert kb.calls == [("stm32", "stm32h743zit6", "stm32h7")]
 
     def test_for_board_routes_arduino_to_avr(self, tmp_path):
         kb = _RecordingKB(knowledge_dir=tmp_path, cache_dir=tmp_path,
                           search_cache=False)
         SourceReviewer.for_board(kb, paradigm="arduino", chip="atmega2560")
-        assert kb.calls == [("avr", "atmega2560")]
+        assert kb.calls == [("avr", "atmega2560", "avr")]
 
     def test_for_board_accepts_board_dict(self, tmp_path):
         kb = _RecordingKB(knowledge_dir=tmp_path, cache_dir=tmp_path,

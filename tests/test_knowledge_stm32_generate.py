@@ -22,9 +22,8 @@ import pytest
 
 from firmforge.knowledge.extractors import stm32_registers as gen
 
-REG_DIR = (Path.home() / ".firmforge" / "cache" / "knowledge"
-           / "stm32" / "stm32h743zit6")
-REG_PATH = REG_DIR / "registers.json"
+REG_PATH = gen.registers_path("stm32h743zit6")
+REG_DIR = REG_PATH.parent
 LOCK_PATH = REG_DIR / "lock.json"
 SCHEMA = (Path(__file__).resolve().parents[1] / "firmforge" / "data"
           / "knowledge" / "schema" / "registers.schema.json")
@@ -241,7 +240,7 @@ def test_generator_is_bit_reproducible(data, tmp_path):
         STM32_DEVICES, default_cmsis_include, find_svd)
 
     svd_name, header_name = STM32_DEVICES["stm32h743zit6"]
-    svd = find_svd(svd_name)
+    svd = find_svd(svd_name, "stm32h7")
     header = default_cmsis_include() / header_name
     if not svd.is_file() or not header.is_file():
         pytest.skip("源文件不全（SVD 或器件头）")

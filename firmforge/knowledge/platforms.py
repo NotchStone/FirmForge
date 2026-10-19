@@ -83,3 +83,38 @@ def library_platform(
             return key   # 调用方直接传库名（CLI --platform 走这条）
 
     return default
+
+
+#: STM32 型号前缀长度：``STM32H743ZIT6`` 前 7 字符就是系列 ``STM32H7``
+_STM32_SERIES_LEN = 7
+
+
+def device_series(
+    board: dict[str, Any] | None = None,
+    chip: str | None = None,
+) -> str | None:
+    """芯片所属**系列**（目录分层用，不是内核）。来源优先级：板卡声明 > 型号推断。
+
+    为什么要单列一层：STM32H7 与 STM32F1 的寄存器手册、SVD、HAL 版本
+    完全不相干，平铺在 ``stm32/<芯片>/`` 下迟早会混用。系列的权威来源
+    是 ``board.yaml: mcu.series``（GC-H743 写的是 ``stm32h7``）。
+
+    STM32 的型号命名本身带系列：``STM32H743ZIT6`` → ``STM32H7``，与
+    ``board.yaml`` 手写的值逐字相同，所以两种来源不会打架，推断只用于
+    「没有板卡定义、只有芯片名」的场合（CLI、生成器、测试）。
+
+    AVR 没有内部系列划分（ATmega/ATtiny 同属一份器件头），返回 ``avr``
+    —— 与平台同名，路径上会被折叠掉一层。识别不出则返回 ``None``。
+    """
+    if board:
+        declared = str((board.get("mcu") or {}).get("series") or "").strip()
+        if declared:
+            return declared.lower()
+
+    if chip:
+        name = str(chip).strip().lower()
+        if name.startswith("stm32") and len(name) >= _STM32_SERIES_LEN:
+            return name[:_STM32_SERIES_LEN]
+        if name.startswith("at") or name.startswith("avr"):
+            return "avr"
+    return None

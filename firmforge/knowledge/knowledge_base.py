@@ -5,12 +5,17 @@ Loads chip-specific reference data: registers, pins, bit-fields.
 两个数据源，按优先级排列
 ------------------------
 
-===========  ===============================================  ================
-来源         路径                                              生命周期
-===========  ===============================================  ================
-A 区（优先）  ``firmforge/data/knowledge/reference/<库>/<芯片>/``  承诺级（入库）
-B 区（兜底）  ``~/.firmforge/cache/knowledge/<库>/<芯片>/``       派生物（生成器产出）
-===========  ===============================================  ================
+===========  =========================================================  ================
+来源         路径                                                       生命周期
+===========  =========================================================  ================
+A 区（优先）  ``firmforge/data/knowledge/reference/<库>/<系列>/<芯片>/``  承诺级（入库）
+B 区（兜底）  ``~/.firmforge/cache/knowledge/<库>/<系列>/<芯片>/``        派生物（生成器产出）
+===========  =========================================================  ================
+
+**系列层不能省**：STM32H7 与 STM32F1 的寄存器手册、SVD、HAL 版本互不相干，
+平铺在 ``<库>/<芯片>/`` 下时「它们不是同一份数据」只存在于人脑里，迟早
+拿 H7 的表去审 F1 的代码。系列与库同名时折叠（AVR 只有一个系列），
+折叠规则见 ``infrastructure.paths.series_scope``。
 
 A 区优先的理由：A 区是人工核验过、跟版本一起发布的「产品承诺」；B 区是
 生成器按需重跑的骨架。同芯片两边都有时，入库的那份必须赢，否则
@@ -102,18 +107,27 @@ class KnowledgeBase:
                 return None
         return self._cache_dir
 
-    def reference_sources(self, platform: str, chip: str) -> list[tuple[str, Path]]:
-        """候选目录，按优先级排列。``(. 区标记, 目录)``。
+    def reference_sources(self, platform: str, chip: str,
+                          series: str | None = None,
+                          ) -> list[tuple[str, Path]]:
+        """候选目录，按优先级排列。``(区标记, 目录)``。
+
+        层级 ``<平台>/<系列>/<芯片>``；系列与平台同名时折叠（AVR）。
+        具体折叠规则见 ``paths.series_scope`` —— 全项目只在那里定义一次。
 
         Returns:
             ``[("A", <A 区目录>), ("B", <B 区目录>)]`` —— B 区按需省略。
         """
+        from firmforge.infrastructure.paths import scoped_chip_dir
+        if series is None:
+            from firmforge.knowledge.platforms import device_series
+            series = device_series(None, chip)
         out: list[tuple[str, Path]] = [
-            ("A", self._dir / "reference" / platform / chip.lower())
+            ("A", scoped_chip_dir(self._dir / "reference", platform, series, chip))
         ]
         root = self._cache_root()
         if root is not None:
-            out.append(("B", root / platform / chip.lower()))
+            out.append(("B", scoped_chip_dir(root, platform, series, chip)))
         return out
 
     @staticmethod
@@ -139,21 +153,28 @@ class KnowledgeBase:
         """
         if not board:
             return False
-        from firmforge.knowledge.platforms import library_platform
+        from firmforge.knowledge.platforms import device_series, library_platform
         platform = library_platform(board)
         chip = (board.get("mcu") or {}).get("chip")
         if not chip:
             logger.warning("load_for_board(): board %r has no mcu.chip",
                            board.get("board_id") or board.get("board_name"))
             return False
-        return self.load_reference(platform, chip=str(chip).lower())
+        return self.load_reference(platform, chip=str(chip).lower(),
+                                   series=device_series(board, str(chip)))
 
     def load_reference(self, platform: str = "avr",
-                        chip: str | None = None) -> bool:
+                        chip: str | None = None,
+                        series: str | None = None) -> bool:
         """Load register + pin reference data for a chip.
 
-        Path, A 区优先: knowledge/reference/<platform>/<chip>/registers.json
-                        B 区兜底: ~/.firmforge/cache/knowledge/<platform>/<chip>/
+        Path, A 区优先: knowledge/reference/<平台>/<系列>/<芯片>/registers.json
+                        B 区兜底: ~/.firmforge/cache/knowledge/<平台>/<系列>/<芯片>/
+
+        系列层避免「同平台不同代」混放：STM32H7 与 STM32F1 的寄存器手册、
+        SVD、HAL 版本互不相干，平铺在一层里迟早会被互相当成对方的数据。
+        系列缺省时按芯片名推断（``STM32H743ZIT6`` → ``stm32h7``，见
+        ``platforms.device_series``）；AVR 的系列与平台同名，路径上折叠。
 
         chip parameter is required — chip-level directories are the standard.
         """
@@ -162,7 +183,8 @@ class KnowledgeBase:
             return False
         chip = chip.lower()
 
-        sources = self.reference_sources(platform, chip)
+        # 系列推断在 reference_sources 里做（唯一的路径拼接点），这里不重复
+        sources = self.reference_sources(platform, chip, series)
         present = [(tag, d) for tag, d in sources if d.is_dir()]
         if not present:
             logger.warning("Reference directory not found: %s",
@@ -180,7 +202,13 @@ class KnowledgeBase:
                 reg_data = json.load(f)
             self._ref_cache[platform] = reg_data
 
-            # Build register index: name -> register entry
+            # 索引是「当前芯片」的视图，整体替换而不是累加：同一实例先加载
+            # H743 再加载 F103 时，累加会让两个系列的同名寄存器（CR/SR/DR）
+            # 互相覆盖，且覆盖率看上去还很高 —— 这类错误没有报错，只有错值。
+            new_index: dict[str, dict[str, Any]] = {}
+            new_qualified: dict[str, dict[str, Any]] = {}
+            new_dups: set[str] = set()
+
             for group_name, group in reg_data.get("register_groups", {}).items():
                 for reg in group.get("registers", []):
                     name = reg.get("name", "")
@@ -190,17 +218,21 @@ class KnowledgeBase:
                     reg_entry["_group"] = group_name
                     reg_entry["_platform"] = platform
                     key = name.upper()
-                    if key in self._register_index:
+                    if key in new_index:
                         # 同名跨组（STM32 常态）。保留第一个命中的，并记为
                         # 歧义 —— 后续按裸名的查找结果不再可信，调用方
                         # 应改用限定键。
-                        self._duplicate_register_names.add(key)
+                        new_dups.add(key)
                     else:
-                        self._register_index[key] = reg_entry
+                        new_index[key] = reg_entry
                         logger.debug("Indexed register: %s @ %s",
                                      name, reg.get("address", "?"))
-                    self._qualified_index.setdefault(
+                    new_qualified.setdefault(
                         f"{group_name}.{name}".upper(), reg_entry)
+
+            self._register_index = new_index
+            self._qualified_index = new_qualified
+            self._duplicate_register_names = new_dups
 
             logger.info("KnowledgeBase loaded %d registers (%d qualified) from %s",
                          len(self._register_index), len(self._qualified_index),
@@ -210,6 +242,7 @@ class KnowledgeBase:
 
         # Load pin mapping files (pins*.json)
         pin_tag, pin_files = self._first_match(present, "pins*.json")
+        new_pins: dict[int, dict[str, Any]] = {}
         for pin_file in pin_files:
             with open(pin_file, "r", encoding="utf-8") as f:
                 pin_data = json.load(f)
@@ -226,11 +259,14 @@ class KnowledgeBase:
             for pin_entry in pin_items:
                 arduino_pin = pin_entry.get("arduino_pin", -1)
                 if arduino_pin >= 0:
-                    self._pin_index[arduino_pin] = pin_entry
+                    new_pins[arduino_pin] = pin_entry
 
             logger.info("KnowledgeBase loaded %d pins from %s (board=%s)",
                          len(pin_data.get("pins", [])), pin_file, board_id)
             loaded_any = True
+        # 当前芯片没有 pin 表时同样清空：留着上一个芯片的引脚映射，
+        # 会让 lookup_pin(13) 在 STM32 上返回 AVR 的 PB5。
+        self._pin_index = new_pins
         if pin_files:
             origin["pins"] = {"zone": pin_tag,
                               "path": str(pin_files[0].parent)}

@@ -68,6 +68,35 @@ def cache_dir() -> Path:
     return firmforge_home() / "cache"
 
 
+# --------------------------------------------------------------------------
+# 芯片数据的目录分级：<平台>/<系列>/<芯片>
+# --------------------------------------------------------------------------
+
+def series_scope(platform: str, series: str | None) -> tuple[str, ...]:
+    """芯片数据的层前缀：``("<平台>",)`` 或 ``("<平台>", "<系列>")``。
+
+    同一平台下会有多代芯片系列（STM32H7 / STM32F1 / STM32F4 …），
+    它们的寄存器手册、SVD、HAL 版本互不相同。全部平铺在
+    ``<平台>/<芯片>/`` 时，"H7 和 F1 是不同的东西"这件事只存在于人脑里；
+    一旦哪天两个系列有同型号后缀或同版本号，就会安静地互相覆盖。
+    所以凡按芯片存放的数据目录一律三级，**芯片目录的父目录永远是系列**。
+
+    系列与平台同名时折叠一级：AVR 只有一个系列（``avr``），
+    路径仍是 ``avr/atmega2560/``，不制造 ``avr/avr/atmega2560/`` 这种空层。
+    """
+    plat = platform.strip().lower()
+    ser = (series or "").strip().lower()
+    if not ser or ser == plat:
+        return (plat,)
+    return (plat, ser)
+
+
+def scoped_chip_dir(root: Path | str, platform: str, series: str | None,
+                    chip: str) -> Path:
+    """拼出 ``<root>/<平台>[/<系列>]/<芯片>``。芯片名统一小写。"""
+    return Path(root).joinpath(*series_scope(platform, series), chip.strip().lower())
+
+
 def examples_dir() -> Path:
     """官方示例库（benchmark 料源）。"""
     return firmforge_home() / "examples"

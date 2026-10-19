@@ -758,19 +758,29 @@ STM32_DEVICES: dict[str, tuple[str, str]] = {
 }
 
 
-def find_svd(name: str) -> Path | None:
-    """SVD 的唯一来源：B 区 `cache/knowledge/_sources/`。
+def find_svd(name: str, series: str | None = None) -> Path:
+    """SVD 的取用路径：B 区 `cache/knowledge/_sources/<系列>/`。
 
     SVD 是**下载来的厂商物**（删了重新下载即可），按路径分区标准属 B 区，
     不该进 A 区；也**不该住在 `.ff-run/`** —— 那个目录是运行时，
     整块删除是它的正常用法，把它当厂家物的仓库会让「能不能删」失去答案
     （曾经就有一份 3.9 MB 的 SVD 副本躺在 `.ff-run/probe/` 里）。
 
+    **按系列分目录**：一份 SVD 只描述一个系列（H743 的 SVD 与 F103 的
+    毫无关系），平铺在一个 `_sources/` 下时，型号一多就分不清哪份属于哪代。
+    旧版平铺位置仍作为兜底查找，便于老环境直接跑通（下次生成即迁到新位置）。
+
     生成器（`stm32_registers`）与比对器共用这一份定位逻辑 —— 两处各写
     一遍会漂移成「报告能找到源、生成器找不到」。
+
+    Returns:
+        路径（**可能不存在**，调用方用 ``is_file()`` 判定）。
     """
     from firmforge.infrastructure import paths
-    return paths.knowledge_cache_dir() / "_sources" / name
+    root = paths.knowledge_cache_dir() / "_sources"
+    candidates = ([root / series.strip().lower() / name] if series else [])
+    candidates.append(root / name)          # 旧版平铺位置，兼容已装环境
+    return next((p for p in candidates if p.is_file()), candidates[0])
 
 
 def default_cmsis_include() -> Path:
@@ -788,7 +798,8 @@ def compare_stm32_all(repo_root: Path,
     include_dir = include_dir or default_cmsis_include()
     out: list[Stm32Parity] = []
     for mcu, (svd_name, header_name) in STM32_DEVICES.items():
-        svd = find_svd(svd_name)
+        from firmforge.knowledge.platforms import device_series
+        svd = find_svd(svd_name, device_series(None, mcu))
         header = Path(include_dir) / header_name
         if not svd.is_file() or not header.is_file():
             continue

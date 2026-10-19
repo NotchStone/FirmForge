@@ -256,19 +256,20 @@ class SourceReviewer:
         Routes by ``board`` (preferred) or ``paradigm``:
 
           board.yaml platform: arduino → reference/avr/<chip>/registers.json
-          board.yaml platform: stm32   → cache/knowledge/stm32/<chip>/registers.json
+          board.yaml platform: stm32   → cache/knowledge/stm32/<系列>/<chip>/registers.json
           paradigm hal                 → stm32（同 platform: stm32）
           paradigm stc / esp_idf       → stc / esp32
 
         映射表收在 ``firmforge.knowledge.platforms`` —— 之前写死在这里的
         局部 dict 缺 ``hal``，导致 STM32 芯片被拿到 AVR 目录下找。
         """
-        from firmforge.knowledge.platforms import library_platform
+        from firmforge.knowledge.platforms import device_series, library_platform
 
         platform = library_platform(board, paradigm)
         if chip is None and board:
             chip = (board.get("mcu") or {}).get("chip")
-        knowledge_base.load_reference(platform, chip=chip)
+        knowledge_base.load_reference(platform, chip=chip,
+                                      series=device_series(board, chip))
         return cls(knowledge_base)
 
     def validate(self, source_code: str,

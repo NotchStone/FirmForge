@@ -605,18 +605,24 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         历史默认，别再往这里加新平台分支，平台名不该在核心层出现。
         """
         platform = (board_config or {}).get("platform", "")
+        from firmforge.knowledge.platforms import device_series
+        series = device_series(board_config, chip)
         if getattr(self, "_knowledge_base_chip", None) != chip \
                 or getattr(self, "_knowledge_base_platform", None) != platform \
+                or getattr(self, "_knowledge_base_series", None) != series \
                 or not hasattr(self, "_knowledge_base"):
             from firmforge.knowledge.knowledge_base import KnowledgeBase
             from firmforge.knowledge.platforms import library_platform
             self._knowledge_base = KnowledgeBase()
             library = library_platform(board_config)
-            if not self._knowledge_base.load_reference(library, chip=chip):
-                logger.warning("KnowledgeBase empty for %s/%s — S2 register "
-                               "review will not resolve anything", library, chip)
+            if not self._knowledge_base.load_reference(library, chip=chip,
+                                                       series=series):
+                logger.warning("KnowledgeBase empty for %s/%s/%s — S2 register "
+                               "review will not resolve anything",
+                               library, series or "-", chip)
             self._knowledge_base_chip = chip
             self._knowledge_base_platform = platform
+            self._knowledge_base_series = series
 
     def _review_check(self, board_id: str | None, source_dir: str | None,
                         board_config: dict) -> SourceReviewResult | None:

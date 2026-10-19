@@ -640,10 +640,19 @@ def default_svd_name(mcu_series: str = "stm32h7") -> str:
     return "STM32H743x.svd"
 
 
-def registers_path(mcu: str, platform: str = "stm32") -> Path:
-    """本芯片知识库文件的目标路径（B 区，见 `paths.knowledge_cache_dir`）。"""
+def registers_path(mcu: str, platform: str = "stm32",
+                   series: str | None = None) -> Path:
+    """本芯片知识库文件的目标路径（B 区，见 `paths.knowledge_cache_dir`）。
+
+    层级 ``<平台>/<系列>/<芯片>``：系列缺省时按型号推断（``stm32h743zit6``
+    → ``stm32h7``）。同平台多代芯片不能平铺在一层 —— 见
+    ``paths.series_scope`` 的说明。
+    """
     from firmforge.infrastructure import paths
-    return (paths.knowledge_cache_dir() / platform / mcu.lower()
+    if series is None:
+        from firmforge.knowledge.platforms import device_series
+        series = device_series(None, mcu)
+    return (paths.scoped_chip_dir(paths.knowledge_cache_dir(), platform, series, mcu)
             / "registers.json")
 
 
@@ -710,6 +719,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="从厂商 CMSIS-SVD 生成 STM32 寄存器知识库（B 区）")
     ap.add_argument("--mcu", default="stm32h743zit6")
+    ap.add_argument("--series", help="芯片系列（缺省按型号推：stm32h743zit6 -> stm32h7）")
     ap.add_argument("--svd", type=Path, help="SVD 路径（缺省查 B 区缓存）")
     ap.add_argument("--header", type=Path, help="器件头路径（缺省查 packages）")
     ap.add_argument("--out", type=Path, help="输出路径（缺省 B 区 cache）")
@@ -720,17 +730,19 @@ def main(argv: list[str] | None = None) -> int:
 
     from firmforge.knowledge.parity import (
         STM32_DEVICES, default_cmsis_include, find_svd)
+    from firmforge.knowledge.platforms import device_series
 
     if args.mcu not in STM32_DEVICES:
         print(f"未登记的器件: {args.mcu}（见 parity.STM32_DEVICES）",
               file=sys.stderr)
         return 2
     svd_name, header_name = STM32_DEVICES[args.mcu]
+    series = args.series or device_series(None, args.mcu)
 
-    svd = Path(args.svd) if args.svd else find_svd(svd_name)
+    svd = Path(args.svd) if args.svd else find_svd(svd_name, series)
     if not svd.is_file():
-        print(f"找不到 SVD: {svd_name}（先下载到 B 区 cache/knowledge/_sources/）",
-              file=sys.stderr)
+        print(f"找不到 SVD: {svd_name}（先下载到 B 区 "
+              f"cache/knowledge/_sources/{series}/）", file=sys.stderr)
         return 2
 
     header: Path | None = None
@@ -743,11 +755,10 @@ def main(argv: list[str] | None = None) -> int:
 
     t0 = time.time()
     result = extract_stm32_registers(svd, mcu=args.mcu, header_path=header)
-    out = Path(args.out) if args.out else registers_path(args.mcu)
+    out = Path(args.out) if args.out else registers_path(args.mcu, series=series)
     write_registers(result, out)
 
-    params = {"mcu": args.mcu, "mcu_series": "stm32h7",
-              "align": header is not None}
+    params = {"mcu": args.mcu, "mcu_series": series, "align": header is not None}
     inputs: list[Path] = [svd] + ([header] if header else [])
     lock = build_lock(result, output_path=out, inputs=inputs, params=params,
                       elapsed_ms=(time.time() - t0) * 1000)

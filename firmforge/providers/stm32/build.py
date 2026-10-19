@@ -405,11 +405,22 @@ class Stm32BuildProvider(BuildProvider):
     # -- SDK 归档缓存 ----------------------------------------------------
 
     def _sdk_cache_dir(self, sdk: _SdkLayout) -> Path:
+        """SDK 编译缓存的单元目录。
+
+        层级与 AVR 侧统一为 ``cache/sdk/<平台>/<系列>/<版本>/<芯片>/``：
+        H7 与 F1 的 HAL/器件包版本互不相干，若只按「版本组合」分层，
+        两个系列一旦用到相同版本号组合就会互相顶掉 —— 而 hal.a 是按
+        目录复用的，顶掉的后果是「拿 H7 的 HAL 编 F1 的板子」。
+        """
         sdk_spec = self._build_cfg.get("sdk", {}) or {}
         hal_ver = (sdk_spec.get("hal", {}) or {}).get("version", "unknown")
         dev_ver = (sdk_spec.get("device", {}) or {}).get("version", "unknown")
-        mcu = str(self._board_config.get("mcu", {}).get("chip", "unknown")).lower()
-        return paths.sdk_cache_dir() / "stm32" / f"{hal_ver}_{dev_ver}" / mcu
+        mcu_spec = self._board_config.get("mcu", {}) or {}
+        mcu = str(mcu_spec.get("chip", "unknown")).lower()
+        series = mcu_spec.get("series")
+        return paths.sdk_cache_dir().joinpath(
+            *paths.series_scope("stm32", series),
+            f"{hal_ver}_{dev_ver}", mcu)
 
     def _sdk_archive(self, sdk: _SdkLayout, common_flags: list[str]) -> str | None:
         """若缓存有效，返回现成 hal.a 路径；否则 None（需要重建）。"""
