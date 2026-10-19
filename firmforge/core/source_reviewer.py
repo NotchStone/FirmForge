@@ -249,26 +249,25 @@ class SourceReviewer:
 
     @classmethod
     def for_board(cls, knowledge_base: KnowledgeBase,
-                  paradigm: str = "arduino", chip: str | None = None
-                  ) -> SourceReviewer:
+                  paradigm: str = "arduino", chip: str | None = None,
+                  board: dict[str, Any] | None = None) -> SourceReviewer:
         """Create a validator pre-loaded with the correct register library.
 
-        Routes to the platform-specific register reference based on paradigm:
-          - arduino → knowledge/reference/avr/<chip>/registers.json
-          - stc     → knowledge/reference/stc/<chip>/registers.json
-          - esp_idf → knowledge/reference/esp32/<chip>/registers.json
-          - register → same as platform-default
+        Routes by ``board`` (preferred) or ``paradigm``:
 
-        Falls back to platform-level registers.json if chip directory
-        doesn't exist.
+          board.yaml platform: arduino → reference/avr/<chip>/registers.json
+          board.yaml platform: stm32   → cache/knowledge/stm32/<chip>/registers.json
+          paradigm hal                 → stm32（同 platform: stm32）
+          paradigm stc / esp_idf       → stc / esp32
+
+        映射表收在 ``firmforge.knowledge.platforms`` —— 之前写死在这里的
+        局部 dict 缺 ``hal``，导致 STM32 芯片被拿到 AVR 目录下找。
         """
-        platform_map = {
-            "arduino": "avr",
-            "stc": "stc",
-            "esp_idf": "esp32",
-            "register": "avr",  # default
-        }
-        platform = platform_map.get(paradigm, "avr")
+        from firmforge.knowledge.platforms import library_platform
+
+        platform = library_platform(board, paradigm)
+        if chip is None and board:
+            chip = (board.get("mcu") or {}).get("chip")
         knowledge_base.load_reference(platform, chip=chip)
         return cls(knowledge_base)
 

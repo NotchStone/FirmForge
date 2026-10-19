@@ -207,7 +207,7 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
         chip = mcu.get("chip", "atmega328p").lower()
 
         knowledge_base = KnowledgeBase()
-        knowledge_base.load_reference("avr", chip=chip)
+        knowledge_base.load_for_board(config)
 
         topic_filter = topic.lower() if topic else ""
 

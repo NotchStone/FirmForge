@@ -65,6 +65,7 @@ class PipelineRunner:
         self._detector = BoardDetector(boards_dir=self._boards_dir)
         self._source_reviewer: SourceReviewer | None = None
         self._sr_chip: str | None = None  # chip of the cached source_reviewer
+        self._sr_platform: str = ""       # board.yaml platform of the cached reviewer
         self._confidence_scorer: ConfidenceScorer | None = None
 
     def _skipped_stage(self, stage_num: int, name: str, reason: str = "") -> PipelineStage:
@@ -562,34 +563,60 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         except Exception:
             return 58.0
 
+    def _resolve_board_config(self, board_id: str | None) -> dict[str, Any] | None:
+        """board_id → board.yaml 定义（含注入的 board_id）。解析失败返回 None。"""
+        if not board_id:
+            return None
+        try:
+            return self._detector.resolve_board(board_id, boards_dir=self._boards_dir)
+        except Exception:
+            return None
+
     def _resolve_chip(self, board_id: str | None) -> str:
         """Resolve chip name from board_id -> board.json -> mcu.chip."""
-        if board_id:
-            try:
-                detector = self._detector
-                config = detector.resolve_board(board_id, boards_dir=self._boards_dir)
-                if config and config.get("mcu", {}).get("chip"):
-                    return config["mcu"]["chip"].lower()
-            except Exception:
-                pass
+        config = self._resolve_board_config(board_id)
+        if config and config.get("mcu", {}).get("chip"):
+            return config["mcu"]["chip"].lower()
         return self._default_chip()
 
     def _get_source_reviewer(self, board_id: str | None = None) -> SourceReviewer:
-        chip = self._resolve_chip(board_id)
-        if self._sr_chip != chip or self._source_reviewer is None:
-            self._load_knowledge_base(chip)
+        config = self._resolve_board_config(board_id)
+        chip = ((config or {}).get("mcu", {}).get("chip") or "").lower() \
+            or self._default_chip()
+        # 缓存键含平台：同一芯片在不同板卡上可能走不同寄存器库（不可能，
+        # 但 `hal`/`arduino` 范式并存时平台路由不同，键里带上更安全）。
+        platform = (config or {}).get("platform", "")
+        if self._sr_chip != chip or self._sr_platform != platform \
+                or self._source_reviewer is None:
+            self._load_knowledge_base(chip, config)
             self._source_reviewer = SourceReviewer(self._knowledge_base)
             self._sr_chip = chip
-            logger.info("SourceReviewer init for chip=%s", chip)
+            self._sr_platform = platform
+            logger.info("SourceReviewer init for chip=%s platform=%s",
+                        chip, platform or "?")
         return self._source_reviewer
 
-    def _load_knowledge_base(self, chip: str) -> None:
-        """Load KnowledgeBase for the given chip, caching on self._knowledge_base."""
-        if getattr(self, "_knowledge_base_chip", None) != chip or not hasattr(self, "_knowledge_base"):
+    def _load_knowledge_base(self, chip: str,
+                             board_config: dict[str, Any] | None = None) -> None:
+        """Load KnowledgeBase for the given chip, caching on self._knowledge_base.
+
+        ``board_config`` 给了就按板卡路由平台（``board.yaml: platform`` →
+        寄存器库目录名，见 ``knowledge.platforms``）；没给则退回 AVR ——
+        历史默认，别再往这里加新平台分支，平台名不该在核心层出现。
+        """
+        platform = (board_config or {}).get("platform", "")
+        if getattr(self, "_knowledge_base_chip", None) != chip \
+                or getattr(self, "_knowledge_base_platform", None) != platform \
+                or not hasattr(self, "_knowledge_base"):
             from firmforge.knowledge.knowledge_base import KnowledgeBase
+            from firmforge.knowledge.platforms import library_platform
             self._knowledge_base = KnowledgeBase()
-            self._knowledge_base.load_reference("avr", chip=chip)
+            library = library_platform(board_config)
+            if not self._knowledge_base.load_reference(library, chip=chip):
+                logger.warning("KnowledgeBase empty for %s/%s — S2 register "
+                               "review will not resolve anything", library, chip)
             self._knowledge_base_chip = chip
+            self._knowledge_base_platform = platform
 
     def _review_check(self, board_id: str | None, source_dir: str | None,
                         board_config: dict) -> SourceReviewResult | None:
@@ -643,7 +670,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         try:
             if self._confidence_scorer is None:
                 chip = self._resolve_chip(board_id)
-                self._load_knowledge_base(chip)
+                self._load_knowledge_base(chip, self._resolve_board_config(board_id))
                 threshold = self._get_confidence_threshold()
                 self._confidence_scorer = ConfidenceScorer(self._knowledge_base, threshold=threshold)
             source_path = Path(source_dir)
