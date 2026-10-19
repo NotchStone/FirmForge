@@ -229,12 +229,13 @@ def test_lock_counts_match_the_payload(data):
 # --------------------------------------------------------------------------
 
 
-def test_generator_is_reproducible_on_real_sources(tmp_path):
-    """同一对源文件重跑，计数与对齐结论必须一致。
+def test_generator_is_bit_reproducible(data, tmp_path):
+    """同一对源文件重跑两次，输出**逐字节相同**。
 
-    `generated_at` / `elapsed_ms` 每次不同，所以不比整文件哈希 ——
-    比**结论**（计数、裁定次数、未裁定条目）。这些一变就说明生成器
-    的行为漂了。
+    这是 `derived` 成立的硬前提（分区标准 §3 / §8.3）：判据是「重新跑一遍
+    就能恢复」，恢复出来的必须与丢掉的那份一模一样，否则 lock 里
+    `output_sha256` 永远对不上，「一致即复用」就是空话。
+    时间戳、耗时这类元数据只许落在 lock.json，不许进数据文件。
     """
     from firmforge.knowledge.parity import (
         STM32_DEVICES, default_cmsis_include, find_svd)
@@ -245,17 +246,26 @@ def test_generator_is_reproducible_on_real_sources(tmp_path):
     if svd is None or not header.is_file():
         pytest.skip("源文件不全（SVD 或器件头）")
 
-    out = tmp_path / "registers.json"
-    result = gen.extract_stm32_registers(svd, mcu="stm32h743zit6",
-                                         header_path=header)
-    gen.write_registers(result, out)
+    digests = []
+    for i in range(2):
+        out = tmp_path / f"run{i}.json"
+        result = gen.extract_stm32_registers(svd, mcu="stm32h743zit6",
+                                             header_path=header)
+        gen.write_registers(result, out)
+        digests.append(gen.sha256_of(out))
 
-    align = result["_generator"]["header"]["alignment"]
-    assert result["_generator"]["counts"]["peripherals"] == 128
-    assert align["peripherals_mapped"] == 115
-    assert align["fields_aligned"] > 8000
-    assert align["registers_conflict"] == 0
-    assert align["bits_conflict"] == 1
+        if i == 0:
+            align = result["_generator"]["header"]["alignment"]
+            assert result["_generator"]["counts"]["peripherals"] == 128
+            assert align["peripherals_mapped"] == 115
+            assert align["fields_aligned"] > 8000
+            assert align["registers_conflict"] == 0
+            assert align["bits_conflict"] == 1
+
+    assert digests[0] == digests[1], "两次生成结果不一致 —— 生成器不确定"
+    # 数据文件里不许出现随时间变化的字段
+    assert "generated_at" not in data["_generator"]
+    assert "elapsed_ms" not in data["_generator"]
 
     lock = gen.build_lock(result, output_path=out, inputs=[svd, header],
                           params={"mcu": "stm32h743zit6"})

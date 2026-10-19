@@ -329,23 +329,67 @@ def check_r5(root: Path, rep: Report) -> None:
 # --------------------------------------------------------------------------
 
 
+def _derived_leaf_dirs(cache: Path) -> list[tuple[Path, str]]:
+    """找出**实际承载派生产物**的目录，返回 (目录, 产物说明)。
+
+    R6 的判据必须落在产物那一层，不是 `cache/` 根：`cache/` 只是容器，
+    它自己永远不会有一个 lock.json，按根判会永远报同一条无意义的警告。
+    """
+    leaves: list[tuple[Path, str]] = []
+
+    # 知识库：cache/knowledge/<platform>/<chip>/{registers,pins}.json
+    kb = cache / "knowledge"
+    if kb.is_dir():
+        for d in sorted(kb.rglob("*")):
+            if d.is_dir() and any((d / n).is_file()
+                                  for n in ("registers.json", "pins.json")):
+                leaves.append((d, "知识库数据"))
+
+    # SDK 编译缓存：缓存单元是含静态库（core.a / hal.a）的那一级；
+    # 其中的 *.o 按源码目录散放，不是独立缓存单元，不能拿来当判据
+    sdk = cache / "sdk"
+    if sdk.is_dir():
+        for d in sorted(sdk.rglob("*")):
+            if not d.is_dir():
+                continue
+            if any(p.is_file() and p.suffix == ".a" for p in d.iterdir()):
+                leaves.append((d, "SDK 编译缓存"))
+
+    return leaves
+
+
 def check_r6(rep: Report) -> None:
     home = user_home()
-    if not home.is_dir():
+    cache = home / "cache"
+    if not cache.is_dir():
         return
-    for sub in USER_DERIVED_SUBTREES:
-        d = home / sub
-        if not d.is_dir():
-            continue
-        has_lock = any((d / n).exists() for n in LOCK_NAMES)
-        if not has_lock:
-            rep.warn(
-                "R6",
-                f"~/.firmforge/{sub}/",
-                "derived 子树缺 lock.json（机制待引入，见标准 §9.2 第三步）",
-            )
 
-    # packages/*/ 内部若含自产 build/ 目录，属跨区归属混乱
+    # ① 派生物叶子目录：指纹文件必须在产物旁边
+    for leaf, kind in _derived_leaf_dirs(cache):
+        rel = f"~/.firmforge/{leaf.relative_to(home).as_posix()}/"
+        if any((leaf / n).is_file() for n in LOCK_NAMES):
+            rep.info("R6", rel, f"{kind}带 lock.json")
+        elif any((leaf / n).is_file() for n in MANIFEST_NAMES):
+            rep.warn("R6", rel,
+                     f"{kind}的指纹文件叫 manifest.json —— derived 的声明文件"
+                     "统一叫 lock.json（manifest 留给 vendor，标准 §5.2）")
+        else:
+            rep.warn("R6", rel, f"{kind}缺 lock.json，无法判断可否安全丢弃")
+
+    # ② 构建产物：整块可删、重编即恢复，复用键由 .ff-run/state.json 的
+    #    四指纹驱动，不按目录逐个写 lock（标准 §5.2 的意图是「丢弃前
+    #    能判定是否陈旧」，这里由 state.json 承担）
+    build = cache / "build"
+    if build.is_dir():
+        n = sum(1 for d in build.rglob("*") if d.is_dir()
+                and any((d / f).is_file()
+                        for f in ("firmware.hex", "firmware.elf")))
+        if n:
+            rep.info("R6", "~/.firmforge/cache/build/",
+                     f"{n} 个构建产物目录：复用由 state.json 四指纹判定，"
+                     "整块可删（重编即恢复）")
+
+    # ③ first-party 产物嵌在 vendor 子树内 —— 跨区归属混乱
     pkgs = home / "packages"
     if pkgs.is_dir():
         for build_dir in pkgs.rglob("build"):

@@ -537,7 +537,6 @@ def extract_stm32_registers(
     根本不会出现，**只配调试，不该入库**。
     """
     svd_path = Path(svd_path)
-    t0 = time.time()
     parsed = parse_svd(svd_path)
     slug = chip_slug or mcu.lower()
     alignment: dict[str, Any] | None = None
@@ -601,8 +600,10 @@ def extract_stm32_registers(
             "source_sha256": sha256_of(svd_path),
             "device": parsed["device"],
             "svd_version": parsed["version"],
-            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "elapsed_ms": round((time.time() - t0) * 1000, 1),
+            # 这里**不写时间戳与耗时**：派生物的判据是「同样的输入重新跑
+            # 一遍，结果 bit-identical」（分区标准 §3 / §8.3）。时间戳一进来，
+            # 输出 SHA256 每次都变，lock 就永远对不上，「一致即复用」失效。
+            # 生成时间属元数据，落在同目录的 lock.json 里。
             "header": ({
                 "file": header_path.name,
                 "sha256": sha256_of(header_path),
@@ -665,8 +666,8 @@ def _display_path(path: Path) -> str:
 
 
 def build_lock(result: dict[str, Any], *, output_path: Path | str,
-               inputs: list[Path | str], params: dict[str, Any]
-               ) -> dict[str, Any]:
+               inputs: list[Path | str], params: dict[str, Any],
+               elapsed_ms: float | None = None) -> dict[str, Any]:
     """lock.json —— derived 目录可被安全丢弃的唯一依据（分区标准 R6）。
 
     四样指纹缺一不可：输入（源文件 SHA256）、生成器版本、参数指纹、
@@ -678,7 +679,7 @@ def build_lock(result: dict[str, Any], *, output_path: Path | str,
     params_hash = hashlib.sha256(
         json.dumps(params, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
-    return {
+    lock: dict[str, Any] = {
         "schema": "knowledge/lock/v1",
         "kind": "derived",
         "generator": "firmforge.knowledge.extractors.stm32_registers",
@@ -691,6 +692,9 @@ def build_lock(result: dict[str, Any], *, output_path: Path | str,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "counts": result.get("_generator", {}).get("counts", {}),
     }
+    if elapsed_ms is not None:
+        lock["elapsed_ms"] = round(elapsed_ms, 1)
+    return lock
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -737,6 +741,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"找不到器件头: {header}", file=sys.stderr)
             return 2
 
+    t0 = time.time()
     result = extract_stm32_registers(svd, mcu=args.mcu, header_path=header)
     out = Path(args.out) if args.out else registers_path(args.mcu)
     write_registers(result, out)
@@ -744,7 +749,8 @@ def main(argv: list[str] | None = None) -> int:
     params = {"mcu": args.mcu, "mcu_series": "stm32h7",
               "align": header is not None}
     inputs: list[Path] = [svd] + ([header] if header else [])
-    lock = build_lock(result, output_path=out, inputs=inputs, params=params)
+    lock = build_lock(result, output_path=out, inputs=inputs, params=params,
+                      elapsed_ms=(time.time() - t0) * 1000)
     lock_path = out.parent / "lock.json"
     lock_path.write_text(json.dumps(lock, ensure_ascii=False, indent=2) + "\n",
                          encoding="utf-8")

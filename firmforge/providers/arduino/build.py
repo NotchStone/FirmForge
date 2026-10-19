@@ -605,11 +605,16 @@ class ArduinoBuildProvider(BuildProvider):
 
         # ── Core & Library Precompilation Cache ─────────────────────────
         # Core .o files are compiled once per MCU. SHA256 of every source is
-        # recorded in manifest.json and decides reuse — content hashing is
+        # recorded in lock.json and decides reuse — content hashing is
         # immune to mtime churn and git checkouts.
         #
         # Layout: <B 区>/cache/sdk/arduino/avr/1.8.6/{mcu}/
-        #             core.a · manifest.json · <source-tree>.o
+        #             core.a · lock.json · <source-tree>.o
+        #
+        # 声明文件叫 lock.json 而不是 manifest.json：这个目录是派生物
+        # （标准 §5.2），manifest 这个名字留给 vendor 子树，两者语义不同，
+        # 同名会让「这个目录能不能安全删掉」失去唯一答案。
+        # 旧缓存里的 manifest.json 仍可读（读时回退），下次写入即改名为 lock。
         #
         # 为什么不在 packages/ 里（标准 §5 R6）：packages/ 的语义是
         # 「厂家物，可整块删除重下」，而 core.a 删掉要重编约 55 秒，是派生物。
@@ -619,9 +624,12 @@ class ArduinoBuildProvider(BuildProvider):
                            / _sdk_cache_key(core_base) / self._mcu)
         build_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Manifest: {source_name: sha256} for all cached objects
+        # Lock: {source_name: sha256} for all cached objects
         import json as _json
-        manifest_path = build_cache_dir / "manifest.json"
+        manifest_path = build_cache_dir / "lock.json"
+        legacy_path = build_cache_dir / "manifest.json"
+        if not manifest_path.is_file() and legacy_path.is_file():
+            manifest_path = legacy_path          # 旧缓存兼容，写入时改回 lock
         manifest: dict[str, str] = {}
         if manifest_path.exists():
             manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -685,8 +693,13 @@ class ArduinoBuildProvider(BuildProvider):
                 ar_cmd = [os.path.join(gcc_dir, "avr-ar"), "rcs",
                           str(core_a)] + core_objs
                 subprocess.run(ar_cmd, capture_output=True, check=True)
-                manifest_path.write_text(
+                # 一律写 lock.json；若此前读的是旧 manifest.json，顺手清掉，
+                # 避免同一目录里两个声明文件并存、各说一套
+                lock_path = build_cache_dir / "lock.json"
+                lock_path.write_text(
                     _json.dumps(new_manifest, indent=2), encoding="utf-8")
+                if manifest_path != lock_path and manifest_path.is_file():
+                    manifest_path.unlink()
 
             # Step 2: link user code → user .o files only (no core in temp)
             user_obj_files: list[str] = []

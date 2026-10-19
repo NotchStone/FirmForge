@@ -417,11 +417,15 @@ class Stm32BuildProvider(BuildProvider):
             return None
         cache = self._sdk_cache_dir(sdk)
         archive = cache / "hal.a"
-        manifest_file = cache / "manifest.json"
-        if not archive.is_file() or not manifest_file.is_file():
+        # 声明文件统一叫 lock.json（派生物，标准 §5.2）；旧缓存的
+        # manifest.json 仍可读，下次重建即改名，不会让旧缓存白丢一次。
+        lock_file = cache / "lock.json"
+        if not lock_file.is_file():
+            lock_file = cache / "manifest.json"
+        if not archive.is_file() or not lock_file.is_file():
             return None
         try:
-            manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            manifest = json.loads(lock_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
         if manifest.get("__key__") != self._sdk_cache_key(sdk, common_flags):
@@ -503,11 +507,19 @@ class Stm32BuildProvider(BuildProvider):
             if r.returncode != 0:
                 return None, stdout_all, stderr_all, r.returncode
 
-            (cache / "manifest.json").write_text(json.dumps({
+            # 写 lock.json（派生物声明文件，标准 §5.2），并清掉旧名
+            lock_path = cache / "lock.json"
+            lock_path.write_text(json.dumps({
+                "schema": "cache/lock/v1",
+                "kind": "derived",
+                "generator": "firmforge.providers.stm32.build",
                 "__key__": self._sdk_cache_key(sdk, common_flags),
                 "__sources__": len(sources),
                 "__toolchain__": self.get_toolchain_version(),
             }, indent=2), encoding="utf-8")
+            legacy = cache / "manifest.json"
+            if legacy.is_file():
+                legacy.unlink()
             return str(archive), stdout_all, stderr_all, 0
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
