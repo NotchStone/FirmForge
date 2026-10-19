@@ -727,8 +727,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     svd_name, header_name = STM32_DEVICES[args.mcu]
 
-    svd = Path(args.svd) if args.svd else find_svd(svd_name, Path.cwd())
-    if svd is None or not svd.is_file():
+    svd = Path(args.svd) if args.svd else find_svd(svd_name)
+    if not svd.is_file():
         print(f"找不到 SVD: {svd_name}（先下载到 B 区 cache/knowledge/_sources/）",
               file=sys.stderr)
         return 2

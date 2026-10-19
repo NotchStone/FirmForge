@@ -241,9 +241,9 @@ def test_generator_is_bit_reproducible(data, tmp_path):
         STM32_DEVICES, default_cmsis_include, find_svd)
 
     svd_name, header_name = STM32_DEVICES["stm32h743zit6"]
-    svd = find_svd(svd_name, Path(__file__).resolve().parents[1])
+    svd = find_svd(svd_name)
     header = default_cmsis_include() / header_name
-    if svd is None or not header.is_file():
+    if not svd.is_file() or not header.is_file():
         pytest.skip("源文件不全（SVD 或器件头）")
 
     digests = []

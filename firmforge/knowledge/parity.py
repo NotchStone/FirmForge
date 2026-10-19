@@ -758,19 +758,19 @@ STM32_DEVICES: dict[str, tuple[str, str]] = {
 }
 
 
-def find_svd(name: str, repo_root: Path) -> Path | None:
-    """SVD 的查找顺序：B 区知识库缓存 → 本机探针目录。
+def find_svd(name: str) -> Path | None:
+    """SVD 的唯一来源：B 区 `cache/knowledge/_sources/`。
 
     SVD 是**下载来的厂商物**（删了重新下载即可），按路径分区标准属 B 区，
-    不该进 A 区。生成器（`stm32_registers`）与比对器共用这一份定位逻辑
-    —— 两处各写一遍会漂移成「报告能找到源、生成器找不到」。
+    不该进 A 区；也**不该住在 `.ff-run/`** —— 那个目录是运行时，
+    整块删除是它的正常用法，把它当厂家物的仓库会让「能不能删」失去答案
+    （曾经就有一份 3.9 MB 的 SVD 副本躺在 `.ff-run/probe/` 里）。
+
+    生成器（`stm32_registers`）与比对器共用这一份定位逻辑 —— 两处各写
+    一遍会漂移成「报告能找到源、生成器找不到」。
     """
     from firmforge.infrastructure import paths
-    candidates = [
-        paths.knowledge_cache_dir() / "_sources" / name,
-        Path(repo_root) / ".ff-run" / "probe" / name,
-    ]
-    return next((p for p in candidates if p.is_file()), None)
+    return paths.knowledge_cache_dir() / "_sources" / name
 
 
 def default_cmsis_include() -> Path:
@@ -788,9 +788,9 @@ def compare_stm32_all(repo_root: Path,
     include_dir = include_dir or default_cmsis_include()
     out: list[Stm32Parity] = []
     for mcu, (svd_name, header_name) in STM32_DEVICES.items():
-        svd = find_svd(svd_name, repo_root)
+        svd = find_svd(svd_name)
         header = Path(include_dir) / header_name
-        if svd is None or not header.is_file():
+        if not svd.is_file() or not header.is_file():
             continue
         out.append(compare_stm32(svd, header, mcu=mcu))
     return out
