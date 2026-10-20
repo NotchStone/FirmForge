@@ -259,7 +259,9 @@ class TestListRegisters:
 
     def test_list_usart_registers(self, kb: KnowledgeBase):
         regs = kb.list_registers(group="usart")
-        assert len(regs) == 26  # 4 USARTs × 6 + 2 UBRR 16-bit aliases
+        # 4 USARTs × 6 个 8 位寄存器 + 4 个 UBRR 16 位别名
+        # （UBRR0/1 原本就在；UBRR2/3 是 2026-10-20 按器件头补齐的）
+        assert len(regs) == 28
 
     def test_list_nonexistent_group(self, kb: KnowledgeBase):
         regs = kb.list_registers(group="nonexistent")

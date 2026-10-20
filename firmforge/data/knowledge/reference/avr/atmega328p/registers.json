@@ -9,7 +9,8 @@
   "description": "ATmega328P complete register map — all peripherals with bit-field definitions",
   "license": "Fair use - datasheet reference data",
   "_revision": [
-    "2026-09-16: 按 avr-libc iom328p.h + Microchip DS40002061B 交叉修正 —— EEAR 口径 (0x21 → 0x41)；ASSR 位号 6 条 (整块错位)；MCUCR.BODSE (7 → 5)；删除 UBRR0H.URSEL0 —— ATmega328P 无此位。"
+    "2026-09-16: 按 avr-libc iom328p.h + Microchip DS40002061B 交叉修正 —— EEAR 口径 (0x21 → 0x41)；ASSR 位号 6 条 (整块错位)；MCUCR.BODSE (7 → 5)；删除 UBRR0H.URSEL0 —— ATmega328P 无此位。",
+    "2026-10-20: 按 avr-libc iom328p.h 补齐 —— 新增 5 个寄存器、307 个位域（分组/描述/引用沿用人工版本，只补缺项）。"
   ],
   "register_groups": {
     "gpio": {
@@ -19,55 +20,349 @@
           "name": "PINB",
           "address": "0x23",
           "size": 8,
-          "description": "Port B Input Pins"
+          "description": "Port B Input Pins",
+          "fields": [
+            {
+              "name": "PINB0",
+              "bit": 0
+            },
+            {
+              "name": "PINB1",
+              "bit": 1
+            },
+            {
+              "name": "PINB2",
+              "bit": 2
+            },
+            {
+              "name": "PINB3",
+              "bit": 3
+            },
+            {
+              "name": "PINB4",
+              "bit": 4
+            },
+            {
+              "name": "PINB5",
+              "bit": 5
+            },
+            {
+              "name": "PINB6",
+              "bit": 6
+            },
+            {
+              "name": "PINB7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRB",
           "address": "0x24",
           "size": 8,
-          "description": "Port B Data Direction"
+          "description": "Port B Data Direction",
+          "fields": [
+            {
+              "name": "DDB0",
+              "bit": 0
+            },
+            {
+              "name": "DDB1",
+              "bit": 1
+            },
+            {
+              "name": "DDB2",
+              "bit": 2
+            },
+            {
+              "name": "DDB3",
+              "bit": 3
+            },
+            {
+              "name": "DDB4",
+              "bit": 4
+            },
+            {
+              "name": "DDB5",
+              "bit": 5
+            },
+            {
+              "name": "DDB6",
+              "bit": 6
+            },
+            {
+              "name": "DDB7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTB",
           "address": "0x25",
           "size": 8,
-          "description": "Port B Data"
+          "description": "Port B Data",
+          "fields": [
+            {
+              "name": "PORTB0",
+              "bit": 0
+            },
+            {
+              "name": "PORTB1",
+              "bit": 1
+            },
+            {
+              "name": "PORTB2",
+              "bit": 2
+            },
+            {
+              "name": "PORTB3",
+              "bit": 3
+            },
+            {
+              "name": "PORTB4",
+              "bit": 4
+            },
+            {
+              "name": "PORTB5",
+              "bit": 5
+            },
+            {
+              "name": "PORTB6",
+              "bit": 6
+            },
+            {
+              "name": "PORTB7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINC",
           "address": "0x26",
           "size": 8,
-          "description": "Port C Input Pins"
+          "description": "Port C Input Pins",
+          "fields": [
+            {
+              "name": "PINC0",
+              "bit": 0
+            },
+            {
+              "name": "PINC1",
+              "bit": 1
+            },
+            {
+              "name": "PINC2",
+              "bit": 2
+            },
+            {
+              "name": "PINC3",
+              "bit": 3
+            },
+            {
+              "name": "PINC4",
+              "bit": 4
+            },
+            {
+              "name": "PINC5",
+              "bit": 5
+            },
+            {
+              "name": "PINC6",
+              "bit": 6
+            }
+          ]
         },
         {
           "name": "DDRC",
           "address": "0x27",
           "size": 8,
-          "description": "Port C Data Direction"
+          "description": "Port C Data Direction",
+          "fields": [
+            {
+              "name": "DDC0",
+              "bit": 0
+            },
+            {
+              "name": "DDC1",
+              "bit": 1
+            },
+            {
+              "name": "DDC2",
+              "bit": 2
+            },
+            {
+              "name": "DDC3",
+              "bit": 3
+            },
+            {
+              "name": "DDC4",
+              "bit": 4
+            },
+            {
+              "name": "DDC5",
+              "bit": 5
+            },
+            {
+              "name": "DDC6",
+              "bit": 6
+            }
+          ]
         },
         {
           "name": "PORTC",
           "address": "0x28",
           "size": 8,
-          "description": "Port C Data"
+          "description": "Port C Data",
+          "fields": [
+            {
+              "name": "PORTC0",
+              "bit": 0
+            },
+            {
+              "name": "PORTC1",
+              "bit": 1
+            },
+            {
+              "name": "PORTC2",
+              "bit": 2
+            },
+            {
+              "name": "PORTC3",
+              "bit": 3
+            },
+            {
+              "name": "PORTC4",
+              "bit": 4
+            },
+            {
+              "name": "PORTC5",
+              "bit": 5
+            },
+            {
+              "name": "PORTC6",
+              "bit": 6
+            }
+          ]
         },
         {
           "name": "PIND",
           "address": "0x29",
           "size": 8,
-          "description": "Port D Input Pins"
+          "description": "Port D Input Pins",
+          "fields": [
+            {
+              "name": "PIND0",
+              "bit": 0
+            },
+            {
+              "name": "PIND1",
+              "bit": 1
+            },
+            {
+              "name": "PIND2",
+              "bit": 2
+            },
+            {
+              "name": "PIND3",
+              "bit": 3
+            },
+            {
+              "name": "PIND4",
+              "bit": 4
+            },
+            {
+              "name": "PIND5",
+              "bit": 5
+            },
+            {
+              "name": "PIND6",
+              "bit": 6
+            },
+            {
+              "name": "PIND7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRD",
           "address": "0x2A",
           "size": 8,
-          "description": "Port D Data Direction"
+          "description": "Port D Data Direction",
+          "fields": [
+            {
+              "name": "DDD0",
+              "bit": 0
+            },
+            {
+              "name": "DDD1",
+              "bit": 1
+            },
+            {
+              "name": "DDD2",
+              "bit": 2
+            },
+            {
+              "name": "DDD3",
+              "bit": 3
+            },
+            {
+              "name": "DDD4",
+              "bit": 4
+            },
+            {
+              "name": "DDD5",
+              "bit": 5
+            },
+            {
+              "name": "DDD6",
+              "bit": 6
+            },
+            {
+              "name": "DDD7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTD",
           "address": "0x2B",
           "size": 8,
-          "description": "Port D Data"
+          "description": "Port D Data",
+          "fields": [
+            {
+              "name": "PORTD0",
+              "bit": 0
+            },
+            {
+              "name": "PORTD1",
+              "bit": 1
+            },
+            {
+              "name": "PORTD2",
+              "bit": 2
+            },
+            {
+              "name": "PORTD3",
+              "bit": 3
+            },
+            {
+              "name": "PORTD4",
+              "bit": 4
+            },
+            {
+              "name": "PORTD5",
+              "bit": 5
+            },
+            {
+              "name": "PORTD6",
+              "bit": 6
+            },
+            {
+              "name": "PORTD7",
+              "bit": 7
+            }
+          ]
         }
       ]
     },
@@ -178,19 +473,121 @@
           "name": "TCNT0",
           "address": "0x46",
           "size": 8,
-          "description": "TC0 Counter"
+          "description": "TC0 Counter",
+          "fields": [
+            {
+              "name": "TCNT0_0",
+              "bit": 0
+            },
+            {
+              "name": "TCNT0_1",
+              "bit": 1
+            },
+            {
+              "name": "TCNT0_2",
+              "bit": 2
+            },
+            {
+              "name": "TCNT0_3",
+              "bit": 3
+            },
+            {
+              "name": "TCNT0_4",
+              "bit": 4
+            },
+            {
+              "name": "TCNT0_5",
+              "bit": 5
+            },
+            {
+              "name": "TCNT0_6",
+              "bit": 6
+            },
+            {
+              "name": "TCNT0_7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR0A",
           "address": "0x47",
           "size": 8,
-          "description": "Output Compare Register A"
+          "description": "Output Compare Register A",
+          "fields": [
+            {
+              "name": "OCR0A_0",
+              "bit": 0
+            },
+            {
+              "name": "OCR0A_1",
+              "bit": 1
+            },
+            {
+              "name": "OCR0A_2",
+              "bit": 2
+            },
+            {
+              "name": "OCR0A_3",
+              "bit": 3
+            },
+            {
+              "name": "OCR0A_4",
+              "bit": 4
+            },
+            {
+              "name": "OCR0A_5",
+              "bit": 5
+            },
+            {
+              "name": "OCR0A_6",
+              "bit": 6
+            },
+            {
+              "name": "OCR0A_7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR0B",
           "address": "0x48",
           "size": 8,
-          "description": "Output Compare Register B"
+          "description": "Output Compare Register B",
+          "fields": [
+            {
+              "name": "OCR0B_0",
+              "bit": 0
+            },
+            {
+              "name": "OCR0B_1",
+              "bit": 1
+            },
+            {
+              "name": "OCR0B_2",
+              "bit": 2
+            },
+            {
+              "name": "OCR0B_3",
+              "bit": 3
+            },
+            {
+              "name": "OCR0B_4",
+              "bit": 4
+            },
+            {
+              "name": "OCR0B_5",
+              "bit": 5
+            },
+            {
+              "name": "OCR0B_6",
+              "bit": 6
+            },
+            {
+              "name": "OCR0B_7",
+              "bit": 7
+            }
+          ]
         }
       ]
     },
@@ -330,49 +727,321 @@
           "name": "TCNT1L",
           "address": "0x84",
           "size": 8,
-          "description": "TC1 Counter Low"
+          "description": "TC1 Counter Low",
+          "fields": [
+            {
+              "name": "TCNT1L0",
+              "bit": 0
+            },
+            {
+              "name": "TCNT1L1",
+              "bit": 1
+            },
+            {
+              "name": "TCNT1L2",
+              "bit": 2
+            },
+            {
+              "name": "TCNT1L3",
+              "bit": 3
+            },
+            {
+              "name": "TCNT1L4",
+              "bit": 4
+            },
+            {
+              "name": "TCNT1L5",
+              "bit": 5
+            },
+            {
+              "name": "TCNT1L6",
+              "bit": 6
+            },
+            {
+              "name": "TCNT1L7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "TCNT1H",
           "address": "0x85",
           "size": 8,
-          "description": "TC1 Counter High"
+          "description": "TC1 Counter High",
+          "fields": [
+            {
+              "name": "TCNT1H0",
+              "bit": 0
+            },
+            {
+              "name": "TCNT1H1",
+              "bit": 1
+            },
+            {
+              "name": "TCNT1H2",
+              "bit": 2
+            },
+            {
+              "name": "TCNT1H3",
+              "bit": 3
+            },
+            {
+              "name": "TCNT1H4",
+              "bit": 4
+            },
+            {
+              "name": "TCNT1H5",
+              "bit": 5
+            },
+            {
+              "name": "TCNT1H6",
+              "bit": 6
+            },
+            {
+              "name": "TCNT1H7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "ICR1L",
           "address": "0x86",
           "size": 8,
-          "description": "Input Capture Register 1 Low"
+          "description": "Input Capture Register 1 Low",
+          "fields": [
+            {
+              "name": "ICR1L0",
+              "bit": 0
+            },
+            {
+              "name": "ICR1L1",
+              "bit": 1
+            },
+            {
+              "name": "ICR1L2",
+              "bit": 2
+            },
+            {
+              "name": "ICR1L3",
+              "bit": 3
+            },
+            {
+              "name": "ICR1L4",
+              "bit": 4
+            },
+            {
+              "name": "ICR1L5",
+              "bit": 5
+            },
+            {
+              "name": "ICR1L6",
+              "bit": 6
+            },
+            {
+              "name": "ICR1L7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "ICR1H",
           "address": "0x87",
           "size": 8,
-          "description": "Input Capture Register 1 High"
+          "description": "Input Capture Register 1 High",
+          "fields": [
+            {
+              "name": "ICR1H0",
+              "bit": 0
+            },
+            {
+              "name": "ICR1H1",
+              "bit": 1
+            },
+            {
+              "name": "ICR1H2",
+              "bit": 2
+            },
+            {
+              "name": "ICR1H3",
+              "bit": 3
+            },
+            {
+              "name": "ICR1H4",
+              "bit": 4
+            },
+            {
+              "name": "ICR1H5",
+              "bit": 5
+            },
+            {
+              "name": "ICR1H6",
+              "bit": 6
+            },
+            {
+              "name": "ICR1H7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR1AL",
           "address": "0x88",
           "size": 8,
-          "description": "Output Compare 1A Low"
+          "description": "Output Compare 1A Low",
+          "fields": [
+            {
+              "name": "OCR1AL0",
+              "bit": 0
+            },
+            {
+              "name": "OCR1AL1",
+              "bit": 1
+            },
+            {
+              "name": "OCR1AL2",
+              "bit": 2
+            },
+            {
+              "name": "OCR1AL3",
+              "bit": 3
+            },
+            {
+              "name": "OCR1AL4",
+              "bit": 4
+            },
+            {
+              "name": "OCR1AL5",
+              "bit": 5
+            },
+            {
+              "name": "OCR1AL6",
+              "bit": 6
+            },
+            {
+              "name": "OCR1AL7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR1AH",
           "address": "0x89",
           "size": 8,
-          "description": "Output Compare 1A High"
+          "description": "Output Compare 1A High",
+          "fields": [
+            {
+              "name": "OCR1AH0",
+              "bit": 0
+            },
+            {
+              "name": "OCR1AH1",
+              "bit": 1
+            },
+            {
+              "name": "OCR1AH2",
+              "bit": 2
+            },
+            {
+              "name": "OCR1AH3",
+              "bit": 3
+            },
+            {
+              "name": "OCR1AH4",
+              "bit": 4
+            },
+            {
+              "name": "OCR1AH5",
+              "bit": 5
+            },
+            {
+              "name": "OCR1AH6",
+              "bit": 6
+            },
+            {
+              "name": "OCR1AH7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR1BL",
           "address": "0x8A",
           "size": 8,
-          "description": "Output Compare 1B Low"
+          "description": "Output Compare 1B Low",
+          "fields": [
+            {
+              "name": "OCR1BL0",
+              "bit": 0
+            },
+            {
+              "name": "OCR1BL1",
+              "bit": 1
+            },
+            {
+              "name": "OCR1BL2",
+              "bit": 2
+            },
+            {
+              "name": "OCR1BL3",
+              "bit": 3
+            },
+            {
+              "name": "OCR1BL4",
+              "bit": 4
+            },
+            {
+              "name": "OCR1BL5",
+              "bit": 5
+            },
+            {
+              "name": "OCR1BL6",
+              "bit": 6
+            },
+            {
+              "name": "OCR1BL7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR1BH",
           "address": "0x8B",
           "size": 8,
-          "description": "Output Compare 1B High"
+          "description": "Output Compare 1B High",
+          "fields": [
+            {
+              "name": "OCR1BH0",
+              "bit": 0
+            },
+            {
+              "name": "OCR1BH1",
+              "bit": 1
+            },
+            {
+              "name": "OCR1BH2",
+              "bit": 2
+            },
+            {
+              "name": "OCR1BH3",
+              "bit": 3
+            },
+            {
+              "name": "OCR1BH4",
+              "bit": 4
+            },
+            {
+              "name": "OCR1BH5",
+              "bit": 5
+            },
+            {
+              "name": "OCR1BH6",
+              "bit": 6
+            },
+            {
+              "name": "OCR1BH7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR1A",
@@ -507,19 +1176,121 @@
           "name": "TCNT2",
           "address": "0xB2",
           "size": 8,
-          "description": "TC2 Counter"
+          "description": "TC2 Counter",
+          "fields": [
+            {
+              "name": "TCNT2_0",
+              "bit": 0
+            },
+            {
+              "name": "TCNT2_1",
+              "bit": 1
+            },
+            {
+              "name": "TCNT2_2",
+              "bit": 2
+            },
+            {
+              "name": "TCNT2_3",
+              "bit": 3
+            },
+            {
+              "name": "TCNT2_4",
+              "bit": 4
+            },
+            {
+              "name": "TCNT2_5",
+              "bit": 5
+            },
+            {
+              "name": "TCNT2_6",
+              "bit": 6
+            },
+            {
+              "name": "TCNT2_7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR2A",
           "address": "0xB3",
           "size": 8,
-          "description": "Output Compare Register A"
+          "description": "Output Compare Register A",
+          "fields": [
+            {
+              "name": "OCR2_0",
+              "bit": 0
+            },
+            {
+              "name": "OCR2_1",
+              "bit": 1
+            },
+            {
+              "name": "OCR2_2",
+              "bit": 2
+            },
+            {
+              "name": "OCR2_3",
+              "bit": 3
+            },
+            {
+              "name": "OCR2_4",
+              "bit": 4
+            },
+            {
+              "name": "OCR2_5",
+              "bit": 5
+            },
+            {
+              "name": "OCR2_6",
+              "bit": 6
+            },
+            {
+              "name": "OCR2_7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "OCR2B",
           "address": "0xB4",
           "size": 8,
-          "description": "Output Compare Register B"
+          "description": "Output Compare Register B",
+          "fields": [
+            {
+              "name": "OCR2_0",
+              "bit": 0
+            },
+            {
+              "name": "OCR2_1",
+              "bit": 1
+            },
+            {
+              "name": "OCR2_2",
+              "bit": 2
+            },
+            {
+              "name": "OCR2_3",
+              "bit": 3
+            },
+            {
+              "name": "OCR2_4",
+              "bit": 4
+            },
+            {
+              "name": "OCR2_5",
+              "bit": 5
+            },
+            {
+              "name": "OCR2_6",
+              "bit": 6
+            },
+            {
+              "name": "OCR2_7",
+              "bit": 7
+            }
+          ]
         }
       ]
     },
@@ -728,6 +1499,10 @@
               "description": "Prescaler Reset TC2"
             },
             {
+              "name": "PSRASY",
+              "bit": 1
+            },
+            {
               "name": "TSM",
               "bit": 7,
               "access": "rw",
@@ -895,7 +1670,41 @@
           "name": "SPDR",
           "address": "0x4E",
           "size": 8,
-          "description": "SPI Data Register"
+          "description": "SPI Data Register",
+          "fields": [
+            {
+              "name": "SPDR0",
+              "bit": 0
+            },
+            {
+              "name": "SPDR1",
+              "bit": 1
+            },
+            {
+              "name": "SPDR2",
+              "bit": 2
+            },
+            {
+              "name": "SPDR3",
+              "bit": 3
+            },
+            {
+              "name": "SPDR4",
+              "bit": 4
+            },
+            {
+              "name": "SPDR5",
+              "bit": 5
+            },
+            {
+              "name": "SPDR6",
+              "bit": 6
+            },
+            {
+              "name": "SPDR7",
+              "bit": 7
+            }
+          ]
         }
       ]
     },
@@ -906,7 +1715,41 @@
           "name": "TWBR",
           "address": "0xB8",
           "size": 8,
-          "description": "TWI Bit Rate Register"
+          "description": "TWI Bit Rate Register",
+          "fields": [
+            {
+              "name": "TWBR0",
+              "bit": 0
+            },
+            {
+              "name": "TWBR1",
+              "bit": 1
+            },
+            {
+              "name": "TWBR2",
+              "bit": 2
+            },
+            {
+              "name": "TWBR3",
+              "bit": 3
+            },
+            {
+              "name": "TWBR4",
+              "bit": 4
+            },
+            {
+              "name": "TWBR5",
+              "bit": 5
+            },
+            {
+              "name": "TWBR6",
+              "bit": 6
+            },
+            {
+              "name": "TWBR7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "TWSR",
@@ -977,6 +1820,34 @@
               "access": "rw",
               "reset": 0,
               "description": "TWI General Call Recognition Enable"
+            },
+            {
+              "name": "TWA0",
+              "bit": 1
+            },
+            {
+              "name": "TWA1",
+              "bit": 2
+            },
+            {
+              "name": "TWA2",
+              "bit": 3
+            },
+            {
+              "name": "TWA3",
+              "bit": 4
+            },
+            {
+              "name": "TWA4",
+              "bit": 5
+            },
+            {
+              "name": "TWA5",
+              "bit": 6
+            },
+            {
+              "name": "TWA6",
+              "bit": 7
             }
           ]
         },
@@ -984,7 +1855,41 @@
           "name": "TWDR",
           "address": "0xBB",
           "size": 8,
-          "description": "TWI Data Register"
+          "description": "TWI Data Register",
+          "fields": [
+            {
+              "name": "TWD0",
+              "bit": 0
+            },
+            {
+              "name": "TWD1",
+              "bit": 1
+            },
+            {
+              "name": "TWD2",
+              "bit": 2
+            },
+            {
+              "name": "TWD3",
+              "bit": 3
+            },
+            {
+              "name": "TWD4",
+              "bit": 4
+            },
+            {
+              "name": "TWD5",
+              "bit": 5
+            },
+            {
+              "name": "TWD6",
+              "bit": 6
+            },
+            {
+              "name": "TWD7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "TWCR",
@@ -1047,7 +1952,37 @@
           "name": "TWAMR",
           "address": "0xBD",
           "size": 8,
-          "description": "TWI Address Mask Register"
+          "description": "TWI Address Mask Register",
+          "fields": [
+            {
+              "name": "TWAM0",
+              "bit": 0
+            },
+            {
+              "name": "TWAM1",
+              "bit": 1
+            },
+            {
+              "name": "TWAM2",
+              "bit": 2
+            },
+            {
+              "name": "TWAM3",
+              "bit": 3
+            },
+            {
+              "name": "TWAM4",
+              "bit": 4
+            },
+            {
+              "name": "TWAM5",
+              "bit": 5
+            },
+            {
+              "name": "TWAM6",
+              "bit": 6
+            }
+          ]
         }
       ]
     },
@@ -1058,7 +1993,41 @@
           "name": "UDR0",
           "address": "0xC6",
           "size": 8,
-          "description": "USART I/O Data Register"
+          "description": "USART I/O Data Register",
+          "fields": [
+            {
+              "name": "UDR0_0",
+              "bit": 0
+            },
+            {
+              "name": "UDR0_1",
+              "bit": 1
+            },
+            {
+              "name": "UDR0_2",
+              "bit": 2
+            },
+            {
+              "name": "UDR0_3",
+              "bit": 3
+            },
+            {
+              "name": "UDR0_4",
+              "bit": 4
+            },
+            {
+              "name": "UDR0_5",
+              "bit": 5
+            },
+            {
+              "name": "UDR0_6",
+              "bit": 6
+            },
+            {
+              "name": "UDR0_7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "UCSR0A",
@@ -1256,13 +2225,65 @@
           "name": "UBRR0H",
           "address": "0xC5",
           "size": 8,
-          "description": "USART Baud Rate High"
+          "description": "USART Baud Rate High",
+          "fields": [
+            {
+              "name": "UBRR0_8",
+              "bit": 0
+            },
+            {
+              "name": "UBRR0_9",
+              "bit": 1
+            },
+            {
+              "name": "UBRR0_10",
+              "bit": 2
+            },
+            {
+              "name": "UBRR0_11",
+              "bit": 3
+            }
+          ]
         },
         {
           "name": "UBRR0L",
           "address": "0xC4",
           "size": 8,
-          "description": "USART Baud Rate Low"
+          "description": "USART Baud Rate Low",
+          "fields": [
+            {
+              "name": "UBRR0_0",
+              "bit": 0
+            },
+            {
+              "name": "UBRR0_1",
+              "bit": 1
+            },
+            {
+              "name": "UBRR0_2",
+              "bit": 2
+            },
+            {
+              "name": "UBRR0_3",
+              "bit": 3
+            },
+            {
+              "name": "UBRR0_4",
+              "bit": 4
+            },
+            {
+              "name": "UBRR0_5",
+              "bit": 5
+            },
+            {
+              "name": "UBRR0_6",
+              "bit": 6
+            },
+            {
+              "name": "UBRR0_7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "UBRR0",
@@ -1437,13 +2458,81 @@
           "name": "ADCL",
           "address": "0x78",
           "size": 8,
-          "description": "ADC Data Low"
+          "description": "ADC Data Low",
+          "fields": [
+            {
+              "name": "ADCL0",
+              "bit": 0
+            },
+            {
+              "name": "ADCL1",
+              "bit": 1
+            },
+            {
+              "name": "ADCL2",
+              "bit": 2
+            },
+            {
+              "name": "ADCL3",
+              "bit": 3
+            },
+            {
+              "name": "ADCL4",
+              "bit": 4
+            },
+            {
+              "name": "ADCL5",
+              "bit": 5
+            },
+            {
+              "name": "ADCL6",
+              "bit": 6
+            },
+            {
+              "name": "ADCL7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "ADCH",
           "address": "0x79",
           "size": 8,
-          "description": "ADC Data High"
+          "description": "ADC Data High",
+          "fields": [
+            {
+              "name": "ADCH0",
+              "bit": 0
+            },
+            {
+              "name": "ADCH1",
+              "bit": 1
+            },
+            {
+              "name": "ADCH2",
+              "bit": 2
+            },
+            {
+              "name": "ADCH3",
+              "bit": 3
+            },
+            {
+              "name": "ADCH4",
+              "bit": 4
+            },
+            {
+              "name": "ADCH5",
+              "bit": 5
+            },
+            {
+              "name": "ADCH6",
+              "bit": 6
+            },
+            {
+              "name": "ADCH7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DIDR0",
@@ -1609,19 +2698,101 @@
           "name": "EEARL",
           "address": "0x41",
           "size": 8,
-          "description": "EEPROM Address Low"
+          "description": "EEPROM Address Low",
+          "fields": [
+            {
+              "name": "EEAR0",
+              "bit": 0
+            },
+            {
+              "name": "EEAR1",
+              "bit": 1
+            },
+            {
+              "name": "EEAR2",
+              "bit": 2
+            },
+            {
+              "name": "EEAR3",
+              "bit": 3
+            },
+            {
+              "name": "EEAR4",
+              "bit": 4
+            },
+            {
+              "name": "EEAR5",
+              "bit": 5
+            },
+            {
+              "name": "EEAR6",
+              "bit": 6
+            },
+            {
+              "name": "EEAR7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "EEARH",
           "address": "0x42",
           "size": 8,
-          "description": "EEPROM Address High"
+          "description": "EEPROM Address High",
+          "fields": [
+            {
+              "name": "EEAR8",
+              "bit": 0
+            },
+            {
+              "name": "EEAR9",
+              "bit": 1
+            },
+            {
+              "name": "EERIE",
+              "bit": 3
+            }
+          ]
         },
         {
           "name": "EEDR",
           "address": "0x40",
           "size": 8,
-          "description": "EEPROM Data"
+          "description": "EEPROM Data",
+          "fields": [
+            {
+              "name": "EEDR0",
+              "bit": 0
+            },
+            {
+              "name": "EEDR1",
+              "bit": 1
+            },
+            {
+              "name": "EEDR2",
+              "bit": 2
+            },
+            {
+              "name": "EEDR3",
+              "bit": 3
+            },
+            {
+              "name": "EEDR4",
+              "bit": 4
+            },
+            {
+              "name": "EEDR5",
+              "bit": 5
+            },
+            {
+              "name": "EEDR6",
+              "bit": 6
+            },
+            {
+              "name": "EEDR7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "EECR",
@@ -1935,6 +3106,10 @@
               "access": "rw",
               "reset": 0,
               "description": "Sleep Mode bit 1"
+            },
+            {
+              "name": "SM2",
+              "bit": 3
             }
           ]
         },
@@ -1999,7 +3174,41 @@
           "name": "OSCCAL",
           "address": "0x66",
           "size": 8,
-          "description": "Oscillator Calibration"
+          "description": "Oscillator Calibration",
+          "fields": [
+            {
+              "name": "CAL0",
+              "bit": 0
+            },
+            {
+              "name": "CAL1",
+              "bit": 1
+            },
+            {
+              "name": "CAL2",
+              "bit": 2
+            },
+            {
+              "name": "CAL3",
+              "bit": 3
+            },
+            {
+              "name": "CAL4",
+              "bit": 4
+            },
+            {
+              "name": "CAL5",
+              "bit": 5
+            },
+            {
+              "name": "CAL6",
+              "bit": 6
+            },
+            {
+              "name": "CAL7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "CLKPR",
@@ -2043,6 +3252,143 @@
               "description": "Change Enable"
             }
           ]
+        },
+        {
+          "name": "GPIOR0",
+          "address": "0x3E",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom328p.h",
+          "fields": [
+            {
+              "name": "GPIOR00",
+              "bit": 0
+            },
+            {
+              "name": "GPIOR01",
+              "bit": 1
+            },
+            {
+              "name": "GPIOR02",
+              "bit": 2
+            },
+            {
+              "name": "GPIOR03",
+              "bit": 3
+            },
+            {
+              "name": "GPIOR04",
+              "bit": 4
+            },
+            {
+              "name": "GPIOR05",
+              "bit": 5
+            },
+            {
+              "name": "GPIOR06",
+              "bit": 6
+            },
+            {
+              "name": "GPIOR07",
+              "bit": 7
+            }
+          ]
+        },
+        {
+          "name": "GPIOR1",
+          "address": "0x4A",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom328p.h",
+          "fields": [
+            {
+              "name": "GPIOR10",
+              "bit": 0
+            },
+            {
+              "name": "GPIOR11",
+              "bit": 1
+            },
+            {
+              "name": "GPIOR12",
+              "bit": 2
+            },
+            {
+              "name": "GPIOR13",
+              "bit": 3
+            },
+            {
+              "name": "GPIOR14",
+              "bit": 4
+            },
+            {
+              "name": "GPIOR15",
+              "bit": 5
+            },
+            {
+              "name": "GPIOR16",
+              "bit": 6
+            },
+            {
+              "name": "GPIOR17",
+              "bit": 7
+            }
+          ]
+        },
+        {
+          "name": "GPIOR2",
+          "address": "0x4B",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom328p.h",
+          "fields": [
+            {
+              "name": "GPIOR20",
+              "bit": 0
+            },
+            {
+              "name": "GPIOR21",
+              "bit": 1
+            },
+            {
+              "name": "GPIOR22",
+              "bit": 2
+            },
+            {
+              "name": "GPIOR23",
+              "bit": 3
+            },
+            {
+              "name": "GPIOR24",
+              "bit": 4
+            },
+            {
+              "name": "GPIOR25",
+              "bit": 5
+            },
+            {
+              "name": "GPIOR26",
+              "bit": 6
+            },
+            {
+              "name": "GPIOR27",
+              "bit": 7
+            }
+          ]
+        },
+        {
+          "name": "SPMCSR",
+          "address": "0x57",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom328p.h"
+        },
+        {
+          "name": "SP",
+          "address": "0x5D",
+          "size": 16,
+          "description": "",
+          "source": "avr-libc iom328p.h"
         }
       ]
     },
@@ -2191,19 +3537,117 @@
           "name": "PCMSK0",
           "address": "0x6B",
           "size": 8,
-          "description": "Pin Change Mask 0"
+          "description": "Pin Change Mask 0",
+          "fields": [
+            {
+              "name": "PCINT0",
+              "bit": 0
+            },
+            {
+              "name": "PCINT1",
+              "bit": 1
+            },
+            {
+              "name": "PCINT2",
+              "bit": 2
+            },
+            {
+              "name": "PCINT3",
+              "bit": 3
+            },
+            {
+              "name": "PCINT4",
+              "bit": 4
+            },
+            {
+              "name": "PCINT5",
+              "bit": 5
+            },
+            {
+              "name": "PCINT6",
+              "bit": 6
+            },
+            {
+              "name": "PCINT7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PCMSK1",
           "address": "0x6C",
           "size": 8,
-          "description": "Pin Change Mask 1"
+          "description": "Pin Change Mask 1",
+          "fields": [
+            {
+              "name": "PCINT8",
+              "bit": 0
+            },
+            {
+              "name": "PCINT9",
+              "bit": 1
+            },
+            {
+              "name": "PCINT10",
+              "bit": 2
+            },
+            {
+              "name": "PCINT11",
+              "bit": 3
+            },
+            {
+              "name": "PCINT12",
+              "bit": 4
+            },
+            {
+              "name": "PCINT13",
+              "bit": 5
+            },
+            {
+              "name": "PCINT14",
+              "bit": 6
+            }
+          ]
         },
         {
           "name": "PCMSK2",
           "address": "0x6D",
           "size": 8,
-          "description": "Pin Change Mask 2"
+          "description": "Pin Change Mask 2",
+          "fields": [
+            {
+              "name": "PCINT16",
+              "bit": 0
+            },
+            {
+              "name": "PCINT17",
+              "bit": 1
+            },
+            {
+              "name": "PCINT18",
+              "bit": 2
+            },
+            {
+              "name": "PCINT19",
+              "bit": 3
+            },
+            {
+              "name": "PCINT20",
+              "bit": 4
+            },
+            {
+              "name": "PCINT21",
+              "bit": 5
+            },
+            {
+              "name": "PCINT22",
+              "bit": 6
+            },
+            {
+              "name": "PCINT23",
+              "bit": 7
+            }
+          ]
         }
       ]
     }

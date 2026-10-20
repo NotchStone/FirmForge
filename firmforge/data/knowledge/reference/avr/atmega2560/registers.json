@@ -9,7 +9,8 @@
   "description": "ATmega2560 complete register map — all 11 ports, 6 timers, 4 USARTs, SPI, TWI, ADC",
   "license": "Fair use - datasheet reference data",
   "_revision": [
-    "2026-09-16: 按 avr-libc iomxx0_1.h + Atmel 2549 数据手册交叉修正 —— 端口 H–L 地址 12 条 (0x35..0x43 → 0x100..0x10B)；EEAR 口径 (0x21 → 0x41)；ASSR 位号 6 条 (整块错位)；UCSR0B/1B/2B/3B 位名 8 条 (TXBx8 → TXB8x)；顶层 source 由查无此号的 DS40002591B 改为已核实的 Atmel 2549。"
+    "2026-09-16: 按 avr-libc iomxx0_1.h + Atmel 2549 数据手册交叉修正 —— 端口 H–L 地址 12 条 (0x35..0x43 → 0x100..0x10B)；EEAR 口径 (0x21 → 0x41)；ASSR 位号 6 条 (整块错位)；UCSR0B/1B/2B/3B 位名 8 条 (TXBx8 → TXB8x)；顶层 source 由查无此号的 DS40002591B 改为已核实的 Atmel 2549。",
+    "2026-10-20: 按 avr-libc iom2560.h 补齐 —— 新增 10 个寄存器、311 个位域（分组/描述/引用沿用人工版本，只补缺项）。"
   ],
   "register_groups": {
     "gpio": {
@@ -19,199 +20,1297 @@
           "name": "PINA",
           "address": "0x20",
           "size": 8,
-          "description": "Port A Input Pins"
+          "description": "Port A Input Pins",
+          "fields": [
+            {
+              "name": "PINA0",
+              "bit": 0
+            },
+            {
+              "name": "PINA1",
+              "bit": 1
+            },
+            {
+              "name": "PINA2",
+              "bit": 2
+            },
+            {
+              "name": "PINA3",
+              "bit": 3
+            },
+            {
+              "name": "PINA4",
+              "bit": 4
+            },
+            {
+              "name": "PINA5",
+              "bit": 5
+            },
+            {
+              "name": "PINA6",
+              "bit": 6
+            },
+            {
+              "name": "PINA7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRA",
           "address": "0x21",
           "size": 8,
-          "description": "Port A Data Direction"
+          "description": "Port A Data Direction",
+          "fields": [
+            {
+              "name": "DDA0",
+              "bit": 0
+            },
+            {
+              "name": "DDA1",
+              "bit": 1
+            },
+            {
+              "name": "DDA2",
+              "bit": 2
+            },
+            {
+              "name": "DDA3",
+              "bit": 3
+            },
+            {
+              "name": "DDA4",
+              "bit": 4
+            },
+            {
+              "name": "DDA5",
+              "bit": 5
+            },
+            {
+              "name": "DDA6",
+              "bit": 6
+            },
+            {
+              "name": "DDA7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTA",
           "address": "0x22",
           "size": 8,
-          "description": "Port A Data"
+          "description": "Port A Data",
+          "fields": [
+            {
+              "name": "PA0",
+              "bit": 0
+            },
+            {
+              "name": "PA1",
+              "bit": 1
+            },
+            {
+              "name": "PA2",
+              "bit": 2
+            },
+            {
+              "name": "PA3",
+              "bit": 3
+            },
+            {
+              "name": "PA4",
+              "bit": 4
+            },
+            {
+              "name": "PA5",
+              "bit": 5
+            },
+            {
+              "name": "PA6",
+              "bit": 6
+            },
+            {
+              "name": "PA7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINB",
           "address": "0x23",
           "size": 8,
-          "description": "Port B Input Pins"
+          "description": "Port B Input Pins",
+          "fields": [
+            {
+              "name": "PINB0",
+              "bit": 0
+            },
+            {
+              "name": "PINB1",
+              "bit": 1
+            },
+            {
+              "name": "PINB2",
+              "bit": 2
+            },
+            {
+              "name": "PINB3",
+              "bit": 3
+            },
+            {
+              "name": "PINB4",
+              "bit": 4
+            },
+            {
+              "name": "PINB5",
+              "bit": 5
+            },
+            {
+              "name": "PINB6",
+              "bit": 6
+            },
+            {
+              "name": "PINB7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRB",
           "address": "0x24",
           "size": 8,
-          "description": "Port B Data Direction"
+          "description": "Port B Data Direction",
+          "fields": [
+            {
+              "name": "DDB0",
+              "bit": 0
+            },
+            {
+              "name": "DDB1",
+              "bit": 1
+            },
+            {
+              "name": "DDB2",
+              "bit": 2
+            },
+            {
+              "name": "DDB3",
+              "bit": 3
+            },
+            {
+              "name": "DDB4",
+              "bit": 4
+            },
+            {
+              "name": "DDB5",
+              "bit": 5
+            },
+            {
+              "name": "DDB6",
+              "bit": 6
+            },
+            {
+              "name": "DDB7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTB",
           "address": "0x25",
           "size": 8,
-          "description": "Port B Data"
+          "description": "Port B Data",
+          "fields": [
+            {
+              "name": "PB0",
+              "bit": 0
+            },
+            {
+              "name": "PB1",
+              "bit": 1
+            },
+            {
+              "name": "PB2",
+              "bit": 2
+            },
+            {
+              "name": "PB3",
+              "bit": 3
+            },
+            {
+              "name": "PB4",
+              "bit": 4
+            },
+            {
+              "name": "PB5",
+              "bit": 5
+            },
+            {
+              "name": "PB6",
+              "bit": 6
+            },
+            {
+              "name": "PB7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINC",
           "address": "0x26",
           "size": 8,
-          "description": "Port C Input Pins"
+          "description": "Port C Input Pins",
+          "fields": [
+            {
+              "name": "PINC0",
+              "bit": 0
+            },
+            {
+              "name": "PINC1",
+              "bit": 1
+            },
+            {
+              "name": "PINC2",
+              "bit": 2
+            },
+            {
+              "name": "PINC3",
+              "bit": 3
+            },
+            {
+              "name": "PINC4",
+              "bit": 4
+            },
+            {
+              "name": "PINC5",
+              "bit": 5
+            },
+            {
+              "name": "PINC6",
+              "bit": 6
+            },
+            {
+              "name": "PINC7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRC",
           "address": "0x27",
           "size": 8,
-          "description": "Port C Data Direction"
+          "description": "Port C Data Direction",
+          "fields": [
+            {
+              "name": "DDC0",
+              "bit": 0
+            },
+            {
+              "name": "DDC1",
+              "bit": 1
+            },
+            {
+              "name": "DDC2",
+              "bit": 2
+            },
+            {
+              "name": "DDC3",
+              "bit": 3
+            },
+            {
+              "name": "DDC4",
+              "bit": 4
+            },
+            {
+              "name": "DDC5",
+              "bit": 5
+            },
+            {
+              "name": "DDC6",
+              "bit": 6
+            },
+            {
+              "name": "DDC7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTC",
           "address": "0x28",
           "size": 8,
-          "description": "Port C Data"
+          "description": "Port C Data",
+          "fields": [
+            {
+              "name": "PC0",
+              "bit": 0
+            },
+            {
+              "name": "PC1",
+              "bit": 1
+            },
+            {
+              "name": "PC2",
+              "bit": 2
+            },
+            {
+              "name": "PC3",
+              "bit": 3
+            },
+            {
+              "name": "PC4",
+              "bit": 4
+            },
+            {
+              "name": "PC5",
+              "bit": 5
+            },
+            {
+              "name": "PC6",
+              "bit": 6
+            },
+            {
+              "name": "PC7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PIND",
           "address": "0x29",
           "size": 8,
-          "description": "Port D Input Pins"
+          "description": "Port D Input Pins",
+          "fields": [
+            {
+              "name": "PIND0",
+              "bit": 0
+            },
+            {
+              "name": "PIND1",
+              "bit": 1
+            },
+            {
+              "name": "PIND2",
+              "bit": 2
+            },
+            {
+              "name": "PIND3",
+              "bit": 3
+            },
+            {
+              "name": "PIND4",
+              "bit": 4
+            },
+            {
+              "name": "PIND5",
+              "bit": 5
+            },
+            {
+              "name": "PIND6",
+              "bit": 6
+            },
+            {
+              "name": "PIND7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRD",
           "address": "0x2A",
           "size": 8,
-          "description": "Port D Data Direction"
+          "description": "Port D Data Direction",
+          "fields": [
+            {
+              "name": "DDD0",
+              "bit": 0
+            },
+            {
+              "name": "DDD1",
+              "bit": 1
+            },
+            {
+              "name": "DDD2",
+              "bit": 2
+            },
+            {
+              "name": "DDD3",
+              "bit": 3
+            },
+            {
+              "name": "DDD4",
+              "bit": 4
+            },
+            {
+              "name": "DDD5",
+              "bit": 5
+            },
+            {
+              "name": "DDD6",
+              "bit": 6
+            },
+            {
+              "name": "DDD7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTD",
           "address": "0x2B",
           "size": 8,
-          "description": "Port D Data"
+          "description": "Port D Data",
+          "fields": [
+            {
+              "name": "PD0",
+              "bit": 0
+            },
+            {
+              "name": "PD1",
+              "bit": 1
+            },
+            {
+              "name": "PD2",
+              "bit": 2
+            },
+            {
+              "name": "PD3",
+              "bit": 3
+            },
+            {
+              "name": "PD4",
+              "bit": 4
+            },
+            {
+              "name": "PD5",
+              "bit": 5
+            },
+            {
+              "name": "PD6",
+              "bit": 6
+            },
+            {
+              "name": "PD7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINE",
           "address": "0x2C",
           "size": 8,
-          "description": "Port E Input Pins"
+          "description": "Port E Input Pins",
+          "fields": [
+            {
+              "name": "PINE0",
+              "bit": 0
+            },
+            {
+              "name": "PINE1",
+              "bit": 1
+            },
+            {
+              "name": "PINE2",
+              "bit": 2
+            },
+            {
+              "name": "PINE3",
+              "bit": 3
+            },
+            {
+              "name": "PINE4",
+              "bit": 4
+            },
+            {
+              "name": "PINE5",
+              "bit": 5
+            },
+            {
+              "name": "PINE6",
+              "bit": 6
+            },
+            {
+              "name": "PINE7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRE",
           "address": "0x2D",
           "size": 8,
-          "description": "Port E Data Direction"
+          "description": "Port E Data Direction",
+          "fields": [
+            {
+              "name": "DDE0",
+              "bit": 0
+            },
+            {
+              "name": "DDE1",
+              "bit": 1
+            },
+            {
+              "name": "DDE2",
+              "bit": 2
+            },
+            {
+              "name": "DDE3",
+              "bit": 3
+            },
+            {
+              "name": "DDE4",
+              "bit": 4
+            },
+            {
+              "name": "DDE5",
+              "bit": 5
+            },
+            {
+              "name": "DDE6",
+              "bit": 6
+            },
+            {
+              "name": "DDE7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTE",
           "address": "0x2E",
           "size": 8,
-          "description": "Port E Data"
+          "description": "Port E Data",
+          "fields": [
+            {
+              "name": "PE0",
+              "bit": 0
+            },
+            {
+              "name": "PE1",
+              "bit": 1
+            },
+            {
+              "name": "PE2",
+              "bit": 2
+            },
+            {
+              "name": "PE3",
+              "bit": 3
+            },
+            {
+              "name": "PE4",
+              "bit": 4
+            },
+            {
+              "name": "PE5",
+              "bit": 5
+            },
+            {
+              "name": "PE6",
+              "bit": 6
+            },
+            {
+              "name": "PE7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINF",
           "address": "0x2F",
           "size": 8,
-          "description": "Port F Input Pins"
+          "description": "Port F Input Pins",
+          "fields": [
+            {
+              "name": "PINF0",
+              "bit": 0
+            },
+            {
+              "name": "PINF1",
+              "bit": 1
+            },
+            {
+              "name": "PINF2",
+              "bit": 2
+            },
+            {
+              "name": "PINF3",
+              "bit": 3
+            },
+            {
+              "name": "PINF4",
+              "bit": 4
+            },
+            {
+              "name": "PINF5",
+              "bit": 5
+            },
+            {
+              "name": "PINF6",
+              "bit": 6
+            },
+            {
+              "name": "PINF7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRF",
           "address": "0x30",
           "size": 8,
-          "description": "Port F Data Direction"
+          "description": "Port F Data Direction",
+          "fields": [
+            {
+              "name": "DDF0",
+              "bit": 0
+            },
+            {
+              "name": "DDF1",
+              "bit": 1
+            },
+            {
+              "name": "DDF2",
+              "bit": 2
+            },
+            {
+              "name": "DDF3",
+              "bit": 3
+            },
+            {
+              "name": "DDF4",
+              "bit": 4
+            },
+            {
+              "name": "DDF5",
+              "bit": 5
+            },
+            {
+              "name": "DDF6",
+              "bit": 6
+            },
+            {
+              "name": "DDF7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTF",
           "address": "0x31",
           "size": 8,
-          "description": "Port F Data"
+          "description": "Port F Data",
+          "fields": [
+            {
+              "name": "PF0",
+              "bit": 0
+            },
+            {
+              "name": "PF1",
+              "bit": 1
+            },
+            {
+              "name": "PF2",
+              "bit": 2
+            },
+            {
+              "name": "PF3",
+              "bit": 3
+            },
+            {
+              "name": "PF4",
+              "bit": 4
+            },
+            {
+              "name": "PF5",
+              "bit": 5
+            },
+            {
+              "name": "PF6",
+              "bit": 6
+            },
+            {
+              "name": "PF7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PING",
           "address": "0x32",
           "size": 8,
-          "description": "Port G Input Pins"
+          "description": "Port G Input Pins",
+          "fields": [
+            {
+              "name": "PING0",
+              "bit": 0
+            },
+            {
+              "name": "PING1",
+              "bit": 1
+            },
+            {
+              "name": "PING2",
+              "bit": 2
+            },
+            {
+              "name": "PING3",
+              "bit": 3
+            },
+            {
+              "name": "PING4",
+              "bit": 4
+            },
+            {
+              "name": "PING5",
+              "bit": 5
+            }
+          ]
         },
         {
           "name": "DDRG",
           "address": "0x33",
           "size": 8,
-          "description": "Port G Data Direction"
+          "description": "Port G Data Direction",
+          "fields": [
+            {
+              "name": "DDG0",
+              "bit": 0
+            },
+            {
+              "name": "DDG1",
+              "bit": 1
+            },
+            {
+              "name": "DDG2",
+              "bit": 2
+            },
+            {
+              "name": "DDG3",
+              "bit": 3
+            },
+            {
+              "name": "DDG4",
+              "bit": 4
+            },
+            {
+              "name": "DDG5",
+              "bit": 5
+            }
+          ]
         },
         {
           "name": "PORTG",
           "address": "0x34",
           "size": 8,
-          "description": "Port G Data"
+          "description": "Port G Data",
+          "fields": [
+            {
+              "name": "PG0",
+              "bit": 0
+            },
+            {
+              "name": "PG1",
+              "bit": 1
+            },
+            {
+              "name": "PG2",
+              "bit": 2
+            },
+            {
+              "name": "PG3",
+              "bit": 3
+            },
+            {
+              "name": "PG4",
+              "bit": 4
+            },
+            {
+              "name": "PG5",
+              "bit": 5
+            }
+          ]
         },
         {
           "name": "PINH",
           "address": "0x100",
           "size": 8,
-          "description": "Port H Input Pins"
+          "description": "Port H Input Pins",
+          "fields": [
+            {
+              "name": "PINH0",
+              "bit": 0
+            },
+            {
+              "name": "PINH1",
+              "bit": 1
+            },
+            {
+              "name": "PINH2",
+              "bit": 2
+            },
+            {
+              "name": "PINH3",
+              "bit": 3
+            },
+            {
+              "name": "PINH4",
+              "bit": 4
+            },
+            {
+              "name": "PINH5",
+              "bit": 5
+            },
+            {
+              "name": "PINH6",
+              "bit": 6
+            },
+            {
+              "name": "PINH7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRH",
           "address": "0x101",
           "size": 8,
-          "description": "Port H Data Direction"
+          "description": "Port H Data Direction",
+          "fields": [
+            {
+              "name": "DDH0",
+              "bit": 0
+            },
+            {
+              "name": "DDH1",
+              "bit": 1
+            },
+            {
+              "name": "DDH2",
+              "bit": 2
+            },
+            {
+              "name": "DDH3",
+              "bit": 3
+            },
+            {
+              "name": "DDH4",
+              "bit": 4
+            },
+            {
+              "name": "DDH5",
+              "bit": 5
+            },
+            {
+              "name": "DDH6",
+              "bit": 6
+            },
+            {
+              "name": "DDH7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTH",
           "address": "0x102",
           "size": 8,
-          "description": "Port H Data"
+          "description": "Port H Data",
+          "fields": [
+            {
+              "name": "PH0",
+              "bit": 0
+            },
+            {
+              "name": "PH1",
+              "bit": 1
+            },
+            {
+              "name": "PH2",
+              "bit": 2
+            },
+            {
+              "name": "PH3",
+              "bit": 3
+            },
+            {
+              "name": "PH4",
+              "bit": 4
+            },
+            {
+              "name": "PH5",
+              "bit": 5
+            },
+            {
+              "name": "PH6",
+              "bit": 6
+            },
+            {
+              "name": "PH7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINJ",
           "address": "0x103",
           "size": 8,
-          "description": "Port J Input Pins"
+          "description": "Port J Input Pins",
+          "fields": [
+            {
+              "name": "PINJ0",
+              "bit": 0
+            },
+            {
+              "name": "PINJ1",
+              "bit": 1
+            },
+            {
+              "name": "PINJ2",
+              "bit": 2
+            },
+            {
+              "name": "PINJ3",
+              "bit": 3
+            },
+            {
+              "name": "PINJ4",
+              "bit": 4
+            },
+            {
+              "name": "PINJ5",
+              "bit": 5
+            },
+            {
+              "name": "PINJ6",
+              "bit": 6
+            },
+            {
+              "name": "PINJ7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRJ",
           "address": "0x104",
           "size": 8,
-          "description": "Port J Data Direction"
+          "description": "Port J Data Direction",
+          "fields": [
+            {
+              "name": "DDJ0",
+              "bit": 0
+            },
+            {
+              "name": "DDJ1",
+              "bit": 1
+            },
+            {
+              "name": "DDJ2",
+              "bit": 2
+            },
+            {
+              "name": "DDJ3",
+              "bit": 3
+            },
+            {
+              "name": "DDJ4",
+              "bit": 4
+            },
+            {
+              "name": "DDJ5",
+              "bit": 5
+            },
+            {
+              "name": "DDJ6",
+              "bit": 6
+            },
+            {
+              "name": "DDJ7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTJ",
           "address": "0x105",
           "size": 8,
-          "description": "Port J Data"
+          "description": "Port J Data",
+          "fields": [
+            {
+              "name": "PJ0",
+              "bit": 0
+            },
+            {
+              "name": "PJ1",
+              "bit": 1
+            },
+            {
+              "name": "PJ2",
+              "bit": 2
+            },
+            {
+              "name": "PJ3",
+              "bit": 3
+            },
+            {
+              "name": "PJ4",
+              "bit": 4
+            },
+            {
+              "name": "PJ5",
+              "bit": 5
+            },
+            {
+              "name": "PJ6",
+              "bit": 6
+            },
+            {
+              "name": "PJ7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINK",
           "address": "0x106",
           "size": 8,
-          "description": "Port K Input Pins"
+          "description": "Port K Input Pins",
+          "fields": [
+            {
+              "name": "PINK0",
+              "bit": 0
+            },
+            {
+              "name": "PINK1",
+              "bit": 1
+            },
+            {
+              "name": "PINK2",
+              "bit": 2
+            },
+            {
+              "name": "PINK3",
+              "bit": 3
+            },
+            {
+              "name": "PINK4",
+              "bit": 4
+            },
+            {
+              "name": "PINK5",
+              "bit": 5
+            },
+            {
+              "name": "PINK6",
+              "bit": 6
+            },
+            {
+              "name": "PINK7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRK",
           "address": "0x107",
           "size": 8,
-          "description": "Port K Data Direction"
+          "description": "Port K Data Direction",
+          "fields": [
+            {
+              "name": "DDK0",
+              "bit": 0
+            },
+            {
+              "name": "DDK1",
+              "bit": 1
+            },
+            {
+              "name": "DDK2",
+              "bit": 2
+            },
+            {
+              "name": "DDK3",
+              "bit": 3
+            },
+            {
+              "name": "DDK4",
+              "bit": 4
+            },
+            {
+              "name": "DDK5",
+              "bit": 5
+            },
+            {
+              "name": "DDK6",
+              "bit": 6
+            },
+            {
+              "name": "DDK7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTK",
           "address": "0x108",
           "size": 8,
-          "description": "Port K Data"
+          "description": "Port K Data",
+          "fields": [
+            {
+              "name": "PK0",
+              "bit": 0
+            },
+            {
+              "name": "PK1",
+              "bit": 1
+            },
+            {
+              "name": "PK2",
+              "bit": 2
+            },
+            {
+              "name": "PK3",
+              "bit": 3
+            },
+            {
+              "name": "PK4",
+              "bit": 4
+            },
+            {
+              "name": "PK5",
+              "bit": 5
+            },
+            {
+              "name": "PK6",
+              "bit": 6
+            },
+            {
+              "name": "PK7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PINL",
           "address": "0x109",
           "size": 8,
-          "description": "Port L Input Pins"
+          "description": "Port L Input Pins",
+          "fields": [
+            {
+              "name": "PINL0",
+              "bit": 0
+            },
+            {
+              "name": "PINL1",
+              "bit": 1
+            },
+            {
+              "name": "PINL2",
+              "bit": 2
+            },
+            {
+              "name": "PINL3",
+              "bit": 3
+            },
+            {
+              "name": "PINL4",
+              "bit": 4
+            },
+            {
+              "name": "PINL5",
+              "bit": 5
+            },
+            {
+              "name": "PINL6",
+              "bit": 6
+            },
+            {
+              "name": "PINL7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "DDRL",
           "address": "0x10A",
           "size": 8,
-          "description": "Port L Data Direction"
+          "description": "Port L Data Direction",
+          "fields": [
+            {
+              "name": "DDL0",
+              "bit": 0
+            },
+            {
+              "name": "DDL1",
+              "bit": 1
+            },
+            {
+              "name": "DDL2",
+              "bit": 2
+            },
+            {
+              "name": "DDL3",
+              "bit": 3
+            },
+            {
+              "name": "DDL4",
+              "bit": 4
+            },
+            {
+              "name": "DDL5",
+              "bit": 5
+            },
+            {
+              "name": "DDL6",
+              "bit": 6
+            },
+            {
+              "name": "DDL7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PORTL",
           "address": "0x10B",
           "size": 8,
-          "description": "Port L Data"
+          "description": "Port L Data",
+          "fields": [
+            {
+              "name": "PL0",
+              "bit": 0
+            },
+            {
+              "name": "PL1",
+              "bit": 1
+            },
+            {
+              "name": "PL2",
+              "bit": 2
+            },
+            {
+              "name": "PL3",
+              "bit": 3
+            },
+            {
+              "name": "PL4",
+              "bit": 4
+            },
+            {
+              "name": "PL5",
+              "bit": 5
+            },
+            {
+              "name": "PL6",
+              "bit": 6
+            },
+            {
+              "name": "PL7",
+              "bit": 7
+            }
+          ]
         }
       ]
     },
@@ -362,6 +1461,14 @@
               "description": "Waveform Generation Mode bit 1"
             },
             {
+              "name": "COM1C0",
+              "bit": 2
+            },
+            {
+              "name": "COM1C1",
+              "bit": 3
+            },
+            {
               "name": "COM1B0",
               "bit": 4,
               "access": "rw",
@@ -454,6 +1561,10 @@
           "size": 8,
           "description": "TC1 Control Register C",
           "fields": [
+            {
+              "name": "FOC1C",
+              "bit": 5
+            },
             {
               "name": "FOC1B",
               "bit": 6,
@@ -709,6 +1820,14 @@
               "description": "Waveform Generation Mode bit 1"
             },
             {
+              "name": "COM3C0",
+              "bit": 2
+            },
+            {
+              "name": "COM3C1",
+              "bit": 3
+            },
+            {
               "name": "COM3B0",
               "bit": 4,
               "access": "rw",
@@ -801,6 +1920,10 @@
           "size": 8,
           "description": "TC3 Control Register C",
           "fields": [
+            {
+              "name": "FOC3C",
+              "bit": 5
+            },
             {
               "name": "FOC3B",
               "bit": 6,
@@ -933,6 +2056,14 @@
               "description": "Waveform Generation Mode bit 1"
             },
             {
+              "name": "COM4C0",
+              "bit": 2
+            },
+            {
+              "name": "COM4C1",
+              "bit": 3
+            },
+            {
               "name": "COM4B0",
               "bit": 4,
               "access": "rw",
@@ -1025,6 +2156,10 @@
           "size": 8,
           "description": "TC4 Control Register C",
           "fields": [
+            {
+              "name": "FOC4C",
+              "bit": 5
+            },
             {
               "name": "FOC4B",
               "bit": 6,
@@ -1157,6 +2292,14 @@
               "description": "Waveform Generation Mode bit 1"
             },
             {
+              "name": "COM5C0",
+              "bit": 2
+            },
+            {
+              "name": "COM5C1",
+              "bit": 3
+            },
+            {
               "name": "COM5B0",
               "bit": 4,
               "access": "rw",
@@ -1249,6 +2392,10 @@
           "size": 8,
           "description": "TC5 Control Register C",
           "fields": [
+            {
+              "name": "FOC5C",
+              "bit": 5
+            },
             {
               "name": "FOC5B",
               "bit": 6,
@@ -2090,6 +3237,34 @@
               "access": "rw",
               "reset": 0,
               "description": "General Call Recognition Enable"
+            },
+            {
+              "name": "TWA0",
+              "bit": 1
+            },
+            {
+              "name": "TWA1",
+              "bit": 2
+            },
+            {
+              "name": "TWA2",
+              "bit": 3
+            },
+            {
+              "name": "TWA3",
+              "bit": 4
+            },
+            {
+              "name": "TWA4",
+              "bit": 5
+            },
+            {
+              "name": "TWA5",
+              "bit": 6
+            },
+            {
+              "name": "TWA6",
+              "bit": 7
             }
           ]
         },
@@ -2160,7 +3335,37 @@
           "name": "TWAMR",
           "address": "0xBD",
           "size": 8,
-          "description": "TWI Address Mask"
+          "description": "TWI Address Mask",
+          "fields": [
+            {
+              "name": "TWAM0",
+              "bit": 1
+            },
+            {
+              "name": "TWAM1",
+              "bit": 2
+            },
+            {
+              "name": "TWAM2",
+              "bit": 3
+            },
+            {
+              "name": "TWAM3",
+              "bit": 4
+            },
+            {
+              "name": "TWAM4",
+              "bit": 5
+            },
+            {
+              "name": "TWAM5",
+              "bit": 6
+            },
+            {
+              "name": "TWAM6",
+              "bit": 7
+            }
+          ]
         }
       ]
     },
@@ -2801,7 +4006,13 @@
           "name": "UDR3",
           "address": "0x136",
           "size": 8,
-          "description": "USART3 I/O Data"
+          "description": "USART3 I/O Data",
+          "fields": [
+            {
+              "name": "INT0_vect_num",
+              "bit": 1
+            }
+          ]
         },
         {
           "name": "UCSR3A",
@@ -3020,6 +4231,20 @@
           "size": 16,
           "description": "USART1 Baud Rate (16-bit alias)",
           "source": "avr-gcc <iomxx0_1.h>"
+        },
+        {
+          "name": "UBRR2",
+          "address": "0xD4",
+          "size": 16,
+          "description": "",
+          "source": "avr-libc iom2560.h"
+        },
+        {
+          "name": "UBRR3",
+          "address": "0x134",
+          "size": 16,
+          "description": "",
+          "source": "avr-libc iom2560.h"
         }
       ]
     },
@@ -3457,7 +4682,17 @@
           "name": "EEARH",
           "address": "0x42",
           "size": 8,
-          "description": "EEPROM Address High"
+          "description": "EEPROM Address High",
+          "fields": [
+            {
+              "name": "EERE",
+              "bit": 0
+            },
+            {
+              "name": "EERIE",
+              "bit": 3
+            }
+          ]
         },
         {
           "name": "EEDR",
@@ -4042,6 +5277,129 @@
               "description": "Change Enable"
             }
           ]
+        },
+        {
+          "name": "GPIOR0",
+          "address": "0x3E",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h"
+        },
+        {
+          "name": "GPIOR1",
+          "address": "0x4A",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h"
+        },
+        {
+          "name": "GPIOR2",
+          "address": "0x4B",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h"
+        },
+        {
+          "name": "OCDR",
+          "address": "0x51",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h",
+          "fields": [
+            {
+              "name": "OCDR0",
+              "bit": 0
+            },
+            {
+              "name": "OCDR1",
+              "bit": 1
+            },
+            {
+              "name": "OCDR2",
+              "bit": 2
+            },
+            {
+              "name": "OCDR3",
+              "bit": 3
+            },
+            {
+              "name": "OCDR4",
+              "bit": 4
+            },
+            {
+              "name": "OCDR5",
+              "bit": 5
+            },
+            {
+              "name": "OCDR6",
+              "bit": 6
+            },
+            {
+              "name": "OCDR7",
+              "bit": 7
+            }
+          ]
+        },
+        {
+          "name": "SPMCSR",
+          "address": "0x57",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h",
+          "fields": [
+            {
+              "name": "SPMEN",
+              "bit": 0
+            },
+            {
+              "name": "PGERS",
+              "bit": 1
+            },
+            {
+              "name": "PGWRT",
+              "bit": 2
+            },
+            {
+              "name": "BLBSET",
+              "bit": 3
+            },
+            {
+              "name": "RWWSRE",
+              "bit": 4
+            },
+            {
+              "name": "SIGRD",
+              "bit": 5
+            },
+            {
+              "name": "RWWSB",
+              "bit": 6
+            },
+            {
+              "name": "SPMIE",
+              "bit": 7
+            }
+          ]
+        },
+        {
+          "name": "RAMPZ",
+          "address": "0x5B",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h",
+          "fields": [
+            {
+              "name": "RAMPZ0",
+              "bit": 0
+            }
+          ]
+        },
+        {
+          "name": "SP",
+          "address": "0x5D",
+          "size": 16,
+          "description": "",
+          "source": "avr-libc iom2560.h"
         }
       ]
     },
@@ -4366,19 +5724,134 @@
           "name": "PCMSK0",
           "address": "0x6B",
           "size": 8,
-          "description": "Pin Change Mask 0"
+          "description": "Pin Change Mask 0",
+          "fields": [
+            {
+              "name": "PCINT0",
+              "bit": 0
+            },
+            {
+              "name": "PCINT1",
+              "bit": 1
+            },
+            {
+              "name": "PCINT2",
+              "bit": 2
+            },
+            {
+              "name": "PCINT3",
+              "bit": 3
+            },
+            {
+              "name": "PCINT4",
+              "bit": 4
+            },
+            {
+              "name": "PCINT5",
+              "bit": 5
+            },
+            {
+              "name": "PCINT6",
+              "bit": 6
+            },
+            {
+              "name": "PCINT7",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PCMSK1",
           "address": "0x6C",
           "size": 8,
-          "description": "Pin Change Mask 1"
+          "description": "Pin Change Mask 1",
+          "fields": [
+            {
+              "name": "PCINT8",
+              "bit": 0
+            },
+            {
+              "name": "PCINT9",
+              "bit": 1
+            },
+            {
+              "name": "PCINT10",
+              "bit": 2
+            },
+            {
+              "name": "PCINT11",
+              "bit": 3
+            },
+            {
+              "name": "PCINT12",
+              "bit": 4
+            },
+            {
+              "name": "PCINT13",
+              "bit": 5
+            },
+            {
+              "name": "PCINT14",
+              "bit": 6
+            },
+            {
+              "name": "PCINT15",
+              "bit": 7
+            }
+          ]
         },
         {
           "name": "PCMSK2",
           "address": "0x6D",
           "size": 8,
-          "description": "Pin Change Mask 2"
+          "description": "Pin Change Mask 2",
+          "fields": [
+            {
+              "name": "PCINT16",
+              "bit": 0
+            },
+            {
+              "name": "PCINT17",
+              "bit": 1
+            },
+            {
+              "name": "PCINT18",
+              "bit": 2
+            },
+            {
+              "name": "PCINT19",
+              "bit": 3
+            },
+            {
+              "name": "PCINT20",
+              "bit": 4
+            },
+            {
+              "name": "PCINT21",
+              "bit": 5
+            },
+            {
+              "name": "PCINT22",
+              "bit": 6
+            },
+            {
+              "name": "PCINT23",
+              "bit": 7
+            }
+          ]
+        },
+        {
+          "name": "EIND",
+          "address": "0x5C",
+          "size": 8,
+          "description": "",
+          "source": "avr-libc iom2560.h",
+          "fields": [
+            {
+              "name": "EIND0",
+              "bit": 0
+            }
+          ]
         }
       ]
     }
