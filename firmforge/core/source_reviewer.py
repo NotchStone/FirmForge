@@ -67,6 +67,19 @@ _FIELD_REF_RE = re.compile(
 # in the known-safe list, then check each against the reference library.
 _ALL_CAPS_IDENT_RE = re.compile(r'\b([A-Z][A-Z0-9_]{2,})\b')
 
+# Pattern 4: STM32 外设寄存器访问 —— PERIPH->REG 或 PERIPH.REG。
+# 外设实例名是全大写（GPIOA / USART1 / DMA1），HAL 句柄是小写（huart1），
+# 两者天然不撞。命中后必须用**限定名**查：STM32 的 CR1 / SR / DR 跨外设重名，
+# 用裸名查会解析到别的外设，且不报错。
+_PERIPH_ACCESS_RE = re.compile(
+    r'\b([A-Z][A-Z0-9]{1,15})\s*(?:->|\.)\s*([A-Z][A-Z0-9_]{1,24})\b'
+)
+
+# Pattern 5: STM32 CMSIS 位宏 —— 至少含一个下划线，且整体全大写。
+# USART_CR1_TE / GPIO_MODER_MODER0 命中；HAL_GPIO_WritePin（有大小写）
+# 与 __HAL_RCC_XXX（前导下划线）不命中。
+_FIELD_MACRO_RE = re.compile(r'\b([A-Z][A-Z0-9]*_[A-Z0-9_]+)\b')
+
 # Known AVR-safe identifiers that are NOT register names
 _KNOWN_NON_REGISTERS = {
     # Arduino constants
@@ -308,6 +321,11 @@ class SourceReviewer:
         seen_registers: set[tuple[str, int]] = set()
         seen_fields: set[tuple[str, int]] = set()
 
+        # 已知外设实例名（USART1 / GPIOA / DMA1）。空集说明当前芯片的知识库
+        # 没有外设分组（AVR 也有分组，但 AVR 代码不写 PERIPH->REG），此时
+        # Phase 0 整体跳过，不为没有的东西付扫描成本。
+        peripherals = self._knowledge_base.peripheral_names()
+
         for line_num, line in enumerate(lines, start=1):
             stripped = self._strip_strings(line).strip()
 
@@ -318,6 +336,41 @@ class SourceReviewer:
                 continue
             if stripped.startswith("/*") or stripped.startswith("*"):
                 continue
+
+            # --- Phase 0: 外设寄存器访问 PERIPH->REG / PERIPH.REG -----------
+            # STM32 的写法。此前这类引用完全没被识别：`USART1->CR1` 里的裸名
+            # `CR1` 会落到 Phase 2，而裸名在 STM32 上跨 36 个外设重名，
+            # lookup_register("CR1") 返回其中随便一个 —— 审查显示「已解析」，
+            # 实际解析到了别的外设。限定名查不到才是真错。
+            peripheral_regs_on_line: set[str] = set()
+            if peripherals:
+                for match in _PERIPH_ACCESS_RE.finditer(stripped):
+                    periph, reg = match.group(1).upper(), match.group(2).upper()
+                    if periph not in peripherals:
+                        continue
+                    peripheral_regs_on_line.add(reg)
+
+                    key = (f"{periph}.{reg}", line_num)
+                    if key in seen_registers:
+                        continue
+                    seen_registers.add(key)
+                    result.registers_checked += 1
+
+                    if self._knowledge_base.lookup_register_qualified(periph, reg):
+                        result.registers_resolved += 1
+                    else:
+                        result.violations.append(SourceReviewViolation(
+                            register=f"{periph}.{reg}",
+                            line=line_num,
+                            line_text=stripped,
+                            severity="error",
+                            reason=(f"Peripheral register '{periph}.{reg}' not "
+                                    f"found in reference library"),
+                            suggestion=(f"外设 {periph} 存在，但 '{reg}' 不是它的"
+                                        f"寄存器。用 'ff context <board> "
+                                        f"--topic {periph}' 列出真名。"),
+                        ))
+                        result.passed = False
 
             # --- Phase 1: Extract bit-field references FIRST ---
             # This lets us exclude them from register scanning
@@ -355,6 +408,53 @@ class SourceReviewer:
                                    f"Arduino core or AVR headers",
                     ))
 
+            # --- Phase 1b: STM32 CMSIS 位宏（USART_CR1_TE）-----------------
+            # AVR 的位名被 (1 << X) / _BV(X) 包着，Phase 1 能认出来；STM32
+            # 直接写宏名，外面没有移位。判据分三档：
+            #   命中全名索引 → 真位
+            #   前缀命中     → 该前缀下确有一批真位，说明寄存器选对了、位名写错了
+            #   都不命中     → HAL 常量（GPIO_PIN_7）或别的库的宏，放过
+            if peripherals:
+                for match in _FIELD_MACRO_RE.finditer(stripped):
+                    macro = match.group(1).upper()
+                    if macro in peripheral_regs_on_line:
+                        continue          # Phase 0 已按限定名查过
+                    if macro in _KNOWN_NON_REGISTERS:
+                        continue
+                    if macro in field_names_on_line:
+                        continue          # Phase 1 已按 (1 << X) 形态处理
+
+                    if self._knowledge_base.lookup_field(macro):
+                        key = (macro, line_num)
+                        if key in seen_fields:
+                            continue
+                        seen_fields.add(key)
+                        result.fields_checked += 1
+                        result.fields_resolved += 1
+                        continue
+
+                    prefix = self._knowledge_base.field_prefix_of(macro)
+                    if not prefix:
+                        continue          # HAL 常量，不在寄存器库里是正常的
+
+                    key = (macro, line_num)
+                    if key in seen_fields:
+                        continue
+                    seen_fields.add(key)
+                    result.fields_checked += 1
+                    result.violations.append(SourceReviewViolation(
+                        register=macro,
+                        line=line_num,
+                        line_text=stripped,
+                        severity="error",
+                        reason=(f"Bit-field macro '{macro}' not found; prefix "
+                                f"'{prefix}' has known fields in reference"),
+                        suggestion=(f"'{prefix}' 下有已知位宏 —— 寄存器选对了、"
+                                    f"位名写错了。用 'ff context <board> "
+                                    f"--topic <外设>' 核对位名。"),
+                    ))
+                    result.passed = False
+
             # --- Phase 2: Find register names in assignment context ---
             for match in _REGISTER_ASSIGN_RE.finditer(stripped):
                 reg_name = match.group(1)
@@ -369,6 +469,11 @@ class SourceReviewer:
 
                 # Skip if this is actually a field name on this line
                 if reg_name.upper() in field_names_on_line:
+                    continue
+
+                # Skip registers already resolved as PERIPH->REG on this line:
+                # 裸名在 STM32 上跨外设重名，再查一遍只会得到假通过
+                if reg_name.upper() in peripheral_regs_on_line:
                     continue
 
                 # Skip common C keywords/types that might match
@@ -502,11 +607,13 @@ class SourceReviewer:
         """
         field_upper = field_name.upper()
 
-        # Strategy 1: Check all registers for a matching field
-        for reg_entry in self._knowledge_base.get_all_registers().values():
-            for fld in reg_entry.get("fields", []):
-                if fld.get("name", "").upper() == field_upper:
-                    return True
+        # Strategy 1: 位域全名索引（O(1)）。
+        # 曾经这里是「遍历所有寄存器、再遍历每个寄存器的位」，STM32 上是
+        # 1761 × 平均 6 位，而每个位引用都要重扫一遍 —— 审查一度是全流程里
+        # 最慢的一段。索引在 load_reference 时建好，名字就是 CMSIS 位宏名
+        # （``USART_CR1_TE``），比遍历更准也更快。
+        if self._knowledge_base.lookup_field(field_upper):
+            return True
 
         # Strategy 2: Port bit name pattern (PORTB7, DDRB3, PINC5)
         port_match = re.match(r'^(PORT|DDR|PIN)([A-L])(\d)$', field_upper)

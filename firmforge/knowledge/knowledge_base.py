@@ -46,6 +46,43 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _build_field_index(qualified: dict[str, dict[str, Any]]
+                        ) -> tuple[dict[str, list[dict[str, Any]]],
+                                   dict[str, int]]:
+    """位域名 → 归属寄存器，以及位宏前缀集合。
+
+    两个索引服务于不同问题：
+
+    - **全名索引**：源码里写了 ``USART_CR1_TE``，它是不是真位？—— 直接查名字。
+    - **前缀索引**：源码里写了 ``GPIO_MODER_BOGUS``，名字查不到。此时要区分
+      「HAL 常量，本来就不在寄存器库里」（``GPIO_PIN_7``）与「前缀对、位名错」
+      （``GPIO_MODER_BOGUS``）—— 前者放过，后者是幻觉。判据只能是前缀：
+      ``GPIO_MODER_`` 下确实有一批已知位，那就说明写的人知道自己要访问哪个
+      寄存器，只是位名写错了。
+
+    AVR 的位名（``RXEN0`` / ``C``）不含下划线，不进前缀表；它们靠全名索引
+    就能判定，不会因为「前缀太短」误伤。
+    """
+    index: dict[str, list[dict[str, Any]]] = {}
+    prefixes: dict[str, int] = {}
+    for key, reg in qualified.items():
+        group, _, reg_name = key.partition(".")
+        for fld in reg.get("fields") or []:
+            name = str(fld.get("name") or "").upper()
+            if not name:
+                continue
+            index.setdefault(name, []).append({
+                "peripheral": group,
+                "register": reg_name,
+                "bit": fld.get("bit"),
+                "svd_name": fld.get("svd_name"),
+            })
+            if "_" in name:
+                head = name.rsplit("_", 1)[0] + "_"
+                prefixes[head] = prefixes.get(head, 0) + 1
+    return index, prefixes
+
+
 class KnowledgeBase:
     """Unified knowledge query interface.
 
@@ -87,6 +124,15 @@ class KnowledgeBase:
         # 永不与源码 token 撞车）。
         self._qualified_index: dict[str, dict[str, Any]] = {}
         self._duplicate_register_names: set[str] = set()
+        # 位域全名索引：``USART_CR1_TE`` → 归属寄存器。STM32 的 CMSIS 位宏
+        # 名字就是「外设_寄存器_位」，与源码里的写法国名，可以直接查；
+        # 顺带解决审查器此前「遍历所有寄存器找位」的 O(n²) 扫描。
+        self._field_index: dict[str, list[dict[str, Any]]] = {}
+        # 位宏前缀：``USART_CR1_``。用来判定「前缀对、位名错」——
+        # ``GPIO_MODER_BOGUS`` 不是凭空出现的常量，而是打错的位宏。
+        self._field_prefixes: dict[str, int] = {}
+        # 已知外设实例名（``USART1`` / ``GPIOA``），STM32 的限定名查找入口
+        self._peripheral_names: set[str] = set()
         self._pin_index: dict[int, dict[str, Any]] = {}  # arduino_pin -> pin entry
         self._pin_map_cache: dict[str, dict[str, Any]] = {}  # board_id -> pins_*.json
         self._ref_origin: dict[str, dict[str, Any]] = {}  # platform -> 实际命中来源
@@ -233,10 +279,15 @@ class KnowledgeBase:
             self._register_index = new_index
             self._qualified_index = new_qualified
             self._duplicate_register_names = new_dups
+            self._field_index, self._field_prefixes = _build_field_index(
+                new_qualified)
+            self._peripheral_names = {
+                key.split(".", 1)[0] for key in new_qualified}
 
-            logger.info("KnowledgeBase loaded %d registers (%d qualified) from %s",
-                         len(self._register_index), len(self._qualified_index),
-                         reg_path)
+            logger.info("KnowledgeBase loaded %d registers (%d qualified, "
+                        "%d field names) from %s",
+                        len(self._register_index), len(self._qualified_index),
+                        len(self._field_index), reg_path)
             origin["registers"] = {"zone": reg_tag, "path": str(reg_path)}
             loaded_any = True
 
@@ -392,6 +443,40 @@ class KnowledgeBase:
                 return fld
         return None
 
+    def lookup_field(self, field_name: str) -> dict[str, Any] | None:
+        """位域**全名**查找（``USART_CR1_TE`` / ``RXEN0``）。
+
+        与 ``lookup_register_field(reg, field)`` 的分工：后者是「我知道是哪个
+        寄存器，问它有没有这一位」；这个是「源码里出现了这个宏名，它是不是
+        真位」。STM32 的 CMSIS 位宏自带外设与寄存器前缀，所以全名本身就
+        足以定位，不需要先解析出所在寄存器。
+        """
+        hits = self._field_index.get((field_name or "").upper())
+        return hits[0] if hits else None
+
+    def field_prefix_of(self, identifier: str) -> str | None:
+        """若标识符形如「已知位宏前缀 + 后缀」，返回该前缀。
+
+        ``GPIO_MODER_BOGUS`` → ``"GPIO_MODER_"``（前缀下有一批真位，说明这是
+        打错的位宏）；``GPIO_PIN_7`` → ``None``（寄存器库里没有 ``GPIO_PIN_``
+        这一族，它是 HAL 常量，不该判错）。
+
+        按 ``_`` 从右往左逐段截短，所以 ``USART_CR1_TE_BOGUS`` 也能落到
+        ``USART_CR1_``。最短 4 字符，挡掉 ``A_`` 这类过短前缀。
+        """
+        ident = (identifier or "").upper()
+        cut = ident.rfind("_")
+        while cut > 0:
+            head = ident[:cut + 1]
+            if len(head) >= 4 and head in self._field_prefixes:
+                return head
+            cut = ident.rfind("_", 0, cut)
+        return None
+
+    def peripheral_names(self) -> set[str]:
+        """已知外设实例名（``USART1`` / ``GPIOA`` / ``DMA1``）。"""
+        return set(self._peripheral_names)
+
     def lookup_pin(self, arduino_pin: int) -> dict[str, Any] | None:
         """Look up Arduino pin number → AVR port/bit mapping.
 
@@ -461,6 +546,8 @@ class KnowledgeBase:
             "reference_platforms_loaded": list(self._ref_cache.keys()),
             "total_registers_indexed": len(self._register_index),
             "total_qualified_registers_indexed": len(self._qualified_index),
+            "total_field_names_indexed": len(self._field_index),
+            "total_peripherals_indexed": len(self._peripheral_names),
             "ambiguous_register_names": sorted(self._duplicate_register_names),
             "total_pins_indexed": len(self._pin_index),
             "pin_maps_loaded": list(self._pin_map_cache.keys()),
