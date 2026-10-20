@@ -224,11 +224,17 @@ class ArduinoBuildProvider(BuildProvider):
 
     @staticmethod
     def _parse_f_cpu(board_config: dict) -> int:
-        """Parse F_CPU from board_config specs.clock (e.g. "16 MHz" → 16000000)."""
-        import re
-        clock_str = (board_config or {}).get("specs", {}).get("clock", "")
-        m = re.search(r"(\d+)", clock_str)
-        return int(m.group(1)) * 1_000_000 if m else 16_000_000
+        """F_CPU 从 ``specs.clock`` 读（``"16 MHz"`` → 16000000）。
+
+        单位解析复用 ``core.board_view.parse_freq``，与 ``ff context`` 同一个
+        函数 —— 两处各写一份正则，迟早有一处把 ``"480 MHz"`` 读成 480。
+        编译层唯一的特殊性是 **F_CPU 必须有值**，所以保留 16 MHz 兜底；
+        而「告诉用户这块板子是多少 Hz」宁可显示 unknown，不猜。
+        """
+        from firmforge.core.board_view import parse_freq
+
+        declared = (board_config or {}).get("specs", {}).get("clock")
+        return parse_freq(declared) or 16_000_000
 
     def _compile_sources(
         self, sources: list[str], elf_path: str, hex_path: str,

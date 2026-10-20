@@ -313,6 +313,63 @@ class KnowledgeBase:
         """裸名是否跨外设重复（重复时裸名查找结果不可信）。"""
         return reg_name.upper() in self._duplicate_register_names
 
+    def search_registers(self, query: str, limit: int = 200
+                          ) -> tuple[list[dict[str, Any]], bool]:
+        """按用户的输入形态查寄存器，返回 ``(命中条目, 是否被截断)``。
+
+        四档顺序，先精确后模糊：
+
+        1. ``外设.寄存器``（``USART1.CR1``）—— 完全限定键
+        2. 外设名（``USART1``）—— 该外设下全部寄存器
+        3. 裸名（``PORTB`` / ``CR1``）—— **裸名有歧义时返回全部限定命中**，
+           不是第一个。STM32 上 ``CR1`` 出现在四十多个外设里，随便挑一个
+           返回和返回错值没有区别。
+        4. 子串（``usart``）—— 兜底模糊匹配，限定键参与匹配
+
+        三档都空才轮到下一档，避免 ``USART1`` 这样的输入被第 4 档的松散
+        子串结果稀释。
+        """
+        q = (query or "").strip().upper()
+        if not q:
+            return [], False
+
+        # 1. 完全限定键
+        hit = self._qualified_index.get(q)
+        if hit is not None:
+            return [hit], False
+
+        # 2. 外设名（是某个限定键的前缀）
+        prefix = f"{q}."
+        grouped = [v for k, v in self._qualified_index.items()
+                   if k.startswith(prefix)]
+        if grouped:
+            return grouped[:limit], len(grouped) > limit
+
+        # 3. 裸名。歧义时把同名的全部返回，让调用方按 group 挑
+        if q in self._duplicate_register_names:
+            dup = [v for k, v in self._qualified_index.items()
+                   if k.endswith(f".{q}")]
+            return dup[:limit], len(dup) > limit
+        bare = self._register_index.get(q)
+        if bare is not None:
+            return [bare], False
+
+        # 4. 子串兜底
+        loose = [v for k, v in self._qualified_index.items() if q in k]
+        return loose[:limit], len(loose) > limit
+
+    def register_groups(self) -> dict[str, int]:
+        """外设组名 → 寄存器数（当前已加载芯片）。
+
+        统计口径走 ``_qualified_index`` 而不是 ``_register_index``：后者只留
+        非歧义的裸名（STM32 上 1761 / 2955），拿它算分组会系统性少算。
+        """
+        counts: dict[str, int] = {}
+        for key in self._qualified_index:
+            group = key.split(".", 1)[0]
+            counts[group] = counts.get(group, 0) + 1
+        return counts
+
     def lookup_register_field(self, reg_name: str,
                                field_name: str,
                                peripheral: str | None = None

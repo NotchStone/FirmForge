@@ -383,8 +383,9 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         "context", help="Query chip knowledge reference (registers/pins/baud) for a board",
     )
     p_ctx.add_argument("board", nargs="?", help="Board ID (auto-detect if omitted)")
-    p_ctx.add_argument("--topic", default="",
-                       help="Filter by topic (uart/spi/i2c/adc/timer/pwm/gpio)")
+    p_ctx.add_argument(
+        "--topic", default="",
+        help="registers|pins|baud|all，或外设名（USART1）、外设.寄存器（USART1.CR1）")
 
     return parser
 
@@ -401,19 +402,76 @@ def cmd_context(args: argparse.Namespace) -> int:
         print(f"Error: {payload['error']}")
         return 1
 
-    print(f"Board: {payload.get('board', '?')} | Chip: {payload.get('chip', '?')}")
-    print(f"  Clock: {payload.get('clock_hz', '?')} Hz | Flash: {payload.get('flash_size', '?')}")
-    regs = payload.get("registers", [])
-    print(f"  Registers: {len(regs)} (topic filter: {args.topic or 'all'})")
-    for r in regs[:10]:
-        print(f"    - {r.get('name', '?')} @ {r.get('address', '?')} ({r.get('size', '?')}-bit)")
-    if len(regs) > 10:
-        print(f"    ... and {len(regs) - 10} more")
-    pins = payload.get("pins", {})
-    if pins:
-        print(f"  Pins: {len(pins)}")
-        for name, pin in list(pins.items())[:5]:
-            print(f"    - {name}: {pin}")
+    from firmforge.core.board_view import format_freq, format_size
+
+    platform = payload.get("platform") or "?"
+    series = payload.get("series")
+    scope = f"{platform}/{series}" if series and series != platform else platform
+    print(f"Board: {payload.get('board', '?')} | "
+          f"Chip: {payload.get('chip') or '?'} ({scope})")
+    print(f"  Clock: {format_freq(payload.get('clock_hz'))} | "
+          f"Flash: {format_size(payload.get('flash_bytes'))} | "
+          f"RAM: {format_size(payload.get('ram_bytes'))}")
+
+    # 寄存器：分组统计 > 命中列表。两个分支的信息量不同，不能混着打。
+    groups = payload.get("register_groups") or {}
+    mode = payload.get("topic_mode", "all")
+    if mode in ("all", "registers", "query"):
+        if groups and mode in ("all", "registers"):
+            total = payload.get("register_total", sum(groups.values()))
+            print(f"  Registers: {total} across {len(groups)} peripherals"
+                  f" — 用 --topic <外设名> 展开，如 --topic USART1")
+            for name, count in sorted(groups.items())[:12]:
+                print(f"    {name:<12} {count:>3} regs")
+            if len(groups) > 12:
+                print(f"    ... and {len(groups) - 12} more peripherals")
+        else:
+            regs = payload.get("registers", [])
+            label = payload.get("topic") or "all"
+            print(f"  Registers: {len(regs)} hit(s) (topic: {label})")
+            for r in regs[:20]:
+                where = f"{r['group']}.{r['name']}" if r.get("group") else r.get("name", "?")
+                # None = 命中过多被省略；[] = 数据本身没有位域。两者不能都印 0。
+                bits = r.get("fields")
+                bits_txt = ("fields omitted" if bits is None
+                            else f"{len(bits)} fields")
+                print(f"    {where:<24} @ {str(r.get('address', '?')):<12} "
+                      f"({r.get('size', '?')}-bit, {bits_txt})")
+            if len(regs) > 20:
+                print(f"    ... and {len(regs) - 20} more")
+            if mode == "query" and not regs:
+                print("    没有命中：换成外设名（USART1）或 外设.寄存器（USART1.CR1）再试")
+
+    pins = payload.get("pins") or {}
+    if pins.get("count"):
+        fmt = pins.get("format")
+        print(f"  Pins: {pins['count']} ({fmt})")
+        for item in pins.get("items", [])[:8]:
+            if fmt == "arduino":
+                print(f"    D{item.get('arduino_pin', '?'):<3} "
+                      f"P{item.get('port', '?')}{item.get('bit', '?')} "
+                      f"({item.get('register', '?')}) "
+                      f"{item.get('special') or ''}".rstrip())
+            else:
+                value = item.get("value")
+                if isinstance(value, dict):
+                    value = " ".join(f"{k}={v}" for k, v in value.items())
+                print(f"    {str(item.get('name', '?')):<12} {value}")
+        if pins["count"] > 8:
+            print(f"    ... and {pins['count'] - 8} more pins")
+
+    if payload.get("baud"):
+        print("  Baud presets:")
+        for baud, preset in list(payload["baud"].items())[:10]:
+            print(f"    {baud:>7} -> UBRR {preset.get('ubrr')} "
+                  f"({preset.get('ubrr_hex')}), err {preset.get('error_pct')}%")
+    elif payload.get("baud_note"):
+        print(f"  Baud: {payload['baud_note']}")
+
+    origin = payload.get("origin") or {}
+    reg_origin = origin.get("registers") if isinstance(origin, dict) else None
+    if reg_origin:
+        print(f"  Source: {reg_origin.get('zone')} 区 {reg_origin.get('path')}")
     return 0
 
 

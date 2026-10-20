@@ -185,10 +185,48 @@ def _do_detect() -> dict[str, Any]:
         return {"error": str(e), "detected": False, "boards": [], "candidates": []}
 
 
+#: ``ff context`` 的主题别名。主题是**枚举**，不是关键字 ——
+#: 早先实现把 ``--topic registers`` 当成「在寄存器名里搜 registers」，
+#: 于是这个最该用的主题永远返回 0 条，而错误是静默的（没有异常，只有空表）。
+_TOPIC_ALIASES: dict[str, str] = {
+    "": "all", "all": "all", "overview": "all",
+    "registers": "registers", "register": "registers",
+    "reg": "registers", "regs": "registers",
+    "pins": "pins", "pin": "pins",
+    "baud": "baud", "baudrate": "baud", "baud_rate": "baud",
+}
+
+#: 概览时寄存器条目的返回上限。超过就瘦身（去掉位域表）并标记 truncated。
+_REG_PREVIEW_LIMIT = 20
+
+
+def _public_register(entry: dict[str, Any], keep_fields: bool = True
+                     ) -> dict[str, Any]:
+    """知识库内部条目 → 对外条目。
+
+    内部字段带 ``_`` 前缀（``_group`` / ``_platform``），是索引期的记账信息。
+    对外只暴露干净的 ``group`` 键，调用方不必知道索引长什么样。位域表默认
+    保留，只有条数过多时才丢 —— 2955 条寄存器全带 ``fields`` 是 3 MB 的
+    payload，那是给程序读的，不是给 ``ff context`` 的输出。
+    """
+    out = {k: v for k, v in entry.items() if not k.startswith("_")}
+    out["group"] = entry.get("_group")
+    if not keep_fields:
+        out.pop("fields", None)
+    return out
+
+
 def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
-    """Execute ff_context — return board register/pin/baud reference."""
+    """Execute ff_context — return board register/pin/baud reference.
+
+    输出形状对所有板卡一致，字段取值一律走 ``core.board_view`` —— 板卡声明
+    里 ``specs.flash`` / ``specs.clock`` 是字符串（``"2 MB"`` / ``"480 MHz"``），
+    而这里要给的是字节数和赫兹。此前直接读 ``mcu.flash_size``（这个字段
+    三块板卡都没有），导致 AVR 与 STM32 的 Flash 都显示 0。
+    """
     try:
-        root = _add_project_root_to_path()
+        _add_project_root_to_path()
+        from firmforge.core.board_view import board_pin_list, board_specs
         from firmforge.knowledge.knowledge_base import KnowledgeBase
         from firmforge.core.board_detector import BoardDetector
 
@@ -203,34 +241,65 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
         config = BoardDetector().resolve_board(board) or {}
         if not config:
             return {"error": f"Board '{board}' not found in board definitions."}
-        mcu = config.get("mcu", {})
-        chip = mcu.get("chip", "atmega328p").lower()
 
+        specs = board_specs(config)
         knowledge_base = KnowledgeBase()
         knowledge_base.load_for_board(config)
 
-        topic_filter = topic.lower() if topic else ""
+        raw_topic = (topic or "").strip()
+        wanted = _TOPIC_ALIASES.get(raw_topic.lower(), "query")
 
-        registers = knowledge_base.get_all_registers()
-        if topic_filter:
-            registers = {
-                k: v for k, v in registers.items()
-                if topic_filter in k.lower() or topic_filter in v.get("description", "").lower()
-            }
-        reg_list = list(registers.values())[:20] if not topic_filter else list(registers.values())
-
-        pins = knowledge_base.get_pin_map(board) or knowledge_base.get_pin_map(chip.lower())
-
-        return {
-            "board": board,
-            "chip": chip,
-            "clock_hz": mcu.get("f_cpu", "16000000"),
-            "flash_size": mcu.get("flash_size", 0),
+        payload: dict[str, Any] = {
+            **specs,
             "features": config.get("features", {}),
-            "registers": reg_list,
-            "pins": pins,
-            "topic": topic_filter or None,
+            "topic": raw_topic or None,
+            "topic_mode": wanted,
+            "registers": [],
+            "register_groups": {},
+            "registers_truncated": False,
+            "pins": {"format": "none", "count": 0, "items": []},
         }
+
+        # ----- 寄存器 ------------------------------------------------------
+        if wanted == "query":
+            hits, truncated = knowledge_base.search_registers(raw_topic)
+            payload["registers"] = hits[:200]
+            payload["registers_truncated"] = truncated or len(hits) > 200
+        elif wanted in ("all", "registers"):
+            all_regs = knowledge_base.get_all_registers()
+            payload["register_groups"] = knowledge_base.register_groups()
+            payload["register_total"] = sum(payload["register_groups"].values())
+            payload["registers"] = list(all_regs.values())[:_REG_PREVIEW_LIMIT]
+            payload["registers_truncated"] = (
+                payload["register_total"] > _REG_PREVIEW_LIMIT)
+
+        # 映射只做一次。此前 query 分支与瘦身分支各映射一遍，第二遍拿不到
+        # 已经被抹掉的 ``_group``，结果 36 条同名 CR1 全显示成 ``CR1`` ——
+        # 有数据但分不清属于哪个外设。
+        keep_fields = len(payload["registers"]) <= _REG_PREVIEW_LIMIT
+        if payload["registers"]:
+            payload["registers"] = [_public_register(r, keep_fields=keep_fields)
+                                    for r in payload["registers"]]
+
+        # ----- 引脚 --------------------------------------------------------
+        pin_map = (knowledge_base.get_pin_map(board)
+                   if specs.get("chip_key") else None)
+        if wanted in ("all", "pins"):
+            fmt, items = board_pin_list(config, pin_map)
+            payload["pins"] = {"format": fmt, "count": len(items),
+                               "items": items}
+
+        # ----- 波特率 ------------------------------------------------------
+        if wanted == "baud":
+            presets = (pin_map or {}).get("baud_rate_presets", {})
+            payload["baud"] = presets
+            if not presets:
+                payload["baud_note"] = (
+                    "该板卡没有波特率预设表：STM32 的波特率由 PCLK 与 BRR "
+                    "算出，不是查表能得到的常数。")
+
+        payload["origin"] = knowledge_base.reference_origin(specs.get("library"))
+        return payload
     except Exception as e:
         return {"error": str(e), "board": board or "unknown"}
 
