@@ -19,6 +19,16 @@ from firmforge.providers.arduino.toolchain import resolve_toolchain
 
 logger = logging.getLogger(__name__)
 
+# avrdude 的退出码不足以判定「写成功」：端口打不开、目标不在 bootloader 时，
+# 它仍可能返回 0。下面这些标记一旦出现，无论 rc 是多少都按「没写进去」处理。
+_NO_TARGET_MARKERS = (
+    "unable to open port",
+    "cannot set com-state",
+    "programmer is not responding",
+    "n sync",          # avrdude 8 的措辞：n sync: resp=0x..
+    "initialization failed",
+)
+
 
 class ArduinoFlashProvider(FlashProvider):
     """Arduino AVR programmer adapter (avrdude)."""
@@ -198,15 +208,31 @@ class ArduinoFlashProvider(FlashProvider):
             combined = (proc.stdout or "") + (proc.stderr or "")
 
             if proc.returncode == 0:
-                if "verification error" in combined.lower():
+                lowered = combined.lower()
+                if "verification error" in lowered:
                     logger.warning("Verification error @%d: %s", baud, combined[-100:])
                     continue
 
+                # rc==0 不等于写成功。实测（2026-10-21，Nano/CH340 端口失效）：
+                # avrdude 打印 "unable to open port" 后仍然返回 0，于是「一个字节没写」
+                # 被判成 PASS —— S4 是阻断点，假通过比假失败危险得多。
+                # 规矩：flash 必须有写入证据；措辞对不上时用回读校验兜底，不猜。
                 bytes_written = 0
                 if operation == "flash":
+                    marker = next((m for m in _NO_TARGET_MARKERS if m in lowered), None)
+                    if marker:
+                        logger.warning("No usable target @%d (%s): %s",
+                                       baud, marker, combined[-140:])
+                        continue
+
                     m = re.search(r'(\d+) bytes of flash written', combined, re.IGNORECASE)
-                    if m:
-                        bytes_written = int(m.group(1))
+                    bytes_written = int(m.group(1)) if m else 0
+                    if bytes_written <= 0:
+                        logger.info("No write evidence @%d; falling back to read-back verify", baud)
+                        if not self._run_avrdude("verify", firmware_path, port).success:
+                            logger.warning("Read-back verify failed @%d", baud)
+                            continue
+                        bytes_written = -1  # 校验通过但字节数未知
                     com_port_clean_close(port)
 
                 result = FlashResult(success=True, bytes_written=bytes_written,

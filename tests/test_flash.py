@@ -77,7 +77,8 @@ class TestFlashCommandConstruction:
         provider = ArduinoFlashProvider(_board_config("ATmega328P"))
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="done", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="avrdude: 5340 bytes of flash written\n", stderr="")
             result = provider.flash(fake_hex_path)
 
         assert result.success is True
@@ -95,7 +96,8 @@ class TestFlashCommandConstruction:
         provider = ArduinoFlashProvider(_board_config("ATmega2560"))
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="done", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="avrdude: 5340 bytes of flash written\n", stderr="")
             result = provider.flash(fake_hex_path)
 
         assert result.success is True
@@ -114,7 +116,8 @@ class TestFlashCommandConstruction:
         provider = ArduinoFlashProvider(_board_config("ATmega32U4"))
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="done", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="avrdude: 5340 bytes of flash written\n", stderr="")
             result = provider.flash(fake_hex_path)
 
         assert result.success is True
@@ -188,6 +191,68 @@ class TestFlashErrorHandling:
 
         assert result.success is False
         assert "Failed" in result.stderr or "failed" in result.stderr.lower()
+
+    def test_rc0_with_port_error_is_not_success(self, monkeypatch, fake_hex_path):
+        """rc=0 但端口打不开 → 必须是失败。
+
+        实测（2026-10-21，Nano 的 CH340 端点失效）：avrdude 打印
+        "unable to open port COM5" 后仍返回 0，旧逻辑据此报 Flash SUCCESS
+        (0 bytes) —— S4 是阻断点，假通过比假失败危险得多。
+        """
+        from firmforge.providers.arduino.flash import ArduinoFlashProvider
+
+        _mock_port(monkeypatch, "COM3")
+        provider = ArduinoFlashProvider(_board_config())
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="avrdude error: unable to open port COM3 for programmer arduino\n"
+                       "Avrdude done.  Thank you.\n",
+                stderr="",
+            )
+            result = provider.flash(fake_hex_path)
+
+        assert result.success is False
+
+    def test_no_byte_evidence_falls_back_to_verify(self, monkeypatch, fake_hex_path):
+        """rc=0 但没有字节证据时，用回读校验兜底，而不是猜成功或猜失败。"""
+        from firmforge.providers.arduino.flash import ArduinoFlashProvider
+
+        _mock_port(monkeypatch, "COM3")
+        provider = ArduinoFlashProvider(_board_config())
+
+        write_ok = MagicMock(returncode=0, stdout="avrdude: writing flash (100 bytes)\n",
+                             stderr="")
+        verify_ok = MagicMock(returncode=0, stdout="avrdude: 100 bytes verified\n", stderr="")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [write_ok, verify_ok]
+            result = provider.flash(fake_hex_path)
+
+        assert result.success is True
+        assert result.bytes_written == -1          # 校验通过但字节数未知
+        assert mock_run.call_count == 2
+        assert ":v:" in " ".join(str(a) for a in mock_run.call_args[0][0])
+
+    def test_no_byte_evidence_and_verify_fails(self, monkeypatch, fake_hex_path):
+        """没有字节证据、回读也失败 → 失败。"""
+        from firmforge.providers.arduino.flash import ArduinoFlashProvider
+
+        _mock_port(monkeypatch, "COM3")
+        provider = ArduinoFlashProvider(_board_config())
+
+        empty = MagicMock(returncode=0, stdout="done", stderr="")
+        verify_fail = MagicMock(returncode=1, stdout="", stderr="avrdude: verification error")
+
+        def _fake_run(cmd, **_kwargs):
+            # 回读校验自己也会遍历波特率，所以按命令行内容区分，而不是按调用序号
+            return verify_fail if any(":v:" in str(a) for a in cmd) else empty
+
+        with patch("subprocess.run", side_effect=_fake_run):
+            result = provider.flash(fake_hex_path)
+
+        assert result.success is False
 
 
 class TestMCUMapCompleteness:
