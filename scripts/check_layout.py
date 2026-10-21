@@ -29,6 +29,9 @@ from typing import Any
 # --------------------------------------------------------------------------
 
 # §5 #1/#2 —— 承诺级：必须在项目内且入库
+# 注意：docs/ 不在表内。2026-10-21 决定整目录不入库 —— 里面是规划、选型论证、
+# 分区标准、benchmark 数据等开发期资料，与代码库无关，不该出现在公开仓库里。
+# 因此 docs/ 既不是承诺级、也不参与 R1；本地保留，由 .gitignore 覆盖。
 COMMITTED_DIR_PREFIXES = (
     "firmforge/adapters/",
     "firmforge/core/",
@@ -40,7 +43,6 @@ COMMITTED_DIR_PREFIXES = (
     "firmforge/data/vendor/manifests/",
     "tests/",
     "scripts/",
-    "docs/",
 )
 
 COMMITTED_TOP_FILES = (
