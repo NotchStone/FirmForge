@@ -1,12 +1,26 @@
 name: sync-from-gitee
 
+# 主仓库在 Gitee（git@gitee.com:notchstone/firmforge.git）。
+# 这个 workflow 把 Gitee 的全部引用（分支 + 标签）镜像到 GitHub；
+# 因为用 `push --mirror`，历史被重写后也能强制覆盖。
+#
+# ⚠️ 两个必须知道的行为：
+# 1) 用 GITHUB_TOKEN 推送产生的提交**不会触发其它 workflow**（GitHub 防递归），
+#    所以 ci.yml 不会在镜像提交上跑。要让它跑，得换 PAT。
+# 2) 仓库连续 60 天无提交，GitHub 会自动停用定时任务，需手动 re-enable。
+
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
-  workflow_dispatch:          # manual trigger
+    - cron: "*/30 * * * *"   # 每 30 分钟
+  workflow_dispatch:          # Actions 页 → Run workflow 手动触发
 
 permissions:
   contents: write
+
+# 上一轮没跑完时不再起一轮，避免两个 mirror push 互相打架
+concurrency:
+  group: mirror-from-gitee
+  cancel-in-progress: false
 
 jobs:
   mirror:
@@ -15,7 +29,29 @@ jobs:
       - name: Mirror Gitee → GitHub
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SRC: https://gitee.com/notchstone/firmforge.git
+          DST: github.com/NotchStone/firmforge.git
         run: |
-          git clone --mirror https://gitee.com/notchstone/firmforge.git /tmp/gitee-mirror
+          set -euo pipefail
+
+          # Gitee 对境外 IP 偶尔拒绝连接。此前这个 workflow 静默失败过
+          # （GitHub 上停在 2026-09-16），所以加显式重试 + 明确报错。
+          rm -rf /tmp/gitee-mirror
+          ok=0
+          for i in 1 2 3; do
+            if git clone --mirror "$SRC" /tmp/gitee-mirror; then ok=1; break; fi
+            echo "::warning::clone attempt $i failed; retry in $((i*10))s"
+            sleep $((i*10))
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::cannot clone $SRC — Gitee 拒绝或网络不通"
+            exit 1
+          fi
+
           cd /tmp/gitee-mirror
-          git push --mirror https://x-access-token:${GH_TOKEN}@github.com/NotchStone/firmforge.git
+          echo "Gitee master: $(git rev-parse --short HEAD)  $(git log -1 --format=%s)"
+
+          git push --mirror "https://x-access-token:${GH_TOKEN}@${DST}"
+
+          echo "pushed, verifying:"
+          git ls-remote "https://x-access-token:${GH_TOKEN}@${DST}" refs/heads/master
