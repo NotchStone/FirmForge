@@ -147,6 +147,8 @@ class PipelineRunner:
         expected: str = "",
         stop_after: str = "",
         progress_callback: Callable[[str, bool, dict, str | None], None] | None = None,
+        panel_open: str = "auto",
+        panel_wait: float | None = None,
     ) -> PipelineResult:
         """Execute the 5-Stage Pipeline.
 
@@ -275,17 +277,57 @@ class PipelineRunner:
         state.mark_done("test")
         state.save()
 
-        # Wait for collector thread to exit (Stop button on panel)
+        # Wait for collector thread to exit: Stop 按钮 / 关窗 / 超时
         if hasattr(self, '_collector_alive') and self._collector_alive.is_alive():
-            logger.info("S5 panel live — waiting for Stop signal (or close window)")
+            # 面板地址必须打出来。ff 自己不负责开浏览器（全历史无 webbrowser/startfile），
+            # 以前是 MCP 客户端拿 panel_url 去开窗；走 CLI 这条路时没人接手，
+            # 如果不打印地址，S5 就等于没有面板。
+            panel_url = s5.details.get("panel_url") or ""
+            logger.info("S5 面板：%s", panel_url or "(未启动)")
+            self._maybe_open_panel(panel_url, panel_open, panel_wait)
+            if panel_wait == 0:
+                logger.info("S5 不等面板（panel_wait=0），采样完即结束")
+            elif panel_wait:
+                logger.info("S5 panel live — 点 Stop / 关窗结束，或 %.0fs 后自动结束", panel_wait)
+            else:
+                logger.info("S5 panel live — 点 Stop 或关窗结束（无限等）")
             try:
-                self._collector_alive.join()
+                self._collector_alive.join(timeout=panel_wait)
             except KeyboardInterrupt:
                 pass
 
         result.overall_success = all(s.success for s in result.stages)
         result.total_elapsed_ms = (time.time() - start) * 1000
         return result
+
+    @staticmethod
+    def _maybe_open_panel(url: str, mode: str, wait: float | None) -> None:
+        """把面板地址送到人眼前——只在"确实有人在看"的场景开窗。
+
+        分工：ff 负责提供地址（永远打印），**用什么容器呈现归调用方**。
+        auto 的判据全是现成事实，不猜：
+          - stdout 是 tty？否则说明被 IDE / 脚本接管
+          - CI / SSH 环境变量存在？否则说明可能是无 GUI 的远端
+        开窗失败只记 debug，绝不因为浏览器起不来而判失败。
+        """
+        if not url or wait == 0:
+            return
+        mode = (mode or "auto").strip().lower()
+        if mode == "none":
+            return
+        if mode == "auto":
+            import os
+            import sys
+            if not sys.stdout.isatty():
+                return
+            if os.environ.get("CI") or os.environ.get("SSH_CONNECTION"):
+                return
+        try:
+            import webbrowser
+            webbrowser.open(url)
+            logger.info("S5 面板已打开：%s", url)
+        except Exception as e:  # 无 GUI / 无浏览器：不影响流程
+            logger.debug("open panel failed: %s", e)
 
     @staticmethod
     def _build_summary(stages) -> tuple[str, str]:

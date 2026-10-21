@@ -52,6 +52,7 @@ body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans
   <select id="paritysel" onchange="doSerialConfig()"><option value="None">8N1</option><option value="Even">8E1</option><option value="Odd">8O1</option></select>
   <button style="border-color:var(--sep);color:var(--txt);font-size:13px;padding:4px 12px;margin-left:auto" onclick="doClearOutput()">Clear</button>
   <button id="connbtn" onclick="doToggleConn()">{{OPEN_CLOSE}}</button>
+  <button id="stopbtn" title="结束本轮 S5 并退出 ff（关窗也会触发）" style="border-color:#c0392b;color:#e74c3c" onclick="doStopRun()">Stop</button>
 </div>
 <div class="bar" style="min-height:28px;padding:2px 14px;font-size:13px;color:var(--dim)">
   <span id="stages">{{STAGES}}</span>
@@ -215,6 +216,17 @@ function doModbusSend(){
     modbusLog.scrollTop = modbusLog.scrollHeight;
   });
 }
+// 结束本轮 S5：写 stop 文件 → 采集线程退出 → ff run 返回。
+// 关窗走同一条路，所以「关掉面板窗口即可结束」这句话现在才成立。
+var _ffStopped=false;
+function doStopRun(){
+  _ffStopped=true;
+  try{navigator.sendBeacon('/serial-stop','x');}catch(e){}
+  document.body.innerHTML='<div style="font-family:sans-serif;padding:28px;color:#888;font-size:16px">已发送 Stop，本轮 S5 结束，可以关闭此页面。</div>';
+}
+window.addEventListener('beforeunload',function(){
+  if(!_ffStopped){try{navigator.sendBeacon('/serial-stop','x');}catch(e){}}
+});
 function doClearOutput(){
   if(modbusPanel.classList.contains("show")){
     modbusLog.innerHTML="";

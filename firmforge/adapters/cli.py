@@ -175,6 +175,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         source_dir=source_dir,
         board_id=board_id or None,
         expected=expected,
+        panel_open=getattr(args, "open_panel", "auto"),
+        panel_wait=getattr(args, "panel_wait", None),
     )
 
     if getattr(args, "json", False):
@@ -378,6 +380,14 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_run.add_argument("board", nargs="?", help="Board ID (e.g. arduino_328p)")
     p_run.add_argument("--app", help="Source code directory (REQUIRED)")
     p_run.add_argument("--expected", help="Regex pattern for expected serial output")
+    p_run.add_argument(
+        "--open-panel", choices=["auto", "panel", "none"], default="auto",
+        help="串口面板谁来开：auto=仅交互式终端自动打开（默认）/ panel=强制打开 / none=只打印地址",
+    )
+    p_run.add_argument(
+        "--panel-wait", type=float, default=None, metavar="SEC",
+        help="S5 采完样本后等面板多久（秒）。不写=无限等（人工点 Stop / 关窗）；0=立即结束（CI 用）",
+    )
 
     # ff build
     p_build = subparsers.add_parser("build", help="Review and compile only (no flash/test)")
