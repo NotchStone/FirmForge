@@ -73,10 +73,10 @@ class Stm32FlashProvider(FlashProvider):
         **宁可返回 None 让 S5 明确说"没有回读"，也不要猜错。**
         """
         try:
-            import serial.tools.list_ports
-            ports = list(serial.tools.list_ports.comports())
-        except ImportError:
-            logger.warning("pyserial 不可用，串口检测跳过")
+            from firmforge.providers.win32ports import list_ports
+            ports = list_ports()
+        except Exception as e:
+            logger.warning("串口枚举失败，检测跳过：%s", e)
             return None
 
         if not ports:

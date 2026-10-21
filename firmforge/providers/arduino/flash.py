@@ -75,12 +75,13 @@ class ArduinoFlashProvider(FlashProvider):
     def detect_port(self) -> str | None:
         """Find the Arduino board's COM port via keyword matching.
 
-        Scans all COM ports with pyserial, matches description keywords.
+        端口枚举走 `win32ports`（Win32 SetupAPI），**不用 pyserial**：
+        后者的 list_ports 在 Win11 + CH340 上会污染驱动状态。
         Falls back to Windows registry.
         """
         try:
-            import serial.tools.list_ports
-            ports = list(serial.tools.list_ports.comports())
+            from firmforge.providers.win32ports import list_ports
+            ports = list_ports()
             if not ports:
                 return None
 

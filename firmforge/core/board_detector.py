@@ -235,18 +235,20 @@ class BoardDetector:
     def _scan_usb(self) -> list[BoardCandidate]:
         """Scan USB/COM ports and match against VID/PID table.
 
-        Uses pyserial to enumerate available ports.
+        端口枚举走 `providers/win32ports.py`（Win32 SetupAPI），**不碰 pyserial**：
+        在 Win11 + CH340 上，pyserial 的 list_ports 会留下 stale 驱动状态，
+        之后连 avrdude 都打不开端口。
         Returns candidates sorted by confidence (descending).
         """
         candidates: list[BoardCandidate] = []
 
         try:
-            import serial.tools.list_ports
-        except ImportError:
-            logger.warning("pyserial not installed; USB detection disabled")
+            from firmforge.providers.win32ports import list_ports
+        except Exception as e:
+            logger.warning("COM port enumeration unavailable: %s", e)
             return candidates
 
-        ports = list(serial.tools.list_ports.comports())
+        ports = list_ports()
         for port in ports:
             if port.vid is None or port.pid is None:
                 continue
@@ -484,19 +486,21 @@ class BoardDetector:
             return []
 
         # Enumerate COM ports — skip virtual/simulation ports
+        # 用 Win32 SetupAPI 枚举（win32ports），不用 pyserial：后者的 list_ports
+        # 在 Win11 + CH340 上会污染驱动状态。
         com_ports: list[str] = []
         try:
-            import serial.tools.list_ports
-            for port_info in serial.tools.list_ports.comports():
+            from firmforge.providers.win32ports import list_ports
+            for port_info in list_ports():
                 if not (port_info.device and port_info.device.upper().startswith("COM")):
                     continue
                 # Skip virtual/simulation ports (ELTIMA, com0com, etc.)
                 desc = (port_info.description or "").lower()
-                if "virtual" in desc or "elTIMA" in desc.lower():
+                if "virtual" in desc or "eltima" in desc:
                     continue
                 com_ports.append(port_info.device)
-        except ImportError:
-            pass
+        except Exception as e:
+            logger.debug("COM port enumeration failed: %s", e)
 
         # Also include ports from USB candidates (official Arduino VID/PID)
         for c in usb_candidates:
