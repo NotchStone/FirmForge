@@ -295,7 +295,7 @@ def test_detect_port_does_not_fall_back_to_arbitrary_port(board_cfg: dict,
     退而取之的后果：在有主板 COM1 的机器上会去读 COM1，读到空数据；
     而 S5 永不阻断，于是"回读失败"被静默吸收成"验证通过"。
     """
-    import serial.tools.list_ports as lp
+    import firmforge.providers.win32ports as wp
 
     class _Port:
         def __init__(self, device, description):
@@ -303,14 +303,14 @@ def test_detect_port_does_not_fall_back_to_arbitrary_port(board_cfg: dict,
             self.description = description
             self.manufacturer = None
 
-    monkeypatch.setattr(lp, "comports",
+    monkeypatch.setattr(wp, "list_ports",
                         lambda: [_Port("COM1", "Communications Port")])
     assert Stm32FlashProvider(board_cfg).detect_port() is None
 
 
 def test_detect_port_accepts_the_declared_bridge(board_cfg: dict,
                                                   monkeypatch) -> None:
-    import serial.tools.list_ports as lp
+    import firmforge.providers.win32ports as wp
 
     class _Port:
         def __init__(self, device, description):
@@ -318,7 +318,7 @@ def test_detect_port_accepts_the_declared_bridge(board_cfg: dict,
             self.description = description
             self.manufacturer = None
 
-    monkeypatch.setattr(lp, "comports", lambda: [
+    monkeypatch.setattr(wp, "list_ports", lambda: [
         _Port("COM1", "Communications Port"),
         _Port("COM7", "USB-SERIAL CH340"),
     ])

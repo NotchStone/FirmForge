@@ -62,7 +62,7 @@ class TestBoardDetector:
     def test_usb_scan_with_no_ports(self, temp_dir):
         detector = BoardDetector(boards_dir=temp_dir)
         # Without pyserial or with no ports, should return empty
-        with patch("serial.tools.list_ports.comports", return_value=[]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[]):
             candidates = detector._scan_usb()
             assert candidates == []
 
@@ -77,7 +77,7 @@ class TestBoardDetector:
         mock_port.serial_number = "12345"
         mock_port.manufacturer = "Arduino LLC"
 
-        with patch("serial.tools.list_ports.comports", return_value=[mock_port]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[mock_port]):
             candidates = detector._scan_usb()
             assert len(candidates) == 1
             assert candidates[0].board_id == "arduino_mega"
@@ -97,7 +97,7 @@ class TestBoardDetector:
         mock_port.serial_number = None
         mock_port.manufacturer = "wch.cn"
 
-        with patch("serial.tools.list_ports.comports", return_value=[mock_port]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[mock_port]):
             candidates = detector._scan_usb()
             # CH340 must never produce a board candidate — it's a generic bridge chip
             assert len(candidates) == 0, f"CH340 produced {len(candidates)} candidates, should be 0"
@@ -113,7 +113,7 @@ class TestBoardDetector:
         mock_port.serial_number = "12345"
         mock_port.manufacturer = "Arduino LLC"
 
-        with patch("serial.tools.list_ports.comports", return_value=[mock_port]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[mock_port]):
             result = detector.detect()
             assert result.board_id == "arduino_mega"
 
@@ -129,14 +129,14 @@ class TestBoardDetector:
         mock_port.serial_number = None
         mock_port.manufacturer = "wch.cn"
 
-        with patch("serial.tools.list_ports.comports", return_value=[mock_port]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[mock_port]):
             result = detector.detect()
             assert result.board_id is None
             assert len(result.candidates) == 0  # CH340 is not a board identifier
 
     def test_detect_no_ports(self, temp_dir):
         detector = BoardDetector(boards_dir=temp_dir)
-        with patch("serial.tools.list_ports.comports", return_value=[]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[]):
             result = detector.detect()
             assert result.board_id is None
             assert result.candidates == []
@@ -166,7 +166,7 @@ class TestBoardDetector:
         port_b.description = "USB-SERIAL CH340 B"
         port_b.serial_number = None; port_b.manufacturer = None
 
-        with patch("serial.tools.list_ports.comports", return_value=[port_a, port_b]):
+        with patch("firmforge.providers.win32ports.list_ports", return_value=[port_a, port_b]):
             result = detector.detect()
 
         # Multi-board result: boards field exists and is a list
