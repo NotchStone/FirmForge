@@ -386,6 +386,11 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
         if s.name == "Build" and s.details.get("compile_rounds", 0) > 0:
             stage_info["compile_rounds"] = s.details["compile_rounds"]
         if s.name == "Verify":
+            # verdict 是 S5 的三态：verified / mismatch / collected / empty /
+            # unavailable。只有 verified 才算「验证通过」；collected 表示
+            # 「采到了数据但调用方没给断言」，需要 Agent 自己判断。
+            stage_info["verdict"] = getattr(s, "verdict", "") or ""
+            stage_info["sample_lines"] = s.details.get("sample_lines", [])
             stage_info["matched_baud"] = s.details.get("matched_baud", 0)
             serial_full = s.details.get("serial_output", "")
             stage_info["serial_output"] = serial_full[:200]

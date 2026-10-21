@@ -138,6 +138,7 @@ def _pipeline_payload(result) -> dict:
                 "stage": s.stage,
                 "name": s.name,
                 "success": s.success,
+                "verdict": s.verdict,
                 "elapsed_ms": s.elapsed_ms,
                 "details": s.details,
                 "error": s.error,
@@ -145,6 +146,37 @@ def _pipeline_payload(result) -> dict:
             for s in result.stages
         ],
     }
+
+
+def _stage_badge(stage) -> str:
+    """阶段的显示标签。
+
+    success 是二态，表达不了 S5 的「采到了数据但没人给断言」——
+    那种情况既不是通过也不是失败，必须单独显示，否则就是把
+    「我只采到了数据」说成「验证通过」。
+    """
+    verdict = getattr(stage, "verdict", "") or ""
+    if verdict == "collected":
+        return "COLLECT"
+    if verdict == "unavailable":
+        return "SKIP"
+    return "PASS" if stage.success else "FAIL"
+
+
+def _stage_extra(stage) -> str:
+    """阶段行尾的补充说明（三态各自讲清楚发生了什么）。"""
+    verdict = getattr(stage, "verdict", "") or ""
+    if verdict == "collected":
+        return " — collected only, no assertion (pass --expected to verify)"
+    if verdict == "unavailable":
+        note = stage.details.get("note") or "unavailable"
+        return f" — {note}, readback not performed"
+    extra = ""
+    if stage.name == "Build" and stage.details.get("compile_rounds", 0) > 1:
+        extra = f" (attempt {stage.details['compile_rounds']})"
+    if stage.details.get("skipped"):
+        extra += " [skipped]"
+    return extra
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -189,18 +221,19 @@ def cmd_run(args: argparse.Namespace) -> int:
     print()
 
     for s in result.stages:
-        icon = "PASS" if s.success else "FAIL"
-        extra = ""
-        if s.name == "Build" and s.details.get("compile_rounds", 0) > 1:
-            extra = f" (attempt {s.details['compile_rounds']})"
-        if s.details.get("skipped"):
-            extra += " [skipped]"
+        icon = _stage_badge(s)
+        extra = _stage_extra(s)
         print(f"  [{icon}] Stage {s.stage} {s.name} ({s.elapsed_ms:.0f}ms){extra}")
         if s.error and not s.details.get("skipped"):
             print(f"         Error: {s.error[:150]}")
 
+    collected = [s for s in result.stages if getattr(s, "verdict", "") == "collected"]
     if result.overall_success:
-        print(f"  RESULT: ALL STAGES PASSED ({result.total_elapsed_ms:.0f}ms)")
+        if collected:
+            print(f"  RESULT: {len(result.stages)} stages done, S5 collected only "
+                  f"(no assertion supplied) ({result.total_elapsed_ms:.0f}ms)")
+        else:
+            print(f"  RESULT: ALL STAGES PASSED ({result.total_elapsed_ms:.0f}ms)")
         return 0
     else:
         failed = [s for s in result.stages if not s.success]
@@ -233,8 +266,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
 
     for s in result.stages:
-        icon = "PASS" if s.success else "FAIL"
-        extra = f" (attempt {s.details['compile_rounds']})" if s.name == "Build" and s.details.get("compile_rounds", 0) > 1 else ""
+        icon = _stage_badge(s)
+        extra = _stage_extra(s)
         print(f"  [{icon}] Stage {s.stage} {s.name} ({s.elapsed_ms:.0f}ms){extra}")
 
     if result.overall_success:

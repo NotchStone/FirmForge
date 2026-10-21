@@ -42,6 +42,66 @@ def _salient_error(text: str, limit: int = 200) -> str:
     return lines[-1][:limit]
 
 
+# S5 的五种结局。ff 只判断「有没有数据」和「调用方给的断言命中没有」，
+# 不判断「这个输出是否说明功能实现了」——那是 Agent / 人的事。
+VERDICT_VERIFIED = "verified"        # 调用方给了断言，且命中
+VERDICT_MISMATCH = "mismatch"        # 调用方给了断言，但没命中（含 regex 非法）
+VERDICT_COLLECTED = "collected"      # 采到数据，但没人给断言 —— 不算通过
+VERDICT_EMPTY = "empty"              # 端口开着，一个字节都没回来
+VERDICT_UNAVAILABLE = "unavailable"  # 没串口 / 没板卡配置 —— 这一步没执行
+VERDICT_ERROR = "error"              # S5 自身异常
+
+
+@dataclass
+class VerifyDecision:
+    """S5 判定的纯结果（不碰线程、不碰端口，便于测试）。"""
+
+    success: bool
+    verdict: str
+    error: str = ""
+    pattern_match: bool | None = None
+    pattern_error: str = ""
+
+
+def _decide_verify(sample_lines: list[str], expected: str,
+                   port: str = "", baud: int = 0) -> VerifyDecision:
+    """S5 判定。三条硬规则，全部机械可查：
+
+    1. 一个字节都没收到 → 不通过（端口开着却没数据，本身就是问题）；
+    2. 调用方给了断言且不命中 → 不通过（断言是调用方自己立的）；
+    3. 采到数据但没给断言 → `collected`，**不是通过** —— 只报「我采到了」，
+       不下「固件正常」的结论。
+    """
+    import re
+
+    pattern_match: bool | None = None
+    pattern_error = ""
+    if expected:
+        output = "\n".join(sample_lines)
+        try:
+            pattern_match = bool(re.search(expected, output))
+        except re.error as exc:
+            pattern_error = f"Invalid regex {expected!r}: {exc}"
+
+    if pattern_error:
+        return VerifyDecision(False, VERDICT_MISMATCH, pattern_error,
+                              pattern_match, pattern_error)
+    if not sample_lines:
+        return VerifyDecision(
+            False, VERDICT_EMPTY,
+            f"串口 {port} 已打开（{baud} bps）但 8s 内没收到任何字节："
+            "固件没在跑 / 波特率不符 / TX 未接到 RX",
+            pattern_match, pattern_error)
+    if pattern_match is True:
+        return VerifyDecision(True, VERDICT_VERIFIED, "", True, "")
+    if pattern_match is False:
+        return VerifyDecision(
+            False, VERDICT_MISMATCH,
+            f"输出未匹配 --expected {expected!r}；实际首行 {sample_lines[0][:100]!r}",
+            False, "")
+    return VerifyDecision(True, VERDICT_COLLECTED, "", None, "")
+
+
 @dataclass
 class PipelineStage:
     """Result of a single pipeline stage."""
@@ -51,6 +111,10 @@ class PipelineStage:
     elapsed_ms: float = 0.0
     details: dict[str, Any] = field(default_factory=dict)
     error: str = ""
+    # 仅 S5 使用，取 verified / mismatch / collected / empty / unavailable。
+    # success 是二态，表达不了「采到了数据但没人给断言」——那种情况既不是
+    # 通过也不是失败，硬塞进任何一个都是在说假话。
+    verdict: str = ""
 
 
 @dataclass
@@ -885,15 +949,20 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             config = detector.resolve_board(board_id or "", boards_dir=self._boards_dir)
             if not config:
                 stage.success = True
-                stage.details = {"note": "No board config"}
+                stage.verdict = "unavailable"
+                stage.details = {"note": "No board config", "skipped": True}
                 stage.elapsed_ms = (time.time() - t0) * 1000
                 return stage
 
             flasher = get_flash_provider(config.get("platform", "arduino"), config)
             port = flasher.detect_port()
             if not port:
+                # 没有可用串口 = 这一步根本没执行，不是通过（旧代码在这里写
+                # success=True，导致 S5 永远是绿的）。skip 与 fail 要分开：
+                # 没接串口是前提缺失，不是固件的问题。
                 stage.success = True
-                stage.details = {"note": "No COM port"}
+                stage.verdict = "unavailable"
+                stage.details = {"note": "No COM port", "skipped": True}
                 stage.elapsed_ms = (time.time() - t0) * 1000
                 return stage
 
@@ -934,14 +1003,26 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 sample_lines = []
                 total = 0
 
-            stage.success = True
+            # 判定：只看机械事实，不含任何业务语义（详见 _decide_verify）。
+            decision = _decide_verify(sample_lines, expected, port, read_baud)
+            stage.success = decision.success
+            stage.verdict = decision.verdict
+            stage.error = decision.error
+
             stage.details = {
                 "port": port,
-                "baud": 9600,
+                "baud": read_baud,
                 "sample_lines": sample_lines,
                 "sample_count": len(sample_lines),
                 "total_lines": total,
+                "verdict": decision.verdict,
             }
+            if expected:
+                stage.details["expected"] = expected
+                if decision.pattern_match is not None:
+                    stage.details["pattern_match"] = decision.pattern_match
+                if decision.pattern_error:
+                    stage.details["pattern_error"] = decision.pattern_error
 
             # Start HTTP server + write redirect (MCP persistent — panel lives)
             try:
@@ -957,22 +1038,17 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             except Exception:
                 pass
 
-            # Pattern match if expected provided
-            if expected and sample_lines:
-                import re
-                output = "\n".join(sample_lines)
-                try:
-                    stage.details["pattern_match"] = bool(re.search(expected, output))
-                    stage.details["expected"] = expected
-                except re.error:
-                    stage.details["pattern_error"] = f"Invalid regex: {expected}"
-
         except Exception as e:
-            stage.success = True
-            stage.details = {"note": f"Verify skipped: {e}"}
+            # 这里以前是 success=True —— 连 S5 自己崩了都算通过。
+            # 采不到证据就是采不到，不能因为「是工具的问题」就报绿。
+            stage.success = False
+            stage.verdict = "error"
+            stage.error = f"Verify failed: {e}"
+            stage.details = {"note": f"Verify failed: {e}", "verdict": "error"}
 
         stage.elapsed_ms = (time.time() - t0) * 1000
-        logger.info("S5 Verify: %s", f"{stage.details.get('sample_count', 0)} sample lines")
+        logger.info("S5 Verify: %s (%d sample lines)",
+                    stage.verdict or "?", stage.details.get("sample_count", 0))
         return stage
 
     @staticmethod
