@@ -315,7 +315,12 @@ def cmd_flash(args: argparse.Namespace) -> int:
             }, 0 if result.success else 1)
 
         if result.success:
-            print(f"Flash SUCCESS ({result.bytes_written} bytes, {result.elapsed_ms:.0f}ms)")
+            # bytes_written = -1 表示「写成功是回读校验确认的，字节数未知」，
+            # 不能把 -1 直接打给人看。
+            if getattr(result, "bytes_written", 0) >= 0:
+                print(f"Flash SUCCESS ({result.bytes_written} bytes, {result.elapsed_ms:.0f}ms)")
+            else:
+                print(f"Flash SUCCESS (verified by read-back, {result.elapsed_ms:.0f}ms)")
             return 0
         else:
             print(f"Flash FAILED: {result.stderr[-200:]}")

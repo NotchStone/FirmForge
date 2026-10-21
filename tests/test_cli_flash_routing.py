@@ -114,3 +114,31 @@ def test_flash_error_is_reported_without_traceback(patched, capsys):
     assert code == 1
     assert "CMSIS-DAP" in out
     assert "Traceback" not in out
+
+
+def test_verified_without_byte_count_has_readable_output(patched, capsys):
+    """bytes_written=-1 表示「回读校验确认写成功、字节数未知」，不能打给人看 -1。"""
+    state, hex_path = patched
+    state["platform"] = "stm32"
+
+    class _VerifiedOnly(_FakeFlasher):
+        def flash(self, firmware_path: str) -> FlashResult:
+            return FlashResult(success=True, bytes_written=-1, elapsed_ms=12.0)
+
+    import firmforge.providers as providers_pkg
+
+    original = providers_pkg.get_flash_provider
+
+    def returning(_platform: str, config: dict):  # noqa: ANN001
+        return _VerifiedOnly(_platform, config)
+
+    try:
+        providers_pkg.get_flash_provider = returning
+        code = cli.cmd_flash(_args("gc_h743", str(hex_path)))
+    finally:
+        providers_pkg.get_flash_provider = original
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "verified by read-back" in out
+    assert "-1 bytes" not in out
