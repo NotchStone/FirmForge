@@ -7,7 +7,7 @@ Thanks for considering a contribution! This project keeps a few simple rules to 
 1. **Open an issue first** for non-trivial changes — describe the problem and the intended fix before writing code.
 2. **Fork + branch**: `feat/<name>` or `fix/<name>`.
 3. **Keep commits focused**: one logical change per commit.
-4. **Run tests**: `pytest` must pass (214+ tests, incl. pipeline, Modbus, panel).
+4. **Run tests**: `pytest` must pass (509 tests, incl. pipeline, Modbus, panel).
 5. **Hardware changes need hardware evidence**: if you touch Flash/Verify paths, note which board/OS you tested on.
 
 ## Architecture notes

@@ -34,6 +34,9 @@ config/llm.yaml
 .env.*
 
 # --- 工具与 IDE ---
+# .mcp.json 是每台机器自己的 MCP 注册（command 里写的是本机解释器绝对路径），
+# 入库会把「谁的机器、装在哪」一起公开，且对别人无用。
+.mcp.json
 *.egg-info/
 .eggs/
 __pycache__/

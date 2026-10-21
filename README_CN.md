@@ -6,7 +6,7 @@
 
 FirmForge 是基于 MCP 和 CLI 的 MCU 固件验证工具链，面向 AI 编码 Agent 的嵌入式开发流程。工具链提供五阶段硬件流水线——Detect（识别）、Review（审查）、Build（编译）、Flash（烧录）、Verify（验证），并通过 MCP 和 CLI 工具（`ff_detect`、`ff_context`、`ff_build`、`ff_run`、`ff_flash`、`ff_monitor`）向 Agent 开放各阶段能力。
 
-固件由 avr-gcc / ArduinoCore-avr 真实编译，avrdude 烧录，串口回读验证。不承担代码生成职能。
+固件由真实编译器编译（AVR 用 avr-gcc + ArduinoCore-avr，STM32 用 arm-none-eabi-gcc + CMSIS），AVR 用 avrdude 烧录、STM32 用 OpenOCD 走 SWD 烧录，串口回读验证。不承担代码生成职能。
 
 ## 流水线
 
@@ -15,8 +15,10 @@ FirmForge 是基于 MCP 和 CLI 的 MCU 固件验证工具链，面向 AI 编码
 | S1 Detect | avrdude 芯片签名探测识别板卡；USB VID/PID 与工作区推断兜底 | 阻断 |
 | S2 Review | 静态分析：cppcheck、寄存器/位域与芯片知识库比对、置信度评分 | 不阻断 |
 | S3 Build | 编译为 firmware.hex：裸寄存器 C（avr-gcc，`-std=c11`）或 Arduino API（ArduinoCore-avr）；SHA256 指纹缓存 | 阻断 |
-| S4 Flash | avrdude 烧录（ATmega2560 使用 `-D` 跳过芯片擦除）+ bootloader 复位 | 阻断 |
-| S5 Verify | 串口回读与模式匹配；浏览器实时面板 | 不阻断 |
+| S4 Flash | AVR 走 avrdude（ATmega2560 用 `-D` 跳过芯片擦除）+ bootloader 复位；STM32 走 OpenOCD `program + verify + reset` | 阻断 |
+| S5 Verify | 串口回读，三态判定：`verified`（`--expected` 命中）、`mismatch`、`COLLECTED`（采到数据但未提供断言，**不算通过**）；8 秒零字节判失败 | 无数据或断言不命中时阻断 |
+
+FirmForge 只回答两件事：**收到了什么**、**你给的断言命中没有**。它不判断「这个输出是否说明功能实现」——那属于调用方（Agent 或人）。需要可判定就用 `--expected` 传入断言。
 
 ## 支持目标
 
@@ -24,6 +26,7 @@ FirmForge 是基于 MCP 和 CLI 的 MCU 固件验证工具链，面向 AI 编码
 |:--|:--|:--|
 | `arduino_mega` | ATmega2560 | 知识库 202 个寄存器（含 GCC 别名） |
 | `arduino_328p` | ATmega328P（UNO/Nano） | 知识库 91 个寄存器 |
+| `gc_h743` | STM32H743ZIT6 | SWD（CMSIS-DAP）；串口回读经板载 CH340N |
 
 自定义板卡通过 `--boards-dir` 支持。
 

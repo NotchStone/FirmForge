@@ -4,7 +4,7 @@
 
 FirmForge is an MCP-based firmware verification toolchain for MCU development with AI coding agents. It provides a five-stage hardware pipeline — Detect, Review, Build, Flash, Verify — and exposes the stages to agents as MCP tools (`ff_detect`, `ff_context`, `ff_build`, `ff_run`, `ff_flash`, `ff_monitor`).
 
-The toolchain compiles firmware with a real compiler (avr-gcc / ArduinoCore-avr), programs the target with avrdude, and verifies the result via serial readback. Code generation is out of scope.
+The toolchain compiles firmware with a real compiler (avr-gcc for AVR, arm-none-eabi-gcc + CMSIS for STM32), programs the target with avrdude (AVR) or OpenOCD over SWD (STM32), and verifies the result via serial readback. Code generation is out of scope.
 
 ## Pipeline
 
@@ -13,8 +13,10 @@ The toolchain compiles firmware with a real compiler (avr-gcc / ArduinoCore-avr)
 | S1 Detect | Board identification via avrdude chip-signature probe; USB VID/PID and workspace inference as fallbacks | Blocking |
 | S2 Review | Static analysis: cppcheck, register/bitfield validation against the chip knowledge base, confidence scoring | Non-blocking |
 | S3 Build | Compile to firmware.hex: bare-register C (avr-gcc, `-std=c11`) or Arduino API (ArduinoCore-avr); SHA256-fingerprint caching | Blocking |
-| S4 Flash | avrdude programming (ATmega2560 uses `-D` skip-chip-erase) with bootloader reset | Blocking |
-| S5 Verify | Serial readback with pattern matching; live browser panel | Non-blocking |
+| S4 Flash | avrdude programming (ATmega2560 uses `-D` skip-chip-erase) with bootloader reset; STM32 via OpenOCD `program + verify + reset` | Blocking |
+| S5 Verify | Serial readback and a three-state verdict: `verified` (`--expected` matched), `mismatch`, or `COLLECTED` (data captured, no assertion supplied — **not** a pass). Zero bytes in 8 s fails | Blocking on no data / assertion mismatch |
+
+FirmForge reports what came back and whether your assertion matched. It does not judge whether the output means the feature works — that belongs to the caller (agent or human), so pass `--expected` to make S5 verifiable.
 
 ## Supported Targets
 
@@ -22,6 +24,7 @@ The toolchain compiles firmware with a real compiler (avr-gcc / ArduinoCore-avr)
 |:--|:--|:--|
 | `arduino_mega` | ATmega2560 | 202 registers in knowledge base (incl. GCC aliases) |
 | `arduino_328p` | ATmega328P (UNO/Nano) | 91 registers in knowledge base |
+| `gc_h743` | STM32H743ZIT6 | SWD via CMSIS-DAP; serial readback through the board's CH340N |
 
 Custom boards are supported via `--boards-dir`.
 

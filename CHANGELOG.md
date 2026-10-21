@@ -2,6 +2,19 @@
 
 All notable changes to FirmForge. Format: [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **S5 Verify is now three-state**: `verified` (`--expected` matched) / `mismatch` / `collected` (data captured, no assertion supplied). Previously S5 could not fail — `success` was set unconditionally, including on internal errors. Zero bytes read back within 8 s now fails, and a non-matching `--expected` now fails. No serial port reports `SKIP` instead of `PASS`.
+- Serial I/O and port enumeration no longer depend on pySerial on Windows: port enumeration moved to Win32 SetupAPI (`providers/win32ports.py`), and `ComPort` fails fast instead of silently falling back (`FF_PYSERIAL_FALLBACK=1` restores the old behaviour).
+
+### Fixed
+- AVR flashing reported success whenever avrdude exited 0, including when it never opened the port (`Flash SUCCESS (0 bytes)`). Success now requires positive evidence — `N bytes of flash written` / `verified`, or a read-back verify pass.
+- AVR flashing also treated a retried-handshake warning (`n sync`) as a hard failure, so successful writes were reported as failures.
+- STM32 serial readback picked the first CH340 port when several were attached; it now refuses to guess (`serial.port` in `board.yaml` overrides detection).
+- Serial fallback raised `Not a valid parity` and masked the real open error.
+- Stage errors were truncated mid-traceback (`Error:  call last):`).
+
 ## [0.3.0] - 2026-08-20
 
 ### Added
