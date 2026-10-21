@@ -454,3 +454,37 @@ def test_build_consumes_sdk_problems(board_cfg: dict, tmp_path: Path,
     assert "board_id" in result.stderr
     assert "SDK / 板级文件不完整" in result.stderr
     assert result.errors
+
+
+def test_multiple_ch340_is_ambiguous_not_guessed(board_cfg: dict, monkeypatch) -> None:
+    """两个 CH340 时必须返回 None，不能取第一个。
+
+    STM32 板的 CH340N 与 Arduino 的 CH340 在描述和 VID/PID 上一模一样
+    （1A86:7523），取第一个可能把 Arduino 的输出当成 STM32 的回读记下来。
+    """
+    import firmforge.providers.win32ports as wp
+
+    class _Port:
+        def __init__(self, device, description):
+            self.device = device
+            self.description = description
+            self.manufacturer = "wch.cn"
+
+    monkeypatch.setattr(wp, "list_ports", lambda: [
+        _Port("COM4", "USB-SERIAL CH340"),
+        _Port("COM5", "USB-SERIAL CH340"),
+    ])
+    assert Stm32FlashProvider(board_cfg).detect_port() is None
+
+
+def test_explicit_port_overrides_enumeration(board_cfg: dict, monkeypatch) -> None:
+    """board.yaml 写了 serial.port 就直接用，不再枚举。"""
+    import firmforge.providers.win32ports as wp
+
+    def _boom():
+        raise AssertionError("declared port should not enumerate")
+
+    monkeypatch.setattr(wp, "list_ports", _boom)
+    cfg = dict(board_cfg)
+    cfg["serial"] = {"port": "COM9", "baudrate": 115200}
+    assert Stm32FlashProvider(cfg).detect_port() == "COM9"

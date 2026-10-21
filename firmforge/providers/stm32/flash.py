@@ -72,6 +72,12 @@ class Stm32FlashProvider(FlashProvider):
         空/垃圾数据，而 S5 不阻断，于是错误被静默吸收。
         **宁可返回 None 让 S5 明确说"没有回读"，也不要猜错。**
         """
+        # 显式声明优先：board.yaml 写了 serial.port 就直接用，绕开"多个 CH340 分不清"。
+        explicit = str(self._serial_cfg.get("port", "")).strip()
+        if explicit:
+            logger.info("S5 回读串口（board.yaml 指定）: %s", explicit)
+            return explicit
+
         try:
             from firmforge.providers.win32ports import list_ports
             ports = list_ports()
@@ -97,10 +103,18 @@ class Stm32FlashProvider(FlashProvider):
                 ", ".join(f"{p.device}({p.description})" for p in ports))
             return None
 
-        chosen = matched[0]
+        # 多个候选一律不猜。CH340 是最常见的克隆桥：STM32 板的 CH340N 与
+        # Arduino 的 CH340 在描述里一模一样、VID/PID 也相同（1A86:7523），
+        # 取第一个就可能把 Arduino 的输出当成 STM32 的回读记下来。
         if len(matched) > 1:
-            logger.warning("多个候选串口：%s，取 %s",
-                           ", ".join(p.device for p in matched), chosen.device)
+            logger.warning(
+                "多个串口匹配 %s：%s。**不猜**——S5 记为无回读；"
+                "请拔掉无关板卡，或在 board.yaml 里用 serial.port 指定端口。",
+                hint or keywords,
+                ", ".join(f"{p.device}({p.description})" for p in matched))
+            return None
+
+        chosen = matched[0]
         logger.info("S5 回读串口: %s (%s)", chosen.device, chosen.description)
         return chosen.device
 
