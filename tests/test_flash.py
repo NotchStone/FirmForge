@@ -192,6 +192,32 @@ class TestFlashErrorHandling:
         assert result.success is False
         assert "Failed" in result.stderr or "failed" in result.stderr.lower()
 
+    def test_nsync_warning_then_verified_is_success(self, monkeypatch, fake_hex_path):
+        """实测 UNO：先打 n sync 重试警告，随后照样写完并校验通过。
+
+        如果按"出现过 n sync 就算失败"判，会把成功烧录误判成失败、白跑下一个波特率。
+        判成功必须靠正向证据（bytes written / bytes verified）。
+        """
+        from firmforge.providers.arduino.flash import ArduinoFlashProvider
+
+        _mock_port(monkeypatch, "COM3")
+        provider = ArduinoFlashProvider(_board_config())
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="avrdude: n sync: resp=0x06\n"
+                       "Reading | ################################################## | 100% 0.34s\n"
+                       "avrdude: 2380 bytes of flash verified\n"
+                       "Avrdude done.  Thank you.\n",
+                stderr="",
+            )
+            result = provider.flash(fake_hex_path)
+
+        assert result.success is True
+        assert result.bytes_written == -1      # 走的是 verified 路径，字节数未知
+        assert mock_run.call_count == 1        # 不该再多跑一个波特率
+
     def test_rc0_with_port_error_is_not_success(self, monkeypatch, fake_hex_path):
         """rc=0 但端口打不开 → 必须是失败。
 

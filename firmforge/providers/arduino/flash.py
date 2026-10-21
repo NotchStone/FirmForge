@@ -19,13 +19,14 @@ from firmforge.providers.arduino.toolchain import resolve_toolchain
 
 logger = logging.getLogger(__name__)
 
-# avrdude 的退出码不足以判定「写成功」：端口打不开、目标不在 bootloader 时，
-# 它仍可能返回 0。下面这些标记一旦出现，无论 rc 是多少都按「没写进去」处理。
-_NO_TARGET_MARKERS = (
+# 只有「端口根本没打开」这一类才算硬失败：无论 rc 是多少都按没写进去处理。
+# 注意 n sync **不能**放进来：avrdude 在重试握手时会打 "n sync" 警告，
+# 之后仍然可能写完并校验通过（实测 UNO：n sync 之后紧跟 2380 bytes verified）。
+# 判成功要靠正向证据，不能靠"有没有出现过吓人的字符串"。
+_HARD_FAIL_MARKERS = (
     "unable to open port",
     "cannot set com-state",
     "programmer is not responding",
-    "n sync",          # avrdude 8 的措辞：n sync: resp=0x..
     "initialization failed",
 )
 
@@ -219,17 +220,20 @@ class ArduinoFlashProvider(FlashProvider):
                 # 规矩：flash 必须有写入证据；措辞对不上时用回读校验兜底，不猜。
                 bytes_written = 0
                 if operation == "flash":
-                    marker = next((m for m in _NO_TARGET_MARKERS if m in lowered), None)
-                    if marker:
-                        logger.warning("No usable target @%d (%s): %s",
-                                       baud, marker, combined[-140:])
-                        continue
-
-                    m = re.search(r'(\d+) bytes of flash written', combined, re.IGNORECASE)
-                    bytes_written = int(m.group(1)) if m else 0
-                    if bytes_written <= 0:
-                        # 把原始输出留在日志里：avrdude 各版本的写入措辞会变，
-                        # 没证据时先看它到底打了什么，别凭猜改正则。
+                    # 正向证据优先：写完会打 "N bytes of flash written"，
+                    # 写完顺带校验会打 "N bytes of flash verified"。
+                    # 只要出现其一就算写成功——哪怕前面出现过 n sync 重试警告。
+                    m_written = re.search(r'(\d+) bytes of flash written', combined, re.IGNORECASE)
+                    m_verified = re.search(r'(\d+) bytes of flash verified', combined, re.IGNORECASE)
+                    if m_written or m_verified:
+                        bytes_written = int(m_written.group(1)) if m_written else -1
+                    else:
+                        marker = next((m for m in _HARD_FAIL_MARKERS if m in lowered), None)
+                        if marker:
+                            logger.warning("No usable target @%d (%s): %s",
+                                           baud, marker, combined[-140:])
+                            continue
+                        # 无完成证据也无明确失败：用回读校验判定，不猜。
                         logger.info("No write evidence @%d (tail: %r); falling back to read-back verify",
                                     baud, combined[-200:])
                         if not self._run_avrdude("verify", firmware_path, port).success:
