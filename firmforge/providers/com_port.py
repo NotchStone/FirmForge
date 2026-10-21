@@ -11,7 +11,28 @@ Used by: board_detector, pipeline_runner, all platform flash providers, collecto
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Win32Serial 用 "None"/"Odd"/"Even"，pySerial 只认 "N"/"O"/"E"。
+# 直接把 "None" 丢给 pySerial 会抛 ValueError: Not a valid parity —— 而这个
+# ValueError 发生在 fallback 里，会把 Win32Serial 真正的失败原因整个盖掉，
+# 于是所有串口故障都显示成「Not a valid parity」，查错方向被带偏。
+_PARITY_TO_PYSERIAL = {
+    "none": "N", "n": "N", "": "N",
+    "odd": "O", "o": "O",
+    "even": "E", "e": "E",
+}
+
+
+def _pyserial_parity(parity: Any) -> str:
+    return _PARITY_TO_PYSERIAL.get(str(parity).strip().lower(), "N")
+
+
+class ComPortError(Exception):
+    """两条打开路径都失败。消息里同时保留 Win32Serial 与 pySerial 的原因。"""
 
 
 def com_port_clean_close(port: str) -> None:
@@ -51,19 +72,31 @@ class ComPort:
 
     def __enter__(self):
         # 1. Win32Serial — CH340-safe, STC-ISP compatible
+        win32_error: Exception | None = None
         try:
             from firmforge.providers.win32serial import Win32Serial
             self._ser = Win32Serial(self._port, self._baud, timeout=self._timeout,
                                     parity=self._parity)
             self._ser.open()
             return self._ser
-        except Exception:
-            # 2. pySerial fallback for exotic hardware
-            import serial as pyserial
+        except Exception as e:
+            # 记下真实原因再回落，别再让它被 pySerial 的参数错误顶掉
+            win32_error = e
+            logger.debug("Win32Serial open %s failed (%s); falling back to pyserial",
+                         self._port, e)
+
+        # 2. pySerial fallback for exotic hardware
+        import serial as pyserial
+        try:
             self._ser = pyserial.Serial(port=self._port, baudrate=self._baud,
                                         timeout=self._timeout, dsrdtr=self._dsrdtr,
-                                        parity=self._parity)
-            return self._ser
+                                        parity=_pyserial_parity(self._parity))
+        except Exception as e:
+            raise ComPortError(
+                f"cannot open {self._port} @ {self._baud}: "
+                f"Win32Serial={win32_error or 'n/a'}; pySerial={e}"
+            ) from (win32_error or e)
+        return self._ser
 
     def __exit__(self, *args):
         if self._ser:
