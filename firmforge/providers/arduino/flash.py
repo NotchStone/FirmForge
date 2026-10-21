@@ -228,7 +228,10 @@ class ArduinoFlashProvider(FlashProvider):
                     m = re.search(r'(\d+) bytes of flash written', combined, re.IGNORECASE)
                     bytes_written = int(m.group(1)) if m else 0
                     if bytes_written <= 0:
-                        logger.info("No write evidence @%d; falling back to read-back verify", baud)
+                        # 把原始输出留在日志里：avrdude 各版本的写入措辞会变，
+                        # 没证据时先看它到底打了什么，别凭猜改正则。
+                        logger.info("No write evidence @%d (tail: %r); falling back to read-back verify",
+                                    baud, combined[-200:])
                         if not self._run_avrdude("verify", firmware_path, port).success:
                             logger.warning("Read-back verify failed @%d", baud)
                             continue
