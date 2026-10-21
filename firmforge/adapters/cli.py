@@ -258,7 +258,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
 
     try:
         from firmforge.core.board_detector import BoardDetector
-        from firmforge.providers.arduino.flash import ArduinoFlashProvider
+        from firmforge.providers import get_flash_provider
 
         detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
         config = detector.resolve_board(board_id)
@@ -269,11 +269,16 @@ def cmd_flash(args: argparse.Namespace) -> int:
             print(f"Error: board '{board_id}' not found")
             return 1
 
-        flasher = ArduinoFlashProvider(config)
+        # 按平台路由，与 pipeline 同一入口：AVR 走 avrdude，STM32 走 OpenOCD + SWD。
+        # 此前这里硬编码 ArduinoFlashProvider，STM32 板卡会撞在 avrdude 的 MCU_MAP 上，
+        # 报出 "Unknown MCU chip 'STM32H743ZIT6'"，把「路由错了」伪装成「芯片不认识」。
+        platform = config.get("platform", "arduino")
+        flasher = get_flash_provider(platform, config)
 
-        # Detect port
+        # 串口只服务「经串口烧录」的路线（avrdude）与 S5 回读。
+        # SWD 路线不依赖串口，拿不到口只影响回读，不该阻断烧录。
         port = flasher.detect_port()
-        if not port:
+        if not port and platform == "arduino":
             if getattr(args, "json", False):
                 return _json_out({"error": "No COM port detected. Connect Arduino and retry."}, 1)
             print("Error: No COM port detected. Connect Arduino and retry.")
@@ -292,7 +297,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
                 print(f"Auto-detected firmware: {firmware}")
 
         if not getattr(args, "json", False):
-            print(f"Port: {port}")
+            print(f"Platform: {platform} | Port: {port or '(none — SWD 不依赖串口)'}")
 
         result = flasher.flash(firmware)
 
@@ -316,8 +321,19 @@ def cmd_flash(args: argparse.Namespace) -> int:
 
     except ImportError as e:
         if getattr(args, "json", False):
-            return _json_out({"error": f"ArduinoFlashProvider not available: {e}"}, 1)
-        print(f"ArduinoFlashProvider not available: {e}")
+            return _json_out({"error": f"flash provider not available: {e}"}, 1)
+        print(f"flash provider not available: {e}")
+        return 1
+    except Exception as e:
+        # FlashError 是可预期失败（工具链缺件、OpenOCD 连不上、校验失败），
+        # 给一行人话而不是 traceback；其余异常照旧抛出去。
+        from firmforge.providers.base import ProviderError
+
+        if not isinstance(e, ProviderError):
+            raise
+        if getattr(args, "json", False):
+            return _json_out({"error": str(e)}, 1)
+        print(f"Error: {e}")
         return 1
 
 
