@@ -25,6 +25,23 @@ from firmforge.infrastructure import paths
 logger = logging.getLogger(__name__)
 
 
+def _salient_error(text: str, limit: int = 200) -> str:
+    """从工具输出里挑一句「能看的」错误。
+
+    不要直接切尾部：那把 traceback 从中间切断。实测 OpenOCD 失败时，
+    stderr[-200:] 让终端显示成 `Error:  call last):` + 一堆 File "..."
+    —— 判定没错，但人看不懂。优先取含 error/fail 的第一行，其次取最后一行非空。
+    """
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    for ln in lines:
+        low = ln.lower()
+        if "error" in low or "fail" in low:
+            return ln[:limit]
+    return lines[-1][:limit]
+
+
 @dataclass
 class PipelineStage:
     """Result of a single pipeline stage."""
@@ -833,7 +850,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 "baud_retries": getattr(flash_result, "baud_retries", 0),
             }
             if not flash_result.success:
-                stage.error = flash_result.stderr[-200:] if hasattr(flash_result, "stderr") else "Flash failed"
+                stage.error = _salient_error(getattr(flash_result, "stderr", "")) or "Flash failed"
 
         except ImportError as e:
             stage.success = False
