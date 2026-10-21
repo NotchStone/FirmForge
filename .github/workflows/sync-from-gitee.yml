@@ -28,13 +28,7 @@ jobs:
     steps:
       - name: Mirror Gitee → GitHub
         env:
-          # 必须用 PAT（secrets.MIRROR_TOKEN），不能用 GITHUB_TOKEN：
-          # 只要这次推送里含 .github/workflows/ 的改动，GITHUB_TOKEN 会被拒——
-          # "refusing to allow a GitHub App to create or update workflow ...
-          #  without `workflows` permission"。2026-10-21 实测踩到。
-          # PAT 需要：classic 勾 repo + workflow（或 fine-grained 的
-          # Contents: RW + Workflows: RW）。
-          GH_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SRC: https://gitee.com/notchstone/firmforge.git
           DST: github.com/NotchStone/firmforge.git
         run: |
