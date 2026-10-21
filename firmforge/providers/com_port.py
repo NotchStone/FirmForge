@@ -12,6 +12,8 @@ Used by: board_detector, pipeline_runner, all platform flash providers, collecto
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,21 @@ _PARITY_TO_PYSERIAL = {
 
 def _pyserial_parity(parity: Any) -> str:
     return _PARITY_TO_PYSERIAL.get(str(parity).strip().lower(), "N")
+
+
+def pyserial_fallback_allowed() -> bool:
+    """Windows 上默认**不**回落到 pySerial。
+
+    理由：Win32Serial 与 pySerial 底层都是 CreateFile + SetCommState，能开的都能开，
+    回落的收益接近零；而回落在 Win11 + CH340 上撞的正是那个坑（stale 驱动状态 /
+    errno 31），失败路径会重复踩、还会把 Win32 的真实原因盖掉。
+
+    但不同板卡的 USB 桥不一定一样（CH340 / CH340N / ATmega16U2 / FT232），
+    所以留一个显式逃生口：设 FF_PYSERIAL_FALLBACK=1 即恢复回落。非 Windows 默认允许。
+    """
+    if sys.platform != "win32":
+        return True
+    return os.environ.get("FF_PYSERIAL_FALLBACK", "").strip().lower() not in ("", "0", "false", "no")
 
 
 class ComPortError(Exception):
@@ -80,10 +97,15 @@ class ComPort:
             self._ser.open()
             return self._ser
         except Exception as e:
-            # 记下真实原因再回落，别再让它被 pySerial 的参数错误顶掉
+            # 记下真实原因再决定要不要回落，别再让它被 pySerial 的参数错误顶掉
             win32_error = e
-            logger.debug("Win32Serial open %s failed (%s); falling back to pyserial",
-                         self._port, e)
+            logger.debug("Win32Serial open %s failed (%s)", self._port, e)
+            if not pyserial_fallback_allowed():
+                raise ComPortError(
+                    f"cannot open {self._port} @ {self._baud}: Win32Serial={e}. "
+                    f"Windows 上不再自动回落 pySerial（那是 CH340 那条坑）；"
+                    f"确需回落请设 FF_PYSERIAL_FALLBACK=1"
+                ) from e
 
         # 2. pySerial fallback for exotic hardware
         import serial as pyserial
