@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 from firmforge import __version__
@@ -246,10 +247,104 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
 
+def _parse_app_list(spec: str) -> list[str]:
+    """解析 --apps 参数：逗号分隔，或 @file（每行一个目录）。
+
+    只保留真实存在的目录，其余忽略但会打一条 warning —— 批量跑的时候
+    一个打错的路径不该让整批停下来，但也绝不能不吭声。
+    """
+    items: list[str] = []
+    raw = spec.strip()
+    if raw.startswith("@"):
+        path = Path(raw[1:])
+        if not path.is_file():
+            logger.warning("--apps 指向的文件不存在：%s", path)
+            return []
+        lines = path.read_text(encoding="utf-8").splitlines()
+        items = [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+    else:
+        items = [p.strip() for p in raw.split(",") if p.strip()]
+
+    out: list[str] = []
+    for it in items:
+        if Path(it).is_dir():
+            out.append(it)
+        else:
+            logger.warning("跳过不存在的目录：%s", it)
+    return out
+
+
+def _cmd_build_batch(args: argparse.Namespace, spec: str) -> int:
+    """批量构建：一个进程连续跑多个 app 目录。
+
+    存在的理由很具体：这台机器起一个 Python 进程要 ~1.9 s（实测，其中真正
+    导入 firmforge 只占 0.25 s，其余是 Windows 进程创建），73 个用例光启动
+    就是 2.3 分钟。批量模式把进程启动收成一次，**编译仍是一例一次**，
+    不改变任何构建语义。
+    """
+    from firmforge.core.pipeline_runner import PipelineRunner
+
+    targets = _parse_app_list(spec)
+    if not targets:
+        if getattr(args, "json", False):
+            return _json_out({"error": "no valid app directory in --apps"}, 1)
+        print("Error: --apps 里没有有效的目录")
+        return 1
+
+    workspace = Path(args.workspace or ".")
+    boards_dir = args.boards_dir or str(_bdir())
+    state_file = workspace / ".ff-run" / "state.json"
+    quiet = bool(getattr(args, "json", False))
+
+    t0 = time.time()
+    results: list[dict] = []
+    for src in targets:
+        # 每个用例前清掉运行指纹。同一份 state.json 跨用例共享会串味：
+        # 实测（2026-10-23）会出现「rc!=0 且 stdout/stderr 全空」的假失败。
+        try:
+            state_file.unlink()
+        except OSError:
+            pass
+
+        # 每个用例用新的 runner，避免上一例残留的 detector / collector 引用
+        runner = PipelineRunner(boards_dir=boards_dir, workspace=workspace)
+        r = runner.build(source_dir=src, board_id=args.board or None)
+        err = next((s.error for s in r.stages if not s.success), "")
+        name = Path(src).name
+        results.append({
+            "app": src,
+            "name": name,
+            "pass": bool(r.overall_success),
+            "elapsed_ms": round(r.total_elapsed_ms),
+            "error": err,
+        })
+        if not quiet:
+            print(f"  {'PASS' if r.overall_success else 'FAIL'} {name} "
+                  f"({r.total_elapsed_ms:.0f}ms)")
+            if not r.overall_success:
+                print(f"        {err[:160] or 'unknown'}")
+
+    passed = sum(1 for x in results if x["pass"])
+    total_ms = (time.time() - t0) * 1000
+
+    if quiet:
+        return _json_out({"total": len(results), "passed": passed,
+                          "failed": len(results) - passed,
+                          "elapsed_ms": round(total_ms),
+                          "results": results},
+                         0 if passed == len(results) else 1)
+
+    print(f"  BATCH: {passed}/{len(results)} build passed ({total_ms:.0f}ms)")
+    return 0 if passed == len(results) else 1
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     """ff build: Review + Build only."""
     from firmforge.core.pipeline_runner import PipelineRunner
 
+    apps = getattr(args, "apps", "") or ""
+    if apps:
+        return _cmd_build_batch(args, apps)
 
     workspace = Path(args.workspace or ".")
     source_dir = args.app
@@ -430,7 +525,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     # ff build
     p_build = subparsers.add_parser("build", help="Review and compile only (no flash/test)")
     p_build.add_argument("board", nargs="?", help="Board ID (e.g. arduino_328p)")
-    p_build.add_argument("--app", help="Source code directory (REQUIRED)")
+    p_build.add_argument("--app", help="Source code directory (REQUIRED, or use --apps)")
+    p_build.add_argument("--apps",
+                         help="Batch mode: comma-separated app dirs, or @file (one per line). "
+                              "Runs all of them in ONE process — saves the per-example "
+                              "Python startup (~1.9 s each on Windows).")
 
     # ff flash
     p_flash = subparsers.add_parser("flash", help="Flash firmware to board")
