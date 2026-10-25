@@ -45,6 +45,9 @@ def report() -> dict:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        # 严格解码，不加 errors="replace"：check_layout.py 的 --json 分支已
+        # 强制 UTF-8 输出（机器契约）。这里若容忍乱码，编码回归就会被静默
+        # 吞掉 —— 正是这个 bug 当初把「校验器无输出」伪装成了别的样子。
     )
     assert proc.stdout.strip(), f"校验器无输出；stderr={proc.stderr}"
     return json.loads(proc.stdout)
@@ -79,6 +82,10 @@ def test_exit_code_consistent(report: dict) -> None:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        # 同 fixture：校验器输出含中文，子进程 stdout 按 locale(GBK) 编码。
+        # 这里只用退出码，但严格解码仍会让 reader 线程崩掉并抛
+        # PytestUnhandledThreadExceptionWarning，属纯噪声。
+        errors="replace",
     )
     if report["errors"]:
         assert proc.returncode == 1

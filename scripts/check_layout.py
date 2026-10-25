@@ -506,6 +506,15 @@ def main() -> int:
             "warnings": rep.warnings,
             "infos": rep.infos,
         }
+        # JSON 是给机器读的契约：强制 UTF-8 输出，不让编码跟随系统 locale。
+        # 中文 Windows 下 stdout 被重定向时默认编成 cp936(GBK)，任何按 UTF-8
+        # 消费这份 JSON 的调用方（如 tests/test_layout.py）都会解码崩溃，
+        # 且报错表现为「校验器无输出」这种极具误导性的样子。
+        # 只改 JSON 分支：人眼查看的文本模式保持原样，控制台渲染不受影响。
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except (AttributeError, OSError, ValueError):
+            pass
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"仓库: {root}")

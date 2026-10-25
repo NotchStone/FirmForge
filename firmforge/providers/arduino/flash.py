@@ -176,7 +176,10 @@ class ArduinoFlashProvider(FlashProvider):
         Returns:
             FlashResult with success/failure details.
         """
-        start = time.time()
+        # perf_counter 而非 time.time()：Windows 上 time.time() 约 15.6ms 一跳，
+        # 一次被 mock 掉、实际耗时不足一跳的烧录会算出 elapsed_ms = 0.0。
+        # 时长测量本来就该用单调高精度时钟。
+        start = time.perf_counter()
 
         conf_arg = f"-C{os.path.abspath(self._toolchain.avrdude_conf)}" if self._toolchain.avrdude_conf else ""
         hex_win = os.path.abspath(firmware_path)
@@ -206,7 +209,7 @@ class ArduinoFlashProvider(FlashProvider):
             logger.info("Flash %s: %s", operation, " ".join(cmd))
             proc = subprocess.run(cmd, capture_output=True, text=True,
                                   timeout=30, errors="replace")
-            elapsed = (time.time() - start) * 1000
+            elapsed = (time.perf_counter() - start) * 1000
             combined = (proc.stdout or "") + (proc.stderr or "")
 
             if proc.returncode == 0:
@@ -251,7 +254,7 @@ class ArduinoFlashProvider(FlashProvider):
 
             logger.warning("%s failed @%d: %s", operation.capitalize(), baud, combined[-100:])
 
-        elapsed = (time.time() - start) * 1000
+        elapsed = (time.perf_counter() - start) * 1000
         return FlashResult(success=False, stderr=f"{operation.capitalize()} failed across all baud rates",
                            elapsed_ms=elapsed)
 
