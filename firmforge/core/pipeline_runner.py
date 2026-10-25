@@ -393,6 +393,32 @@ class PipelineRunner:
             except KeyboardInterrupt:
                 pass
 
+            # panel_wait 有限（0 或 N 秒）意味着「命令就在此刻结束」：采集线程
+            # 若还活着必须显式叫停并等它关闭串口。它是 daemon 线程，不写 stop
+            # 文件就会一直持有 COM 口，于是下一次 flash 打不开端口——表现为
+            # 1 秒内走完所有波特率、bytes_written=0 的「假失败」。
+            if panel_wait is not None and self._collector_alive.is_alive():
+                stop_path = getattr(self, "_collector_stop_path", "")
+                if stop_path:
+                    try:
+                        with open(stop_path, "w", encoding="utf-8") as f:
+                            f.write("stop\n")
+                    except OSError as e:
+                        logger.warning("S5 无法写入 stop 文件 %s: %s", stop_path, e)
+                # join() 返回 None（不是 bool），必须用 is_alive() 判定，
+                # 否则 `if not join(...)` 恒为真 —— 每次都会报「5s 内未退出」，
+                # 把唯一的端口占用告警变成人人忽略的噪声。
+                self._collector_alive.join(timeout=5.0)
+                if self._collector_alive.is_alive():
+                    logger.warning("S5 采集线程 5s 内未退出，COM 口可能仍被占用")
+                elif stop_path:
+                    # 线程已退出：立刻清掉停止文件。留着它等于给下一次运行埋雷
+                    # ——任何没做清理的入口（面板、手工 monitor）进来第一轮就被赶走。
+                    try:
+                        os.remove(stop_path)
+                    except OSError:
+                        pass
+
         result.overall_success = all(s.success for s in result.stages)
         result.total_elapsed_ms = (time.time() - start) * 1000
         return result
@@ -1023,6 +1049,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
             # Keep reference for run() to wait on
             self._collector_alive = t
+            # 停止信号路径：panel_wait 为有限值时，run_full 必须在返回前让
+            # 采集线程退出并释放 COM 口，否则下一次 flash 会因端口被占失败。
+            self._collector_stop_path = stop_path
 
             # Wait for sample (3 lines or 8s timeout)
             if sample_ready.wait(timeout=8.0):
