@@ -666,6 +666,12 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
         ns.board = cargs.get("board")
         ns.app = cargs.get("app")
         ns.expected = cargs.get("expected", "")
+        # 面板参数必须能透传：run_full 的 join(timeout=panel_wait) 在 panel_wait
+        # 为 None 时会永久阻塞（等人点 Stop / 关窗）。agent / CI 调用方传
+        # 0 = 采样结束即返回；不传仍保持历史语义（无限等面板）。
+        _pw = cargs.get("panel_wait")
+        ns.panel_wait = float(_pw) if _pw is not None else None
+        ns.open_panel = cargs.get("open_panel") or "auto"
     elif cmd == "build":
         ns.board = cargs.get("board")
         ns.app = cargs.get("app")

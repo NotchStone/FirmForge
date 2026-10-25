@@ -362,6 +362,11 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
             board_id=board or None,
             expected=expected or "",
             progress_callback=_on_progress,
+            # 必须显式给 0：panel_wait 默认 None 会让 join(timeout=None) 无限阻塞，
+            # 等人点 Stop / 关窗。MCP 调用没有「人在面板前」这回事，不传就等于
+            # 工具调用永远不返回（CLI/json-mode 那条路已经修过，这里当时漏了）。
+            # 面板文件仍然随结果返回，需要看的人自己打开。
+            panel_wait=0,
         )
     except Exception as e:
         return {"overall_success": False, "error": str(e), "stages": [],
