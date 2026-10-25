@@ -112,6 +112,10 @@ class PipelineState:
     def mark_done(self, stage_name: str, **details: Any) -> None:
         entry = self._data.setdefault("stages", {}).setdefault(stage_name, {"status": "done"})
         entry["status"] = "done"
+        # 上一次失败留下的 error 必须清掉，否则 state.json 里会出现
+        # 「status=done 且 error=Flash failed」这种自相矛盾的记录，
+        # 排查时会被当成真错误（实测踩过一次）。
+        entry.pop("error", None)
         entry.update(details)  # merge, don't overwrite previous data
 
     def mark_failed(self, stage_name: str, error: str) -> None:
@@ -133,6 +137,11 @@ class PipelineState:
                 bool(stored.get("hex")))
 
     def should_skip_test(self, fingerprints: dict[str, Any]) -> bool:
+        # 上一次 S5 必须真的通过过（mark_done 写的 done）。
+        # 只看指纹会把「上次验证失败」也算成可跳过：空串口/断言不命中之后，
+        # 下一次同输入的调用会显示 [skipped] + overall_success=True，失败被粘成通过。
+        if self.stage_status("test") != "done":
+            return False
         stored = self._data.get("fingerprints", {})
         return (fingerprint_match(stored, fingerprints, ["board_id", "source", "hex", "port"]) and
                 bool(stored.get("hex")))

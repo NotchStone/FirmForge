@@ -315,20 +315,26 @@ class PipelineRunner:
         fps = compute_fingerprints(
             board_id or "", detected_port, build_source, fw_path,
         )
-        state.update_fingerprints(fps)
-        state.save()
+        # 指纹必须在 S4/S5 的跳过判定**之后**才能落盘。
+        # 以前在这里就 update_fingerprints(fps)，而 should_skip_flash/should_skip_test
+        # 读的 stored 正是这个刚写入的 dict（同一对象）——自己跟自己比较恒为 True，
+        # 于是只要历史上烧录成功过一次，之后源码/固件怎么改都不会再烧，板子上
+        # 永远跑旧固件（S5 自然等不到新固件的输出）。
 
         if stop_after == "build":
+            state.update_fingerprints(fps)
+            state.save()
             result.overall_success = all(s.success for s in result.stages)
             result.total_elapsed_ms = (time.time() - start) * 1000
             return result
 
         # -- Stage 4: Flash --
-        build_skipped = s3.details.get("skipped", False)
+        # 只按指纹判定（board + source + hex + port）：源码或固件变了就必须重烧。
+        # 不再附加 `or build_skipped` —— 那会让「源码没变但换了 COM 口」跳过烧录，
+        # 新口上的板子留着旧固件。
         flash_done_before = state.data.get("stages", {}).get("flash", {}).get("status") == "done"
-        if flash_done_before and (state.should_skip_flash(fps) or build_skipped):
-            s4 = self._skipped_stage(4, "Flash",
-                "fingerprints match" if state.should_skip_flash(fps) else "Build skipped, flash previously done")
+        if flash_done_before and state.should_skip_flash(fps):
+            s4 = self._skipped_stage(4, "Flash", "fingerprints match")
         else:
             s4 = self._stage_flash(board_id, fw_path)
         result.stages.append(s4)
@@ -346,16 +352,24 @@ class PipelineRunner:
 
         # -- Stage 5: Test --
         # Always run Test if expected pattern is provided (need to verify output)
-        if not expected and flash_done_before and (state.should_skip_test(fps) or s4.details.get("skipped")):
+        if not expected and flash_done_before and state.should_skip_test(fps):
             s5 = self._skipped_stage(5, "Test", "fingerprints match")
         else:
             s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html, process_summary=process_html)
         result.stages.append(s5)
         self._notify_progress(progress_callback, s5)
-        if not s5.success:
+        if s5.success:
+            state.mark_done("test")
+        else:
+            # 没拿到证据就不能记成 done。should_skip_test 读的就是这个状态，
+            # 记成 done 等于把「这次没验证成功」写进缓存：下一次调用直接跳过
+            # S5、显示 [skipped]、overall_success=True —— 失败被粘成了通过。
             logger.info("S5 Test: FAIL")
+            verdict = getattr(s5, "verdict", "") or "error"
+            state.mark_failed("test", s5.error or f"verify not passed ({verdict})")
 
-        state.mark_done("test")
+        # 指纹在 S4/S5 的跳过判定全部结束之后才落盘（见上方注释）。
+        state.update_fingerprints(fps)
         state.save()
 
         # Wait for collector thread to exit: Stop 按钮 / 关窗 / 超时
@@ -968,12 +982,17 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
             html_path = str(paths.runtime_dir(root) / "serial_live.html")
             stop_path = html_path + ".stop"
+            pause_path = html_path + ".pause"
 
-            # Remove stale stop file
-            try:
-                os.remove(stop_path)
-            except OSError:
-                pass
+            # 清掉上一次会话遗留的控制文件。留着 .stop → 采集线程进来第一轮
+            # 就退出，S5 永远 0 字节；留着 .pause → 采集线程把端口关掉后死等
+            # 一个永远不会来的「Open」。两种都表现为「固件没在跑」，
+            # 会把人往硬件故障上引（实测踩过一次）。
+            for _stale in (stop_path, pause_path):
+                try:
+                    os.remove(_stale)
+                except OSError:
+                    pass
 
             # Shared state between main thread and collector thread
             sample_ready = threading.Event()
