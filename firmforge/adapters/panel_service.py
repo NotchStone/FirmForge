@@ -23,6 +23,11 @@ logger = logging.getLogger("firmforge.panel")
 _panel_httpd = None
 _stream_queue = None
 
+# 面板端口扫描起点与跨度。做成模块级常量，测试才能把这一族端口
+# 挪到别处验证「端口被占时要换下一个」——否则测试自己就得先去抢 9878。
+_PANEL_PORT_BASE = 9878
+_PANEL_PORT_SPAN = 10
+
 
 def get_stream_queue():
     """Return the shared SSE queue, creating it if needed."""
@@ -70,6 +75,14 @@ def start_panel_httpd(root: str) -> int:
 
     class _ThreadedPanelServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
+        # http.server.HTTPServer 默认 allow_reuse_address = True，在 Windows 上
+        # 表现为 SO_REUSEADDR 允许两个进程**同时** bind 同一端口：后 bind 的那个
+        # 看起来成功了，但新连接仍然被先 bind 的进程接走。
+        # 实测后果：另一个 workspace 的 json-mode 守护进程占着 9878 时，
+        # 这边的面板请求（/serial-send、/modbus）全被它接走，文件写进它的
+        # .ff-run，本实例的面板永远是空的。所以 Windows 上必须关掉，
+        # 让 bind 冲突老老实实抛错，走下一个端口。
+        allow_reuse_address = os.name != "nt"
 
     data_dir = str(paths.runtime_dir(root))
     stop_file = os.path.join(data_dir, "serial_live.html.stop")
@@ -245,7 +258,7 @@ def start_panel_httpd(root: str) -> int:
         def log_error(self, *a):
             pass
 
-    for p in range(9878, 9888):
+    for p in range(_PANEL_PORT_BASE, _PANEL_PORT_BASE + _PANEL_PORT_SPAN):
         try:
             _panel_httpd = _ThreadedPanelServer(("127.0.0.1", p), _PanelHandler)
             threading.Thread(target=_panel_httpd.serve_forever, daemon=True).start()

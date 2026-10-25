@@ -109,3 +109,66 @@ class TestPanelRoutes:
         out = _post(port, "/modbus", {"mb": {"slave": 1, "fc": 3, "addr": 0, "count": 1}})
         assert out["ok"] is False
         assert "timeout" in out["error"]
+
+
+class TestPortCollision:
+    """端口被别的进程占住时，必须换下一个，而不是「绑定成功」然后被劫持。
+
+    背景：http.server.HTTPServer 默认 allow_reuse_address = True，在 Windows 上
+    SO_REUSEADDR 允许两个进程同时 bind 同一端口 —— 后 bind 的看起来成功，
+    但新连接还是被先 bind 的进程接走。面板请求（/serial-send、/modbus）
+    会全部打进另一个 workspace 的 .ff-run，本实例的面板永远是空的。
+    这个测试就是那件事的最小复现：抢占 base 端口，要求服务换到别的口，
+    并且确认回连拿到的是**自己**的页面。
+    """
+
+    @staticmethod
+    def _occupy_two_free_ports():
+        """找一对连续空闲端口，占住第一个，返回 (监听 socket, base)。"""
+        import socket
+        for base in range(21000, 21900, 2):
+            s1 = socket.socket()
+            try:
+                s1.bind(("127.0.0.1", base))
+                s1.listen(1)
+            except OSError:
+                s1.close()
+                continue
+            s2 = socket.socket()
+            try:
+                s2.bind(("127.0.0.1", base + 1))
+            except OSError:
+                s2.close()
+                s1.close()
+                continue
+            s2.close()
+            return s1, base
+        return None, None
+
+    def test_busy_port_is_skipped_not_hijacked(self, monkeypatch, temp_dir):
+        occupier, base = self._occupy_two_free_ports()
+        if occupier is None:
+            pytest.skip("本机找不到一对连续空闲端口")
+        try:
+            (temp_dir / ".ff-run").mkdir(exist_ok=True)
+            (temp_dir / ".ff-run" / "serial_live.html").write_text(
+                "<html><body>FirmForge test panel</body></html>", encoding="utf-8")
+
+            monkeypatch.setattr(ps, "_PANEL_PORT_BASE", base)
+            port = ps.start_panel_httpd(str(temp_dir))
+            try:
+                assert port, "面板服务没起来"
+                assert port != base, (
+                    f"端口 {base} 已被别的进程占用，服务却报告自己在用它 —— "
+                    "请求会被那个进程接走"
+                )
+                status, data = _get(port, "/serial_live.html")
+                assert status == 200
+                assert b"FirmForge test panel" in data, "回连拿到的不是自己的页面"
+            finally:
+                try:
+                    ps._panel_httpd.shutdown()
+                except Exception:
+                    pass
+        finally:
+            occupier.close()
