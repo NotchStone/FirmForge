@@ -82,13 +82,7 @@ def harness(tmp_path, monkeypatch):
 
 
 def _stage(result, name):
-    """按名取阶段。
-
-    S5 有个历史遗留：真跑时叫 Verify，被跳过时叫 Test（`_skipped_stage(5, "Test", ...)`）。
-    这是显示层的不一致，不属于本次要锁的行为，所以两个名字都认。
-    """
-    names = {name} if name != "Verify" else {"Verify", "Test"}
-    return next(s for s in result.stages if s.name in names)
+    return next(s for s in result.stages if s.name == name)
 
 
 def test_source_change_forces_reflash(harness):

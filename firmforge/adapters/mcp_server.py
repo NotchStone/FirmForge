@@ -73,6 +73,10 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "properties": {
                 "board": {"type": "string", "description": "Board ID. Auto-detected if omitted."},
                 "app": {"type": "string", "description": "Path to source code directory. REQUIRED."},
+                "workspace": {
+                    "type": "string",
+                    "description": "Project directory holding .ff-run/ (state + panel). Default: FIRMFORGE_WORKSPACE env, else process cwd.",
+                },
             },
             "required": ["app"],
         },
@@ -100,6 +104,10 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "Optional: regex pattern for expected serial output (e.g. 'HEARTBEAT')",
                 },
+                "workspace": {
+                    "type": "string",
+                    "description": "Project directory holding .ff-run/ (state + panel). Default: FIRMFORGE_WORKSPACE env, else process cwd.",
+                },
             },
             "required": ["app"],
         },
@@ -120,6 +128,10 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "firmware": {
                     "type": "string",
                     "description": "Path to firmware.hex file",
+                },
+                "workspace": {
+                    "type": "string",
+                    "description": "Project directory holding .ff-run/. Default: FIRMFORGE_WORKSPACE env, else process cwd.",
                 },
             },
             "required": ["board"],
@@ -146,6 +158,10 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "action": {
                     "type": "string",
                     "description": "'start' to begin monitoring, 'stop' to close",
+                },
+                "workspace": {
+                    "type": "string",
+                    "description": "Project directory holding .ff-run/ (panel files). Default: FIRMFORGE_WORKSPACE env, else process cwd.",
                 },
             },
         },
@@ -304,12 +320,13 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
         return {"error": str(e), "board": board or "unknown"}
 
 
-def _do_build(board: str = "", app: str = "") -> dict[str, Any]:
+def _do_build(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
     """Execute ff_build — Review + Build only."""
-    root = _add_project_root_to_path()
+    _add_project_root_to_path()
     from firmforge.core.pipeline_runner import PipelineRunner
+    from firmforge.infrastructure import paths
 
-    runner = PipelineRunner(workspace=str(root))
+    runner = PipelineRunner(workspace=str(paths.resolve_workspace(workspace)))
     try:
         result = runner.build(source_dir=app or None, board_id=board or None)
     except Exception as e:
@@ -337,12 +354,19 @@ def _do_build(board: str = "", app: str = "") -> dict[str, Any]:
     }
 
 
-def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any]:
+def _do_run(board: str = "", app: str = "", expected: str = "",
+            workspace: str = "") -> dict[str, Any]:
     """Execute ff_run: Detect → Review → Build → Flash → Verify."""
-    root = _add_project_root_to_path()
+    _add_project_root_to_path()
     from firmforge.core.pipeline_runner import PipelineRunner
+    from firmforge.infrastructure import paths
 
-    workspace = str(root)
+    # 工作区必须是**调用方的工作区**，不是工具自己的安装目录。
+    # 状态（.ff-run/state.json）、面板（serial_live.html）、串口配置
+    # （serial_config.json）三者都要落在同一处，否则会出现「状态在这里、
+    # 面板在那里」，串口参数还会被别的会话串改（实测误判过一次）。
+    workspace = str(paths.resolve_workspace(workspace))
+    logger.info("ff_run workspace = %s", workspace)
     runner = PipelineRunner(workspace=workspace)
 
     progress_events: list[dict[str, Any]] = []
@@ -427,13 +451,14 @@ def _do_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any
     }
 
 
-def _do_flash(board: str = "", firmware: str = "") -> dict[str, Any]:
+def _do_flash(board: str = "", firmware: str = "", workspace: str = "") -> dict[str, Any]:
     """Execute ff_flash — flash pre-compiled hex via PipelineRunner."""
-    root = _add_project_root_to_path()
+    _add_project_root_to_path()
     from firmforge.core.pipeline_runner import PipelineRunner
+    from firmforge.infrastructure import paths
 
     try:
-        runner = PipelineRunner(workspace=str(root))
+        runner = PipelineRunner(workspace=str(paths.resolve_workspace(workspace)))
         result = runner.flash(board_id=board or None, firmware_path=firmware)
         return {
             "success": result.overall_success,
@@ -469,28 +494,29 @@ if MCP_AVAILABLE and mcp is not None:
         return _do_context(board, topic)
 
     @mcp.tool()
-    def ff_build(board: str = "", app: str = "") -> dict[str, Any]:
+    def ff_build(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
         """Compile MCU source code only (no hardware required). Runs Review + Build. Use for CI/pre-commit checks. Use ff_run when hardware is connected."""
         _add_project_root_to_path()
-        return _do_build(board, app)
+        return _do_build(board, app, workspace)
 
     @mcp.tool()
-    def ff_run(board: str = "", app: str = "", expected: str = "") -> dict[str, Any]:
+    def ff_run(board: str = "", app: str = "", expected: str = "",
+               workspace: str = "") -> dict[str, Any]:
         """Compile, flash and run MCU code on real hardware.
         Full pipeline: Detect → Review → Build → Flash → Verify.
         Call AFTER writing code. Returns sample serial lines for analysis + panel file for live monitor."""
         _add_project_root_to_path()
-        return _do_run(board, app, expected)
+        return _do_run(board, app, expected, workspace)
 
     @mcp.tool()
-    def ff_flash(board: str, firmware: str = "") -> dict[str, Any]:
+    def ff_flash(board: str, firmware: str = "", workspace: str = "") -> dict[str, Any]:
         """Flash pre-compiled firmware.hex to a board. Bypasses Review+Build — use only with known-good hex files."""
         _add_project_root_to_path()
-        return _do_flash(board, firmware)
+        return _do_flash(board, firmware, workspace)
 
     @mcp.tool()
     def ff_monitor(port: str = "", baud: int = 9600,
-                   action: str = "start") -> dict[str, Any]:
+                   action: str = "start", workspace: str = "") -> dict[str, Any]:
         """Start/stop serial output monitoring in a browser panel.
 
         Args:
@@ -504,7 +530,7 @@ if MCP_AVAILABLE and mcp is not None:
             Agent should call present_files() with the URL to open the panel.
         """
         _add_project_root_to_path()
-        return _do_monitor(port, baud, action)
+        return _do_monitor(port, baud, action, workspace=workspace)
 
 _monitor_httpd = None  # legacy — kept for backward compat with pipeline_runner
 
@@ -530,7 +556,8 @@ def _start_monitor_httpd(root: str) -> int:
 # -- Main entry point --
 
 def _do_monitor(port: str = "", baud: int = 9600,
-                action: str = "start", timeout: int = 0) -> dict[str, Any]:
+                action: str = "start", timeout: int = 0,
+                workspace: str = "") -> dict[str, Any]:
     """Start/stop serial monitor + HTTP panel.
 
     start: auto-detect port, start collector + HTTP server, write goto_panel.html
@@ -545,7 +572,9 @@ def _do_monitor(port: str = "", baud: int = 9600,
     from pathlib import Path
     import time
     from firmforge.infrastructure import paths
-    root = _add_project_root_to_path()
+    _add_project_root_to_path()
+    # 面板服务的根 = 调用方工作区（与 ff_run 的 state.json 同一处）。
+    root = paths.resolve_workspace(workspace)
     html_path = str(paths.runtime_dir(root) / "serial_live.html")
     goto_path = str(paths.runtime_dir(root) / "goto_panel.html")
 

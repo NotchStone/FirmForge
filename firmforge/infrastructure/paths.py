@@ -177,6 +177,26 @@ def runtime_dir(workspace: Path | str) -> Path:
     return Path(workspace) / RUNTIME_DIR_NAME
 
 
+def resolve_workspace(explicit: Path | str | None = None) -> Path:
+    """会话工作区（= `.ff-run/` 的父目录，状态与面板都落这里）。
+
+    优先级：显式传入 > `FIRMFORGE_WORKSPACE` 环境变量 > 当前工作目录。
+
+    ⚠️ 不能用 `Path(__file__)` 上溯来当工作区：开发态它指向源码仓库根，
+    装成 wheel 后指向 site-packages —— 两个都不是调用方的工作区。用它
+    会造成同一个会话里状态写进真工作区、面板写进工具安装目录的**分裂**；
+    更糟的是 `serial_config.json`（波特率/校验位）变成全局一份，任何一个
+    工作区的面板操作都会改掉所有工作区的验证串口参数 —— 实测因此误判过
+    一次「固件没在跑」（实际是拿 57600/Even 去开 9600 的串口，8 秒零字节）。
+    """
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+    env = os.environ.get("FIRMFORGE_WORKSPACE", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    return Path.cwd()
+
+
 def resolve_output_dir(source_dir: Path | str,
                        output_dir: Path | str | None = None,
                        board_id: str = "",

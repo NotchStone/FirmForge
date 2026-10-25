@@ -350,10 +350,12 @@ class PipelineRunner:
         # Build stages summary for panel display (process + result)
         stages_summary_html, process_html = self._build_summary(result.stages)
 
-        # -- Stage 5: Test --
-        # Always run Test if expected pattern is provided (need to verify output)
+        # -- Stage 5: Verify --
+        # 有断言就必须验证（跳过等于没验证）；只有「没给断言 + 上次验证成功过」
+        # 才允许走增量跳过。阶段名统一叫 Verify —— 以前跳过时叫 Test、真跑时
+        # 叫 Verify，而 mcp_server 里按名字取 verdict/panel_url，跳过那次就取不到。
         if not expected and flash_done_before and state.should_skip_test(fps):
-            s5 = self._skipped_stage(5, "Test", "fingerprints match")
+            s5 = self._skipped_stage(5, "Verify", "fingerprints match")
         else:
             s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html, process_summary=process_html)
         result.stages.append(s5)
@@ -364,7 +366,7 @@ class PipelineRunner:
             # 没拿到证据就不能记成 done。should_skip_test 读的就是这个状态，
             # 记成 done 等于把「这次没验证成功」写进缓存：下一次调用直接跳过
             # S5、显示 [skipped]、overall_success=True —— 失败被粘成了通过。
-            logger.info("S5 Test: FAIL")
+            logger.info("S5 Verify: FAIL")
             verdict = getattr(s5, "verdict", "") or "error"
             state.mark_failed("test", s5.error or f"verify not passed ({verdict})")
 
@@ -956,7 +958,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             import threading
             import json
             from pathlib import Path
-            root = Path(__file__).resolve().parent.parent.parent
+            # 工作区 = 本次调用的 workspace —— state.json 本来就在它下面。
+            # 以前这里是 `Path(__file__)` 上溯三级，那是**工具自己的安装目录**，
+            # 于是面板文件写进源码树/site-packages，而状态写进真工作区：同一个
+            # 会话被劈成两半，且 serial_config.json 变成全局一份，任何一个
+            # 工作区的面板操作都会改掉所有工作区的验证串口参数（实测踩过一次）。
+            root = Path(self._workspace)
 
             from firmforge.providers import get_flash_provider
             detector = self._detector
@@ -983,6 +990,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             html_path = str(paths.runtime_dir(root) / "serial_live.html")
             stop_path = html_path + ".stop"
             pause_path = html_path + ".pause"
+            # 面板落点可能还没建（全新工作区）：采集线程直接往里写文件，
+            # 目录不存在会静默落到 exit_trace.log 里，表现为「S5 采不到数据」。
+            Path(html_path).parent.mkdir(parents=True, exist_ok=True)
 
             # 清掉上一次会话遗留的控制文件。留着 .stop → 采集线程进来第一轮
             # 就退出，S5 永远 0 字节；留着 .pause → 采集线程把端口关掉后死等
