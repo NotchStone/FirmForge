@@ -11,7 +11,7 @@ mcu:
   family: cortex-m7
   core: Cortex-M7
   package: LQFP144
-  # DBGMCU DEV_ID 0x450 覆盖 H742/743/753/750，**不能单独区分** 743，
+  # DBGMCU DEV_ID 0x450 覆盖 H742/743/753/750，**不能单独区分 743**，
   # 所以 STM32 路线不做"芯片签名直读"式 Detect，走板卡声明 + SWD 探针。
   dev_id: "0x450"
 
@@ -34,26 +34,335 @@ memories:
   - {name: SRAM4, start: "0x38000000", size: 64 KB,  domain: D3}
   - {name: BKPSRAM, start: "0x38800000", size: 4 KB, domain: backup}
 
+# --------------------------------------------------------------------------
+# 引脚
+# 2026-10-26 按 datasheet/YS_GC108.pdf（Rev V0.1 / 2025-06-17，共 4 页）
+# 逐脚核对。核对方法：文本层坐标配对 + 关键单元电路渲染确认，不是照抄手册。
+# 判据链：网络名 -> MCU 引脚（LQFP144 脚号） -> 连接器脚位
+# --------------------------------------------------------------------------
 pins:
+  # —— 板载人机 ——
   led1: PE7
   buzzer: PB10
+  dip_sw:
+    sw0: PD15
+    sw1: PD14
+    sw2: PD11
+    sw3: PC13
+    note: "4 位拨码开关 S2；10K 上拉，低有效"
+
+  # —— 调试 / 本地串口 ——
   debug_uart:
     peripheral: USART1
     tx: PA9
     rx: PA10
-    bridge: CH340N            # 板载 USB 转串口，原理图网络名 USB_RX / USB_TX
+    bridge: CH340N
+    # 🔴 网络名是「从 CH340 看过去」的方向，容易接反：
+    #    USB_RX -> PA9 = MCU 的 TX；USB_TX -> PA10 = MCU 的 RX
+    # 另：CH340N 与 MCU 之间还有一颗 U22 = CA-IS3722HS 数字隔离器，
+    #     CH340N 的 RXD/TXD 并不等于 PA9/PA10 网络。
+    note: "USB_RX=PA9(MCU TX) / USB_TX=PA10(MCU RX)；U22 隔离在 CH340N 与 MCU 之间"
+  usb:
+    dm: PB14
+    dp: PB15
+    peripheral: OTG_HS
+    # 🔴 2026-10-26 更正：USB-A 是 CN3；CN2 是备份电池座，不是 USB。
+    connector: CN3
+  backup_battery:
+    connector: CN2
+    type: "1.25 mm 2P"
+    net: VBAT
+    note: "BAT54C 双二极管在 3V3 与电池间自动择高；RTC + Backup SRAM 由此保持"
   swd:
     swdio: PA13
     swclk: PA14
-    connector: "CN1 (2.5 mm 6P: 1=GND 2=NRST 3=3V3 4=SWDIO 5=SWCLK 6=GND)"
+    # 🔴 2026-10-26 更正：原写 2=NRST 3=3V3，与原理图相反。
+    connector: "CN1 (2.5 mm 6P: 1=GND 2=3V3 3=NRST 4=SWDIO 5=SWCLK 6=GND)"
     swo: false
-  i2c2: {sda: PF0, scl: PF1, purpose: "24C64 EEPROM"}
-  mdio: {mdc: PC1, mdio: PA2}
+    note: "仅 SWD；PA15/PB3/PB4 为 JTAG 脚，板载已用作 EA0/EB0，须关 JTAG 留 SWD"
+  reset_button:
+    pin: NRST
+    series: "S1 + C5 0.1uF 消抖 + R1 10K 上拉到 3V3"
+    note: "长按 5 s 进 ROM 引导程序（BOOT0 侧 R2 205K / C6 22uF，tau 约 4.5 s）"
+
+  # —— 存储 ——
+  i2c2:
+    sda: PF0
+    scl: PF1
+    purpose: "24C64 EEPROM"
+  eeprom:
+    part: 24C64
+    bus: I2C2
+    size: 8 KB
+    address: "0x50（A0/A1/A2 全部接 DG）"
+    write_protect: "WP 接 DG -> 写使能（已按走线确认，非浮空）"
+    pullups: "SCL/SDA 各 4.7K 到 3V3"
+
+  # —— 以太网（RMII，H7 固定引脚，无重映射）——
   ethernet:
     phy: LAN8720A
     reset: PB2
     interrupt: PA6
     ref_clk: "X3 50 MHz"
+  ethernet_rmii:
+    ref_clk: PA1
+    mdio: PA2
+    mdc: PC1
+    crs_dv: PA7
+    rxd0: PC4
+    rxd1: PC5
+    tx_en: PB11
+    txd0: PB12
+    txd1: PB13
+
+  # —— CAN（两路编码器总线）——
+  # 🔴 原理图把 FDCAN2 叫 CAN0、FDCAN1 叫 CAN1，与 ST 外设编号相反。
+  # 对外一律用 logical 名，代码里不得出现裸的 FDCAN1 / FDCAN2。
+  can:
+    can0:
+      logical: ENC_CH_AZ
+      axis: AZ
+      rx: PB5
+      tx: PB6
+      peripheral: FDCAN2
+      connector: "CN9 pin2=CANL0 / pin3=CANH0"
+      termination: "JP3（可选 120R）"
+    can1:
+      logical: ENC_CH_EL
+      axis: EL
+      rx: PD0
+      tx: PD1
+      peripheral: FDCAN1
+      connector: "CN9 pin4=CANL1 / pin5=CANH1"
+      termination: "JP4（可选 120R）"
+    termination: "板侧每路只提供一端 120R；另一端在编码器侧"
+    # 为什么方位占端子第 1 路却是 FDCAN2：板卡把 CAN0 布到 FDCAN2，于是
+    # 「端子顺序」与「外设编号顺序」互斥，只能选一个。本方案选端子顺序 ——
+    # 方位占 CN9 pin2/3，与脉冲通道（AZ 占 CN11 pin4/5）同构，施工时
+    # "第一路接方位"；外设编号反序由 logical 名封装消除。
+    note: "方位占 CN9 第 1 路（pin2/3）但用 FDCAN2；编号反序由板卡 AF 交叉决定"
+
+  # —— 串口（板载隔离）——
+  rs485:
+    ch0:
+      rx: PD6
+      tx: PD5
+      de: PD7
+      peripheral: USART2
+      mode: half_duplex
+      transceiver: MAX13085
+    ch1:
+      rx: PD9
+      tx: PD8
+      en: PD10
+      peripheral: USART3
+      mode: "RS422 全双工（U17 收 / U18 发）"
+      transceiver: MAX13085
+
+  # —— 8 路高速脉冲输出（TLP2345 图腾柱）——
+  pulse:
+    pul00: PB0
+    pul01: PB1
+    pul02: PA0
+    pul03: PA3
+    pul04: PC6
+    pul05: PC7
+    pul06: PC8
+    pul07: PC9
+    connector: "CN11 pin8..pin1 = OPUL00..OPUL07；pin9=OPCOM- pin10=OPCOM+"
+    supply: "JP7 选 PWR / 5V / 外部 5~24V"
+
+  # —— 24 路隔离输入（ELQ3H4 双向光耦）——
+  di:
+    in00: PG2
+    in01: PG3
+    in02: PG4
+    in03: PG5
+    in04: PG6
+    in05: PG7
+    in06: PG8
+    in07: PG9
+    in10: PG10
+    in11: PG11
+    in12: PG12
+    in13: PG13
+    in14: PG14
+    in15: PG15
+    in16: PG0
+    in17: PG1
+    in20: PE8
+    in21: PE9
+    in22: PE10
+    in23: PE11
+    in24: PE12
+    in25: PE13
+    in26: PE14
+    in27: PE15
+    note: "组0 = CN16（pin1=ICOM0, pin2..9 = IIN00..IIN07）；组1/组2 端子脚序待核"
+
+  # —— 24 路隔离输出（ELQ3H7 低速光耦，< 1 kHz）——
+  do:
+    out00: PF10
+    out01: PF9
+    out02: PF8
+    out03: PF7
+    out04: PF6
+    out05: PF2
+    out06: PE6
+    out07: PE5
+    out10: PE4
+    out11: PE3
+    out12: PE2
+    out13: PE1
+    out14: PE0
+    out15: PB7
+    out16: PB4
+    out17: PD4
+    out20: PD3
+    out21: PA11
+    out22: PA12
+    out23: PF11
+    out24: PF12
+    out25: PF13
+    out26: PF14
+    out27: PF15
+    note: "MCU 侧网络名 OUTxx，隔离后端子侧名 OOUTxx；CN12/13/14 脚序待核"
+
+  # —— 模拟 ——
+  analog_in:
+    adi0: PC3
+    adi1: PC2
+    adi2: PC0
+    adi3: PF5
+    adi4: PF3
+    adi5: PF4
+    note: "-10..+10 V 经差分放大，1.65 V 偏置"
+  analog_out:
+    dao1: PA4
+    dao2: PA5
+    note: "0..10 V 输出，增益 10K/3.24K"
+
+  # —— 高速编码器输入（EL0631，本项目改 CANopen 后空出）——
+  encoder_ab:
+    ea0: PA15
+    eb0: PB3
+    ea1: PD12
+    eb1: PD13
+    voltage_select: "JP8 / JP9 / JP10 / JP11，各通道 5V 或 24V"
+
+  # —— CN19 扩展排针（2.54 mm 5x2P，每脚 50 mA）——
+  expansion:
+    cn19_pin1: PB8
+    cn19_pin2: PB9
+    cn19_pin3: PA8
+    cn19_pin4: PC10
+    cn19_pin5: PC11
+    cn19_pin6: PC12
+    cn19_pin7: NC
+    cn19_pin8: PD2
+    cn19_pin9: GND
+    cn19_pin10: "5V0"
+    note: "脚序已按图面确认；原「排针脚位待实物核对」一项可关闭"
+
+# --------------------------------------------------------------------------
+# 连接器脚位（只登记已按原理图确认的）
+# --------------------------------------------------------------------------
+connectors:
+  CN1:
+    type: "2.5 mm 6P"
+    purpose: SWD
+    pinout: {1: GND, 2: 3V3, 3: NRST, 4: SWDIO, 5: SWCLK, 6: GND}
+  CN2:
+    type: "1.25 mm 2P"
+    purpose: "备份电池（VBAT）"
+    pinout: {1: "VBAT（经 BAT54C）", 2: GND}
+  CN3:
+    type: "USB-A"
+    purpose: "主从 USB（OTG_HS，PB14/PB15）"
+  CN4:
+    type: "mini USB"
+    purpose: "板载 USB 串口 (CH340N -> U22 隔离 -> USART1)"
+    note: "JP1 默认不焊：USB 的 5 V 不接入板内 5 V 轨"
+  CN5:
+    type: "RJ45"
+    purpose: "以太网（LAN8720A + HY951180A 网络变压器）"
+  CN7:
+    type: "3.81 mm 9P"
+    purpose: "模拟量：6 路 -10~+10 V 输入 + 2 路 0~10 V 输出"
+    pinout: {1: AIN0, 2: AIN1, 3: AIN2, 4: AIN3, 5: AIN4, 6: AIN5, 7: AOUT1, 8: AOUT2, 9: "AG 模拟地"}
+  CN9:
+    type: "3.81 mm 5P"
+    purpose: "双路 CAN"
+    pinout: {1: "DG1 隔离地", 2: CANL0, 3: CANH0, 4: CANL1, 5: CANH1}
+  CN10:
+    type: "3.81 mm 7P"
+    purpose: "1 路 RS485 + 1 路 RS422/RS485（每脚经 50 mA 自恢复保险 F2~F7）"
+    # 🔴 pin1 是隔离地，不是第 1 路信号 —— 按脚号顺序接线会错位一格。
+    pinout: {1: "DG2 隔离地", 2: "485_A0", 3: "485_B0", 4: "RS485_T+", 5: "RS485_T-", 6: "RS485_R+", 7: "RS485_R-"}
+  CN11:
+    type: "3.81 mm 10P"
+    purpose: "8 路高速脉冲输出"
+    # 🔴 安全链里的继电器常开触点要串 OPCOM±，落点是 pin9/pin10。
+    pinout: {1: OPUL07, 2: OPUL06, 3: OPUL05, 4: OPUL04, 5: OPUL03, 6: OPUL02, 7: OPUL01, 8: OPUL00, 9: "OPCOM-", 10: "OPCOM+"}
+  CN12:
+    type: "3.81 mm 10P"
+    purpose: "8 路 NPN 开漏输出 · 组0（ULN2803A 低边）"
+    pinout: {1: OOUT07, 2: OOUT06, 3: OOUT05, 4: OOUT04, 5: OOUT03, 6: OOUT02, 7: OOUT01, 8: OOUT00, 9: "OTCOM-", 10: "OTCOM1+"}
+  CN13:
+    type: "3.81 mm 9P"
+    purpose: "8 路 NPN 开漏输出 · 组1（COM 与 CN12 共用 OTCOM1+，故本端子只有 9 脚）"
+    pinout: {1: OOUT17, 2: OOUT16, 3: OOUT15, 4: OOUT14, 5: OOUT13, 6: OOUT12, 7: OOUT11, 8: OOUT10, 9: "OTCOM-"}
+  CN14:
+    type: "3.81 mm 10P"
+    purpose: "8 路 NPN 开漏输出 · 组2（ULN2803A 低边）"
+    pinout: {1: OOUT27, 2: OOUT26, 3: OOUT25, 4: OOUT24, 5: OOUT23, 6: OOUT22, 7: OOUT21, 8: OOUT20, 9: "OTCOM-", 10: "OTCOM2+"}
+  CN15:
+    type: "3.81 mm 8P"
+    purpose: "2 路 AB 相编码器输入（EL0631 光耦；编码器改 CANopen 后空出）"
+    pinout: {1: "EA0+", 2: "EA0-", 3: "EB0+", 4: "EB0-", 5: "EA1+", 6: "EA1-", 7: "EB1+", 8: "EB1-"}
+  CN16:
+    type: "3.81 mm 9P"
+    purpose: "24 路通用输入 · 组0"
+    pinout: {1: "ICOM0", 2: IIN00, 3: IIN01, 4: IIN02, 5: IIN03, 6: IIN04, 7: IIN05, 8: IIN06, 9: IIN07}
+  CN17:
+    type: "3.81 mm 9P"
+    purpose: "24 路通用输入 · 组1"
+    pinout: {1: "ICOM1", 2: IIN10, 3: IIN11, 4: IIN12, 5: IIN13, 6: IIN14, 7: IIN15, 8: IIN16, 9: IIN17}
+  CN18:
+    type: "3.81 mm 9P"
+    purpose: "24 路通用输入 · 组2"
+    pinout: {1: "ICOM2", 2: IIN20, 3: IIN21, 4: IIN22, 5: IIN23, 6: IIN24, 7: IIN25, 8: IIN26, 9: IIN27}
+  CN19:
+    type: "2.54 mm 5x2P"
+    purpose: "预留扩展 IO（SPI / I2C / UART）"
+    pinout: {1: "PB8 (D104)", 2: "PB9 (D101)", 3: "PA8 (D103)", 4: "PC10 (D100)", 5: "PC11 (D102)", 6: "PC12 (D99)", 7: NC, 8: "PD2 (D98)", 9: GND, 10: "5V0"}
+  CN6:
+    type: "3.81 mm 2P"
+    purpose: "供电输入（图面标注「供电输入」；与 CN20/CN21 的 PWR 关系待实物核对）"
+
+# --------------------------------------------------------------------------
+# 核对记录
+# --------------------------------------------------------------------------
+schematic_verification:
+  source: "datasheet/YS_GC108.pdf（4 页，MCU 页 = YS_GC108_MCU.SchDoc sheet 1/4，Rev V0.1，2025-06-17）"
+  date: "2026-10-26"
+  method: "PDF 文本层坐标配对 + 关键单元电路渲染确认（CN1 / CN9 / CN10 / CN11 / CN19 / 24C64 / 复位 / RS485）"
+  scope: "MCU 全部外设引脚；CN1 / CN5 / CN7 / CN9 / CN10 / CN11 / CN12 / CN13 / CN14 / CN15 / CN16 / CN17 / CN18 / CN19 脚位"
+  pinning: "LQFP144 物理脚号取自原理图 U1 符号旁标注（如 PA13=105 / PC6=96 / PG8=93）"
+  corrected:
+    - "SWD 连接器 CN1：2 与 3 脚原登记为 2=NRST 3=3V3，实为 2=3V3 3=NRST"
+  naming_traps:
+    - "原理图 CAN0 = FDCAN2（PB5/PB6），CAN1 = FDCAN1（PD0/PD1），与 ST 编号相反"
+    - "逻辑通道名：ENC_CH_AZ = CAN0 端子 = FDCAN2；ENC_CH_EL = CAN1 端子 = FDCAN1（方位占端子第 1 路，外设编号反序）"
+    - "USB_RX -> PA9 是 MCU 的 TX，USB_TX -> PA10 是 MCU 的 RX（命名取自 CH340 视角）"
+    - "IN06 = PG8，即 DI7；已由板载 CN16 pin8 引出，无需改板"
+    - "OUTxx 是 MCU 侧名，OOUTxx 是隔离后的端子侧名"
+    - "USB-A 是 CN3，不是 CN2；CN2 是 1.25 mm 2P 备份电池座"
+    - "CN11 的 OPCOM+/- 在 pin10/pin9，不在 pin1/pin2（pin1~pin8 是 OPUL07~OPUL00）"
+    - "CN10 的 pin1 是 DG2 隔离地；CN12 的 pin1~pin3 是 OOUT07~OOUT05"
+    - "CN13 只有 9 脚：其 COM 与 CN12 共用 OTCOM1+，所以没有独立的 OTCOM+ 端子"
+    - "PA5 无 BKIN 功能（是 DAC2_OUT / DAO2）；TIM1_BKIN 与 TIM8_BKIN 都在 PA6，与 E_INT 二选一"
+    - "救援串口必须并到 MCU 侧 PA9/PA10；CH340N 的 RXD/TXD 中间隔着 U22（CA-IS3722HS）"
 
 # --------------------------------------------------------------------------
 # 编译（S3）
@@ -93,8 +402,12 @@ build:
   #
   # 为什么这几个不能省（踩过才知道）：
   #   flash  —— HAL_RCC_ClockConfig 内部调 HAL_FLASH_SetLatency，不编会链接失败
+  #   flash_ex —— `HAL_FLASHEx_Erase()` 在 flash_ex.c 里，不在 flash.c
+  #              （`M-05` 启动标志区整扇区擦除用它；缺了就是链接期 undefined reference）
   #   pwr_ex —— HAL_PWREx_ConfigSupply 在 pwr_ex.c 里，不在 pwr.c
-  hal_modules: [cortex, rcc, rcc_ex, gpio, uart, dma, exti, flash, pwr, pwr_ex]
+  #   i2c    —— 参数区 24C64（`I2C2`）：START/STOP/NACK 与 ACK 轮询交给 HAL，
+  #             时序寄存器 `TIMINGR` 仍由工程自己算（H7 的 HAL 不做换算）
+  hal_modules: [cortex, rcc, rcc_ex, gpio, uart, dma, exti, flash, flash_ex, pwr, pwr_ex, i2c]
 
   fpu: fpv5-d16
   float_abi: hard
@@ -132,6 +445,15 @@ serial:
   data_bits: 8
   parity: none
   stop_bits: 1
+  # 🔴 断言（--expected）只能针对**周期性**输出。端口在烧录完成后才打开，
+  #    开跑前还会丢弃驱动缓冲里的残留字节，所以固件上电时打印一次的内容
+  #    （版本横幅、初始化日志）结构上采不到，拿它当断言一定是 mismatch。
+  #    实测（2026-10-26 首跑）：--expected "GC-H743 boot" 收到的是
+  #    HEARTBEAT tick=1 uptime_ms=1010，判成 mismatch —— 固件其实是对的。
+  #    正确写法（hello_blink）：
+  #      ff run gc_h743 --app firmforge/data/boards/gc_h743/apps/hello_blink \
+  #         --expected "HEARTBEAT ver=1 tick=\d+"
+  #    固件要能被验证，就得让版本/状态随心跳一起周期打印，别只打一次。
 
 features:
   gpio: true
