@@ -24,6 +24,8 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+
+from firmforge.providers.textio import run_text
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -197,8 +199,7 @@ def version_of(exe: str, *args: str) -> str:
     if not exe:
         return "unknown"
     try:
-        r = subprocess.run([exe, *args, "--version"], capture_output=True,
-                           text=True, timeout=10)
+        r = run_text([exe, *args, "--version"], timeout=10)
         text = (r.stdout or r.stderr or "").strip()
         return text.splitlines()[0] if text else "unknown"
     except (OSError, subprocess.SubprocessError):

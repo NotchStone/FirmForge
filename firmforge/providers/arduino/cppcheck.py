@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from firmforge.infrastructure import paths
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ def run_cppcheck(source_dir: str, *,
     cmd.extend(_files)
 
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = run_text(cmd, timeout=30)
     except subprocess.TimeoutExpired:
         logger.warning("Cppcheck timed out after 30s")
         return []
@@ -152,9 +153,7 @@ def _to_native_paths(paths: list[str]) -> list[str]:
         # Git Bash style: /c/Users/... → use cygpath if available
         if p.startswith("/") and len(p) > 2 and p[2] == "/":
             try:
-                import subprocess
-                r = subprocess.run(
-                    ["cygpath", "-w", p], capture_output=True, text=True, timeout=2)
+                r = run_text(["cygpath", "-w", p], timeout=2)
                 if r.returncode == 0 and r.stdout.strip():
                     result.append(r.stdout.strip())
                     continue

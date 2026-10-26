@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from firmforge.infrastructure import paths
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,7 @@ def find_avr_gcc() -> tuple[str | None, str | None]:
 
     # 1. PATH
     try:
-        r = subprocess.run(["avr-gcc", "--version"], capture_output=True,
-                           text=True, timeout=5)
+        r = run_text(["avr-gcc", "--version"], timeout=5)
         if r.returncode == 0:
             return "avr-gcc", None
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -94,8 +94,7 @@ def find_avrdude() -> tuple[str | None, str | None]:
 
     # 1. PATH
     try:
-        r = subprocess.run(["avrdude", "--version"], capture_output=True,
-                           text=True, timeout=5)
+        r = run_text(["avrdude", "--version"], timeout=5)
         if r.returncode == 0:
             return "avrdude", None
     except (FileNotFoundError, subprocess.TimeoutExpired):

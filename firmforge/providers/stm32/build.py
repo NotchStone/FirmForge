@@ -49,6 +49,7 @@ from firmforge.infrastructure import paths
 from firmforge.providers.base import BuildDiagnostic, BuildProvider, BuildResult
 from firmforge.providers.gcc_diagnostics import parse_gcc_diagnostics
 from firmforge.providers.stm32.toolchain import Stm32Toolchain, resolve_toolchain
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -365,7 +366,7 @@ class Stm32BuildProvider(BuildProvider):
                 cmd = ([compiler] + common + ["-Wall"] + lang
                        + ["-c", "-o", obj, src])
                 logger.info("Compile[%d/%d]: %s", i + 1, len(user_sources), src)
-                r = subprocess.run(cmd, capture_output=True, text=True)
+                r = run_text(cmd)
                 stdout_all += r.stdout
                 stderr_all += r.stderr
                 if r.returncode != 0:
@@ -385,7 +386,7 @@ class Stm32BuildProvider(BuildProvider):
                 "-Wl,--start-group", "-lc", "-lm", "-lgcc", "-Wl,--end-group",
             ] + list(self._build_cfg.get("extra_link_flags", []) or [])
             logger.info("Link: %s", " ".join(link_cmd))
-            r = subprocess.run(link_cmd, capture_output=True, text=True)
+            r = run_text(link_cmd)
             stdout_all += r.stdout
             stderr_all += r.stderr
             if r.returncode != 0:
@@ -394,8 +395,7 @@ class Stm32BuildProvider(BuildProvider):
             # -- Step 4: .elf → .hex / .bin -----------------------------------
             for args, target in ((("-O", "ihex"), hex_path),
                                  (("-O", "binary"), str(out / "firmware.bin"))):
-                r2 = subprocess.run([objcopy, *args, elf_path, target],
-                                    capture_output=True, text=True)
+                r2 = run_text([objcopy, *args, elf_path, target])
                 if r2.returncode != 0:
                     return stdout_all, stderr_all + r2.stderr, r2.returncode
             return stdout_all, stderr_all, 0
@@ -499,7 +499,7 @@ class Stm32BuildProvider(BuildProvider):
                            + ["-c", "-o", obj, src])
                 logger.info("SDK compile[%d/%d]: %s", i + 1, len(sources),
                             Path(src).name)
-                r = subprocess.run(cmd, capture_output=True, text=True)
+                r = run_text(cmd)
                 stdout_all += r.stdout
                 stderr_all += r.stderr
                 if r.returncode != 0:
@@ -511,8 +511,7 @@ class Stm32BuildProvider(BuildProvider):
                 archive.unlink()     # arm-ar rcs 会追加，必须先删
             ar = str(Path(gcc).with_name(
                 "arm-none-eabi-ar.exe" if os.name == "nt" else "arm-none-eabi-ar"))
-            r = subprocess.run([ar, "rcs", str(archive), *objs],
-                               capture_output=True, text=True)
+            r = run_text([ar, "rcs", str(archive), *objs])
             stdout_all += r.stdout
             stderr_all += r.stderr
             if r.returncode != 0:
@@ -559,8 +558,7 @@ class Stm32BuildProvider(BuildProvider):
         if not size or not Path(elf_path).is_file():
             return ""
         try:
-            r = subprocess.run([size, elf_path], capture_output=True,
-                               text=True, timeout=20)
+            r = run_text([size, elf_path], timeout=20)
             return "\n[size]\n" + (r.stdout or r.stderr)
         except (OSError, subprocess.SubprocessError):
             return ""

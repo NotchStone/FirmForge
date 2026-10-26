@@ -23,7 +23,6 @@ import logging
 import os
 import platform
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -33,6 +32,7 @@ from pathlib import Path
 
 from firmforge.core.resources import manifests_dir
 from firmforge.infrastructure import paths
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -247,10 +247,7 @@ def _extract_msi(msi: Path, dest: Path) -> None:
     with tempfile.TemporaryDirectory() as td:
         target = Path(td) / "out"
         target.mkdir(parents=True, exist_ok=True)
-        r = subprocess.run(
-            ["msiexec", "/a", str(msi), "/qn", f"TARGETDIR={target}"],
-            capture_output=True, text=True,
-        )
+        r = run_text(["msiexec", "/a", str(msi), "/qn", f"TARGETDIR={target}"])
         if r.returncode != 0:
             raise RuntimeError(f"msiexec failed: {r.returncode} {r.stderr}")
         # Files land under <TARGETDIR>/PFiles/cppcheck*/ — locate cppcheck.exe and copy

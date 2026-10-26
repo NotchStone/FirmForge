@@ -10,12 +10,12 @@ from firmforge.providers.com_port import com_port_clean_close
 import logging
 import os
 import re
-import subprocess
 import time
 from typing import Any
 
 from firmforge.providers.base import FlashProvider, FlashResult, FlashError
 from firmforge.providers.arduino.toolchain import resolve_toolchain
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +153,7 @@ class ArduinoFlashProvider(FlashProvider):
 
     def get_programmer_version(self) -> str:
         try:
-            proc = subprocess.run(
-                [self._toolchain.avrdude, "--version"],
-                capture_output=True, text=True, timeout=5,
-            )
+            proc = run_text([self._toolchain.avrdude, "--version"], timeout=5)
             return proc.stdout.splitlines()[0] if proc.stdout else "unknown"
         except Exception:
             return "unknown"
@@ -207,8 +204,7 @@ class ArduinoFlashProvider(FlashProvider):
             cmd.extend(["-U", f"flash:{op_flag}:{hex_win}:i"])
 
             logger.info("Flash %s: %s", operation, " ".join(cmd))
-            proc = subprocess.run(cmd, capture_output=True, text=True,
-                                  timeout=30, errors="replace")
+            proc = run_text(cmd, timeout=30)
             elapsed = (time.perf_counter() - start) * 1000
             combined = (proc.stdout or "") + (proc.stderr or "")
 

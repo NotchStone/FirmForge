@@ -24,6 +24,7 @@ from firmforge.providers.base import (
 )
 from firmforge.providers.gcc_diagnostics import parse_gcc_diagnostics
 from firmforge.providers.arduino.toolchain import resolve_toolchain
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -163,10 +164,7 @@ class ArduinoBuildProvider(BuildProvider):
 
     def get_toolchain_version(self) -> str:
         try:
-            r = subprocess.run(
-                [self._toolchain.avr_gcc, "--version"],
-                capture_output=True, text=True, timeout=5,
-            )
+            r = run_text([self._toolchain.avr_gcc, "--version"], timeout=5)
             return r.stdout.splitlines()[0] if r.stdout else "unknown"
         except Exception:
             return "unknown"
@@ -267,7 +265,7 @@ class ArduinoBuildProvider(BuildProvider):
                    "-Os", "-Wall", "-Wextra", "-std=c11", "-lm",
                    "-o", elf_path] + [str(s) for s in sources]
             logger.info("Compile: %s", " ".join(cmd))
-            r = subprocess.run(cmd, capture_output=True, text=True)
+            r = run_text(cmd)
             stdout, stderr, rc = r.stdout, r.stderr, r.returncode
 
             if rc != 0:
@@ -275,7 +273,7 @@ class ArduinoBuildProvider(BuildProvider):
 
             # .elf to .hex
             cmd2 = [objcopy, "-O", "ihex", "-R", ".eeprom", elf_path, hex_path]
-            r2 = subprocess.run(cmd2, capture_output=True, text=True)
+            r2 = run_text(cmd2)
             if r2.returncode != 0:
                 return stdout, stderr + "\n" + r2.stderr, r2.returncode
 
@@ -301,7 +299,7 @@ class ArduinoBuildProvider(BuildProvider):
                 lang_flags = ["-std=gnu++11"] if src.endswith(".cpp") else ["-std=c11"]
                 cmd = [compiler] + common_flags + lang_flags + ["-c", "-o", obj_file, src]
                 logger.info("Compile[%d/%d]: %s", i + 1, len(sources), " ".join(cmd))
-                r = subprocess.run(cmd, capture_output=True, text=True)
+                r = run_text(cmd)
                 all_stdout += r.stdout
                 all_stderr += r.stderr
                 if r.returncode != 0:
@@ -311,7 +309,7 @@ class ArduinoBuildProvider(BuildProvider):
             link_cmd = [avr_gpp, f"-mmcu={self._mcu}",
                          "-o", elf_path] + obj_files + ["-lm"]
             logger.info("Link: %s", " ".join(link_cmd))
-            r = subprocess.run(link_cmd, capture_output=True, text=True)
+            r = run_text(link_cmd)
             all_stdout += r.stdout
             all_stderr += r.stderr
             if r.returncode != 0:
@@ -329,7 +327,7 @@ class ArduinoBuildProvider(BuildProvider):
 
         # .elf to .hex
         cmd2 = [objcopy, "-O", "ihex", "-R", ".eeprom", elf_path, hex_path]
-        r2 = subprocess.run(cmd2, capture_output=True, text=True)
+        r2 = run_text(cmd2)
         if r2.returncode != 0:
             return all_stdout, all_stderr + "\n" + r2.stderr, r2.returncode
 
@@ -680,7 +678,7 @@ class ArduinoBuildProvider(BuildProvider):
                               else ["-std=c11"])
                 cmd = ([compiler] + common_flags + CORE_WARN_FLAGS + lang_flags
                        + ["-c", "-o", str(obj_file), src])
-                r = subprocess.run(cmd, capture_output=True, text=True)
+                r = run_text(cmd)
                 all_stdout += r.stdout
                 all_stderr += r.stderr
                 if r.returncode != 0:
@@ -719,7 +717,7 @@ class ArduinoBuildProvider(BuildProvider):
                 if is_ino:
                     cmd += ["-x", "c++"]
                 cmd += ["-c", "-o", obj_file, src]
-                r = subprocess.run(cmd, capture_output=True, text=True)
+                r = run_text(cmd)
                 all_stdout += r.stdout
                 all_stderr += r.stderr
                 if r.returncode != 0:
@@ -739,7 +737,7 @@ class ArduinoBuildProvider(BuildProvider):
                 "-o", elf_path,
             ] + user_obj_files + [str(core_a), "-lm"]
 
-            r = subprocess.run(link_cmd, capture_output=True, text=True)
+            r = run_text(link_cmd)
             all_stdout += r.stdout
             all_stderr += r.stderr
             if r.returncode != 0:
@@ -747,7 +745,7 @@ class ArduinoBuildProvider(BuildProvider):
 
             # Step 3: .elf to .hex
             cmd2 = [objcopy, "-O", "ihex", "-R", ".eeprom", elf_path, hex_path]
-            r2 = subprocess.run(cmd2, capture_output=True, text=True)
+            r2 = run_text(cmd2)
             if r2.returncode != 0:
                 return all_stdout, all_stderr + "\n" + r2.stderr, r2.returncode
 
@@ -789,5 +787,5 @@ class ArduinoBuildProvider(BuildProvider):
     def _run_make(source_dir: str, output_dir: str) -> tuple[str, str, int]:
         """Run make in source_dir with output_dir for artifacts."""
         cmd = ["make", "-C", source_dir, f"BUILD_DIR={output_dir}"]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = run_text(cmd)
         return r.stdout, r.stderr, r.returncode
