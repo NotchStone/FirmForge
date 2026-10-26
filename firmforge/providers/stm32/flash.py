@@ -28,7 +28,9 @@ from typing import Any
 
 from firmforge.providers.base import FlashProvider, FlashResult
 from firmforge.providers.com_port import com_port_clean_close  # noqa: F401  (接口对齐)
+from firmforge.providers.stm32.debug import base_args
 from firmforge.providers.stm32.toolchain import Stm32Toolchain, resolve_toolchain
+from firmforge.providers.textio import run_text
 
 logger = logging.getLogger(__name__)
 
@@ -143,29 +145,17 @@ class Stm32FlashProvider(FlashProvider):
     def _openocd_command(self, operation: str, firmware_path: str) -> list[str]:
         """拼 OpenOCD 命令行。cfg 路径与速度全部来自 board.yaml。
 
-        参数顺序有讲究：`transport select` 与 `adapter speed` 必须排在
-        `-f target/*.cfg` **之前** —— target cfg 会自己 auto-select transport
-        并就此打上 DEPRECATED 警告；先选则警告消失，且行为与显式声明一致。
+        连接参数走 `debug.base_args()` —— 烧录与 `ff inspect` 必须用同一套
+        拼接（含 `transport select` 必须排在 `-f target/*.cfg` 之前的顺序），
+        否则两处各写一份，迟早会在某次改 board.yaml 时只改一边。
         """
-        cfg = self._flash_cfg
-        cmd = [
-            self._toolchain.openocd,
-            "-s", str(self._toolchain.openocd_scripts),
-            "-f", str(cfg.get("interface_cfg", "interface/cmsis-dap.cfg")),
-        ]
-        transport = cfg.get("transport")
-        if transport:
-            cmd += ["-c", f"transport select {transport}"]
-        speed = cfg.get("speed_khz")
-        if speed:
-            cmd += ["-c", f"adapter speed {speed}"]
-        cmd += ["-f", str(cfg.get("target_cfg", "target/stm32h7x.cfg"))]
+        cmd = base_args(self._toolchain, self._flash_cfg)
 
         # 路径含空格时必须自己加引号 —— OpenOCD 的 -c 是**它自己的**命令解析器，
         # 不走 shell，所以花括号是它认的引号写法。
         fw = "{" + str(Path(firmware_path).resolve()) + "}"
-        verify = "verify " if cfg.get("verify", True) else ""
-        reset = "reset " if cfg.get("reset_after", True) else ""
+        verify = "verify " if self._flash_cfg.get("verify", True) else ""
+        reset = "reset " if self._flash_cfg.get("reset_after", True) else ""
 
         if operation == "flash":
             cmd += ["-c", f"program {fw} {verify}{reset}exit"]
@@ -184,7 +174,7 @@ class Stm32FlashProvider(FlashProvider):
         cmd = self._openocd_command(operation, firmware_path)
         logger.info("OpenOCD %s: %s", operation, " ".join(cmd))
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            r = run_text(cmd, timeout=180)
         except subprocess.TimeoutExpired:
             return FlashResult(
                 success=False, elapsed_ms=(time.time() - start) * 1000,

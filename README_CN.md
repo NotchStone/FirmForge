@@ -63,6 +63,9 @@ ff run arduino_mega --app path/to/source --expected "Hello World"
 
 # 直烧 hex
 ff flash arduino_mega --firmware firmware.hex
+
+# STM32 只读观测：复位原因 / CPU 位置 / 变量 / 外设寄存器（暂停→读→自动恢复运行）
+ff inspect gc_h743 --sym g_boot_stage --periph IWDG
 ```
 
 ## MCP 服务器

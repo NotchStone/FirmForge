@@ -172,6 +172,9 @@ def _stage_extra(stage) -> str:
     if verdict == "unavailable":
         note = stage.details.get("note") or "unavailable"
         return f" — {note}, readback not performed"
+    if verdict == "port_busy":
+        # 端口没打开 ≠ 固件没输出：失败在前提，固件根本没被检验。
+        return " — serial port busy, firmware was never exercised"
     extra = ""
     if stage.name == "Build" and stage.details.get("compile_rounds", 0) > 1:
         extra = f" (attempt {stage.details['compile_rounds']})"
@@ -512,7 +515,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("board", nargs="?", help="Board ID (e.g. arduino_328p)")
     p_run.add_argument("--app", help="Source code directory (REQUIRED)")
-    p_run.add_argument("--expected", help="Regex pattern for expected serial output")
+    p_run.add_argument(
+        "--expected",
+        help="断言（正则），必须能命中**周期性**输出，如 'HEARTBEAT tick=\\d+'。"
+             "不要断言启动横幅：S5 在烧录完成后才打开串口，一次性打印早已发完。",
+    )
     p_run.add_argument(
         "--open-panel", choices=["auto", "panel", "none"], default="auto",
         help="串口面板谁来开：auto=仅交互式终端自动打开（默认）/ panel=强制打开 / none=只打印地址",
@@ -549,6 +556,44 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_ctx.add_argument(
         "--topic", default="",
         help="registers|pins|baud|all，或外设名（USART1）、外设.寄存器（USART1.CR1）")
+
+    # ff inspect
+    p_ins = subparsers.add_parser(
+        "inspect",
+        help="Read-only observation: reset cause / PC location / symbols / peripherals "
+             "(STM32, via SWD probe)",
+    )
+    p_ins.add_argument("board", nargs="?",
+                       help="Board ID（缺省=唯一一台 STM32 板卡）")
+    p_ins.add_argument("--elf", help="ELF 路径（缺省取构建缓存里最新的 firmware.elf）")
+    p_ins.add_argument("--sym", action="append", metavar="NAME",
+                       help="读一个变量/数组（可重复），如 --sym s_ticks")
+    p_ins.add_argument("--sym-glob", action="append", metavar="PAT",
+                       help="按通配读一组变量（可重复），如 --sym-glob 'g_rsv_*'")
+    p_ins.add_argument("--periph", action="append", metavar="NAME",
+                       help="读外设寄存器并解码字段（可重复）：LPTIM1 读全部，"
+                            "LPTIM1.CR 只读一个")
+    p_ins.add_argument("--no-where", action="store_true",
+                       help="不解析 PC 对应的源码行")
+    p_ins.add_argument("--no-resume", action="store_true",
+                       help="观测完保持暂停（默认恢复运行）")
+    p_ins.add_argument("--no-freeze-watchdog", action="store_true",
+                       help="不冻结看门狗（默认冻结——不冻结时暂停期间可能被看门狗复位）")
+    p_ins.add_argument("--clear-reset-flags", action="store_true",
+                       help="观测后清 RCC_RSR 复位标志（不清则下次读到的还是这批 sticky 位）")
+    p_ins.add_argument("--symbol-notes", metavar="YAML",
+                       help="符号语义表（符号名: {取值: 说明}），给变量值补一行人话")
+    p_ins.add_argument("--timeout", type=float, default=90.0, metavar="SEC",
+                       help="OpenOCD 会话超时（秒，默认 90）")
+
+    # `--json` 原先只挂在根解析器上，于是只有 `ff --json run` 可用；
+    # 写成 `ff run --json`（人/Agent 的第一直觉）会被 argparse 判为未知参数，
+    # 而错误落在 stderr、stdout 一片空白 —— 看起来像"命令没输出"，极易误判。
+    # 这里给每个子命令也挂一份（`SUPPRESS` 默认值，不覆盖根上的取值）。
+    for _sp in (p_init, p_run, p_build, p_flash, p_setup, p_ctx, p_ins):
+        _sp.add_argument(
+            "--json", action="store_true", default=argparse.SUPPRESS,
+            help="输出机器可读 JSON（等价于全局 --json，可写在子命令之后）")
 
     return parser
 
@@ -638,6 +683,155 @@ def cmd_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_inspect(args: argparse.Namespace) -> int:
+    """ff inspect: 只读观测 —— 复位原因 / CPU 位置 / 关键变量 / 外设寄存器。"""
+    from firmforge.providers.stm32.inspect import InspectRequest
+    from firmforge.providers.stm32.inspect import inspect as run_inspect
+
+    board_id = args.board
+    detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
+
+    if not board_id:
+        # 缺省只在"唯一一台 STM32"时才自动选；多台一律要求显式，不猜。
+        stm32 = []
+        for path in sorted(Path(_bdir()).glob("*/board.yaml")):
+            try:
+                import yaml
+                cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except Exception:                     # noqa: BLE001
+                continue
+            if cfg.get("platform") == "stm32":
+                stm32.append(cfg.get("board_id") or path.parent.name)
+        if len(stm32) != 1:
+            msg = (f"需要显式指定板卡（候选：{', '.join(stm32) or '无 STM32 板卡'}）")
+            if getattr(args, "json", False):
+                return _json_out({"error": msg}, 1)
+            print(f"Error: {msg}")
+            return 1
+        board_id = stm32[0]
+
+    config = detector.resolve_board(board_id)
+    if not config:
+        if getattr(args, "json", False):
+            return _json_out({"error": f"board '{board_id}' not found"}, 1)
+        print(f"Error: board '{board_id}' not found")
+        return 1
+
+    platform = config.get("platform", "arduino")
+    if platform != "stm32":
+        msg = (f"inspect 目前只实现 STM32（SWD 探针 + halt 读内存）。"
+               f"板卡 {board_id} 的平台是 {platform}。")
+        if getattr(args, "json", False):
+            return _json_out({"error": msg}, 1)
+        print(f"Error: {msg}")
+        return 1
+
+    req = InspectRequest(
+        elf=getattr(args, "elf", None),
+        symbols=list(getattr(args, "sym", None) or []),
+        sym_globs=list(getattr(args, "sym_glob", None) or []),
+        peripherals=list(getattr(args, "periph", None) or []),
+        where=not getattr(args, "no_where", False),
+        resume=not getattr(args, "no_resume", False),
+        freeze_watchdog=not getattr(args, "no_freeze_watchdog", False),
+        clear_reset_flags=getattr(args, "clear_reset_flags", False),
+        symbol_notes=getattr(args, "symbol_notes", None),
+        timeout=float(getattr(args, "timeout", None) or 90.0),
+    )
+
+    payload = run_inspect(config, req)
+    if getattr(args, "json", False):
+        return _json_out(payload, 0 if payload.get("target", {}).get("halted") else 1)
+
+    _print_inspect(payload)
+    return 0 if payload.get("target", {}).get("halted") else 1
+
+
+def _print_inspect(p: dict) -> None:
+    """人读格式。要的是判据，不是 JSON 的换行版。"""
+    t = p.get("target") or {}
+    frozen = t.get("watchdog_frozen")
+    state = "halted" if t.get("halted") else "NOT-HALTED"
+    print(f"Board: {t.get('board_id')} | {t.get('mcu')} | {state} | "
+          f"probe {t.get('probe') or '?'} | {p.get('elapsed_ms')} ms")
+    if t.get("elf"):
+        print(f"ELF:   {t['elf']}  ({t.get('elf_mtime') or '?'})")
+    if t.get("state_prior"):
+        print(f"  （进会话前状态：{t['state_prior']}）")
+
+    rc = p.get("reset_cause")
+    if rc:
+        label = rc.get("primary") or ("已清除（无标志）" if rc.get("raw") == "0x00000000"
+                                      else "无法判定")
+        print(f"Reset: {label}  ({rc.get('raw')})")
+        print(f"  {rc.get('note')}")
+        if rc.get("flags"):
+            print(f"  置位标志: {', '.join(rc['flags'])}")
+
+    loc = p.get("location")
+    if loc:
+        where = ""
+        if loc.get("file"):
+            where = f"{_short_path(loc['file'])}:{loc.get('line') or '?'}"
+        print(f"Where: {loc.get('pc')}  {loc.get('function') or '?'}  {where}".rstrip())
+
+    st = p.get("stack") or {}
+    fault = st.get("fault")
+    fault_txt = ("未判断" if fault is None
+                 else (fault.get("exception") or "none") if fault.get("in_exception")
+                 else "none")
+    print(f"Stack: sp={st.get('sp')}  lr={st.get('lr')}  exception={fault_txt}")
+
+    syms = p.get("symbols") or []
+    if syms:
+        print("Symbols:")
+        for s in syms:
+            val = s.get("value")
+            val_txt = f"{val} (0x{val:08X})" if isinstance(val, int) else str(val)
+            line = f"  {s['name']:<24} {s.get('addr')}  = {val_txt}"
+            if s.get("text"):
+                line += f"   → {s['text']}"
+            print(line)
+            words = s.get("words")
+            if words:
+                shown = " ".join(words[:8])
+                more = f"  (+{len(words) - 8} 字)" if len(words) > 8 else ""
+                print(f"  {'':<24} [{shown}]{more}")
+
+    for per in p.get("peripherals") or []:
+        print(f"Peripheral {per['name']} @ {per.get('base') or '?'}:")
+        for r in per.get("registers") or []:
+            if r.get("value") is None:
+                print(f"  {r['name']:<8} (未读到)")
+                continue
+            fields = " ".join(f"{f['name']}={f['value']}" for f in r.get("fields") or [])
+            print(f"  {r['name']:<8} {r['value']}  {fields}".rstrip())
+
+    if frozen is not None:
+        # 冻结状态必须显式可见：否则用户会把"暂停期间芯片复位"当成"没在跑"
+        if not frozen:
+            print("Watchdog: NOT frozen — 快照可能已被看门狗复位打断")
+        elif t.get("watchdog_freeze_applied"):
+            print("Watchdog: frozen（本次由 inspect 置位，退出时已恢复）")
+        else:
+            print("Watchdog: frozen（进入会话前就已置位，不是本次设置）")
+
+    warns = p.get("warnings") or []
+    if warns:
+        print("Warnings:")
+        for w in warns:
+            print(f"  - {w}")
+
+
+def _short_path(path: str) -> str:
+    """厂商库的路径压成 `[vendor] 文件名` —— 目的是让人一眼看出
+    「这行是我的代码还是库里的」，不是把 100 字符路径打在终端上。"""
+    norm = path.replace("\\", "/")
+    if "/packages/" in norm or "/src/templates/" in norm.lower():
+        return "[vendor] " + norm.rsplit("/", 1)[-1]
+    return path
+
+
 def _emit_frame(req_id, ok, value, code=None, message=""):
     """Write one result frame (JSON line) to stdout — called outside redirect scope."""
     frame = {"id": req_id, "type": "result", "ok": bool(ok)}
@@ -662,6 +856,18 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
     elif cmd == "context":
         ns.board = cargs.get("board", "")
         ns.topic = cargs.get("topic", "")
+    elif cmd == "inspect":
+        ns.board = cargs.get("board")
+        ns.elf = cargs.get("elf")
+        ns.sym = cargs.get("sym") or []
+        ns.sym_glob = cargs.get("sym_glob") or []
+        ns.periph = cargs.get("periph") or []
+        ns.no_where = bool(cargs.get("no_where", False))
+        ns.no_resume = bool(cargs.get("no_resume", False))
+        ns.no_freeze_watchdog = bool(cargs.get("no_freeze_watchdog", False))
+        ns.clear_reset_flags = bool(cargs.get("clear_reset_flags", False))
+        ns.symbol_notes = cargs.get("symbol_notes")
+        ns.timeout = float(cargs.get("timeout") or 90.0)
     elif cmd == "run":
         ns.board = cargs.get("board")
         ns.app = cargs.get("app")
@@ -693,6 +899,7 @@ def _json_mode_loop() -> int:
         "build": cmd_build,
         "run": cmd_run,
         "flash": cmd_flash,
+        "inspect": cmd_inspect,
     }
 
     for raw in sys.stdin:
@@ -761,6 +968,8 @@ def main(argv: list[str] | None = None) -> int:
         return setup_all()
     elif args.command == "context":
         return cmd_context(args)
+    elif args.command == "inspect":
+        return cmd_inspect(args)
     else:
         parser.print_help()
         return 0

@@ -57,13 +57,18 @@ class TestParserWiring:
         assert args.app is not None
         assert getattr(args, "apps", None) in (None, "")
 
-    def test_json_is_global_not_per_subcommand(self):
-        """--json 必须放在子命令之前；放到后面会被判为未知参数。
+    def test_json_works_before_and_after_subcommand(self):
+        """`--json` 在两个位置都必须生效。
 
-        批量入口就是踩在这个坑上：写成 `ff build ... --json` 直接
-        `unrecognized arguments`，而且退出码是 2、没有任何可用输出。
+        历史：原先只有根解析器认 `--json`，`ff build ... --json` 会被判为
+        `unrecognized arguments`（退出码 2、stdout 空白）—— 批量入口踩过这个坑，
+        当时的处置是"把参数挪到前面"，于是这条约束被固化成了测试。
+        但把缺陷写成契约是错的：人的第一直觉就是写在子命令后面，写在后面还静默
+        失败更像"命令没输出"。现在两个位置都认（子命令那份用 `SUPPRESS` 默认值，
+        不覆盖根上的取值）。
         """
         parser = setup_argument_parser()
         assert parser.parse_args(["--json", "build", "arduino_mega", "--apps", "x"]).json is True
-        with pytest.raises(SystemExit):
-            parser.parse_args(["build", "arduino_mega", "--apps", "x", "--json"])
+        assert parser.parse_args(["build", "arduino_mega", "--apps", "x", "--json"]).json is True
+        # 不写就是 False，不能因为子命令挂了 flag 而变成 True
+        assert parser.parse_args(["build", "arduino_mega", "--apps", "x"]).json is False
