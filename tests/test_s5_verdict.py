@@ -61,6 +61,28 @@ class TestDecideVerify:
         assert d.verdict == VERDICT_EMPTY
 
 
+class TestAssertionTarget:
+    """断言必须针对周期性输出。
+
+    实测（2026-10-26 GC-H743 首跑）：拿启动横幅 `GC-H743 boot` 当断言，
+    实收 `HEARTBEAT tick=1`，判 mismatch —— 固件其实是对的。原因是 S5
+    在烧录完成后才打开串口，上电时打印一次的内容结构性采不到。
+    所以 mismatch 的文案必须把这条讲出来，否则下一个读日志的人还会去查硬件。
+    """
+
+    def test_one_shot_banner_assertion_is_mismatch_with_hint(self):
+        samples = ["HEARTBEAT ver=1 tick=1 uptime_ms=1010"]
+        d = _decide_verify(samples, r"GC-H743 boot")
+        assert d.verdict == VERDICT_MISMATCH
+        assert "周期性" in d.error, "mismatch 文案没说明断言该针对周期性输出"
+        assert "HEARTBEAT ver=1" in d.error or "实际首行" in d.error
+
+    def test_periodic_output_assertion_passes(self):
+        samples = ["HEARTBEAT ver=1 tick=1 uptime_ms=1010"]
+        d = _decide_verify(samples, r"HEARTBEAT ver=1 tick=\d+")
+        assert d.verdict == VERDICT_VERIFIED
+
+
 class TestBadge:
     def test_collected_badge_is_not_pass(self):
         from firmforge.adapters.cli import _stage_badge, _stage_extra

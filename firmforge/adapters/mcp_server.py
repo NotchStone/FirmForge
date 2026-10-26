@@ -102,7 +102,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "expected": {
                     "type": "string",
-                    "description": "Optional: regex pattern for expected serial output (e.g. 'HEARTBEAT')",
+                    "description": "Optional: regex that must match PERIODIC serial output (e.g. 'HEARTBEAT tick=\\d+'). Do not assert on a one-shot boot banner — S5 opens the port only after flashing, so the banner is already gone.",
                 },
                 "workspace": {
                     "type": "string",
@@ -415,9 +415,10 @@ def _do_run(board: str = "", app: str = "", expected: str = "",
         if s.name == "Build" and s.details.get("compile_rounds", 0) > 0:
             stage_info["compile_rounds"] = s.details["compile_rounds"]
         if s.name == "Verify":
-            # verdict 是 S5 的三态：verified / mismatch / collected / empty /
-            # unavailable。只有 verified 才算「验证通过」；collected 表示
-            # 「采到了数据但调用方没给断言」，需要 Agent 自己判断。
+            # verdict 是 S5 的六种结局：verified / mismatch / collected / empty /
+            # port_busy / unavailable。只有 verified 才算「验证通过」；collected 表示
+            # 「采到了数据但调用方没给断言」，需要 Agent 自己判断；port_busy 表示
+            # 端口没打开（采集线程或别的进程占着），固件根本没被检验。
             stage_info["verdict"] = getattr(s, "verdict", "") or ""
             stage_info["sample_lines"] = s.details.get("sample_lines", [])
             stage_info["matched_baud"] = s.details.get("matched_baud", 0)
@@ -504,7 +505,9 @@ if MCP_AVAILABLE and mcp is not None:
                workspace: str = "") -> dict[str, Any]:
         """Compile, flash and run MCU code on real hardware.
         Full pipeline: Detect → Review → Build → Flash → Verify.
-        Call AFTER writing code. Returns sample serial lines for analysis + panel file for live monitor."""
+        Call AFTER writing code. Returns sample serial lines for analysis + panel file for live monitor.
+        `expected` must match periodic output (heartbeat / status line); a one-shot boot banner cannot be seen,
+        because S5 opens the serial port only after flashing finishes."""
         _add_project_root_to_path()
         return _do_run(board, app, expected, workspace)
 

@@ -42,12 +42,13 @@ def _salient_error(text: str, limit: int = 200) -> str:
     return lines[-1][:limit]
 
 
-# S5 的五种结局。ff 只判断「有没有数据」和「调用方给的断言命中没有」，
+# S5 的六种结局。ff 只判断「有没有数据」和「调用方给的断言命中没有」，
 # 不判断「这个输出是否说明功能实现了」——那是 Agent / 人的事。
 VERDICT_VERIFIED = "verified"        # 调用方给了断言，且命中
 VERDICT_MISMATCH = "mismatch"        # 调用方给了断言，但没命中（含 regex 非法）
 VERDICT_COLLECTED = "collected"      # 采到数据，但没人给断言 —— 不算通过
 VERDICT_EMPTY = "empty"              # 端口开着，一个字节都没回来
+VERDICT_PORT_BUSY = "port_busy"      # 端口根本没打开 —— 前提缺失，固件没被检验
 VERDICT_UNAVAILABLE = "unavailable"  # 没串口 / 没板卡配置 —— 这一步没执行
 VERDICT_ERROR = "error"              # S5 自身异常
 
@@ -71,6 +72,12 @@ def _decide_verify(sample_lines: list[str], expected: str,
     2. 调用方给了断言且不命中 → 不通过（断言是调用方自己立的）；
     3. 采到数据但没给断言 → `collected`，**不是通过** —— 只报「我采到了」，
        不下「固件正常」的结论。
+
+    断言的前提（调用方必须知道）：**只能断言周期性输出**（心跳 / 状态行）。
+    端口是在烧录完成后才打开的，开跑前还会丢掉驱动缓冲里的残留字节，
+    所以固件上电时打印一次的内容（版本横幅、初始化日志）**结构上采不到**。
+    实测踩过：拿 `GC-H743 boot` 当断言，收到的其实是 `HEARTBEAT tick=1`，
+    被判成 mismatch —— 看起来像固件不对，实际是断言选错了对象。
     """
     import re
 
@@ -89,15 +96,17 @@ def _decide_verify(sample_lines: list[str], expected: str,
     if not sample_lines:
         return VerifyDecision(
             False, VERDICT_EMPTY,
-            f"串口 {port} 已打开（{baud} bps）但 8s 内没收到任何字节："
-            "固件没在跑 / 波特率不符 / TX 未接到 RX",
+            f"串口 {port} 已打开（{baud} bps）但采样窗内没收到任何字节："
+            "固件没在跑 / 波特率不符 / TX 未接到 RX / 固件只在启动时打印一次",
             pattern_match, pattern_error)
     if pattern_match is True:
         return VerifyDecision(True, VERDICT_VERIFIED, "", True, "")
     if pattern_match is False:
         return VerifyDecision(
             False, VERDICT_MISMATCH,
-            f"输出未匹配 --expected {expected!r}；实际首行 {sample_lines[0][:100]!r}",
+            f"输出未匹配 --expected {expected!r}；实际首行 {sample_lines[0][:100]!r}。"
+            "断言只能针对周期性输出：端口在烧录完成后才打开，"
+            "固件上电时打印一次的横幅/初始化日志采不到。",
             False, "")
     return VerifyDecision(True, VERDICT_COLLECTED, "", None, "")
 
@@ -332,8 +341,15 @@ class PipelineRunner:
         # 只按指纹判定（board + source + hex + port）：源码或固件变了就必须重烧。
         # 不再附加 `or build_skipped` —— 那会让「源码没变但换了 COM 口」跳过烧录，
         # 新口上的板子留着旧固件。
+        #
+        # 给了断言（expected）时 **一律真烧**：state 里的 `flash=done` 只说明
+        # *曾经*有某一轮把这份 hex 烧进去过，它无法证明 **此刻这块板上跑的就是
+        # 这份固件**（换板、手动烧录、擦除、烧录中途失败都不会改 state）。
+        # 跳过 S4 再跑 S5，得到的是一条误导链：「设备里是旧固件 → 串口 0 字节 →
+        # 报波特率/TX 故障」。实测踩过一次（M-01 首轮，S4 显示 [skipped] 而
+        # S5 空串口），代价是去查了硬件链路。
         flash_done_before = state.data.get("stages", {}).get("flash", {}).get("status") == "done"
-        if flash_done_before and state.should_skip_flash(fps):
+        if not expected and flash_done_before and state.should_skip_flash(fps):
             s4 = self._skipped_stage(4, "Flash", "fingerprints match")
         else:
             s4 = self._stage_flash(board_id, fw_path)
@@ -380,7 +396,16 @@ class PipelineRunner:
             # 以前是 MCP 客户端拿 panel_url 去开窗；走 CLI 这条路时没人接手，
             # 如果不打印地址，S5 就等于没有面板。
             panel_url = s5.details.get("panel_url") or ""
-            logger.info("S5 面板：%s", panel_url or "(未启动)")
+            if panel_wait == 0:
+                # 🔴 panel_wait=0 = 采样完立刻退出，HTTP 服务随进程一起消失。
+                # 这时把地址打出来，人点开只会得到「连接被拒」——比不打更糟
+                # （实测有人照着提示的地址去开，结论是「S5 面板不见了」）。
+                # 地址仍留在 stage.details 里给 MCP / json 调用方：那边进程常驻，地址有效。
+                logger.info(
+                    "S5 面板未保留（panel_wait=0）：进程退出后地址即失效；"
+                    "要实时看面板，用 --panel-wait 120（或去掉该参数常驻）")
+            else:
+                logger.info("S5 面板：%s", panel_url or "(未启动)")
             self._maybe_open_panel(panel_url, panel_open, panel_wait)
             if panel_wait == 0:
                 logger.info("S5 不等面板（panel_wait=0），采样完即结束")
@@ -1020,6 +1045,24 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # 目录不存在会静默落到 exit_trace.log 里，表现为「S5 采不到数据」。
             Path(html_path).parent.mkdir(parents=True, exist_ok=True)
 
+            # ── 回收上一轮 S5 的采集线程 ────────────────────────────────────
+            # panel 常驻是产品特性（人要持续观察），代价是采集线程一直持有 COM 口。
+            # 若不回收就直接开新线程：连续 10 次打开失败 → 最终被报成
+            # 「串口已打开但 8s 没收到字节」，把排查引向硬件/波特率（实测发生过）。
+            # 这里先叫停上一位，并等它真的关闭端口（3 s 上限）。
+            prev = getattr(self, "_collector_alive", None)
+            prev_stop = getattr(self, "_collector_stop_path", "")
+            if prev is not None and prev.is_alive() and prev_stop:
+                logger.info("S5 回收上一轮采集线程（释放 %s）", port)
+                try:
+                    with open(prev_stop, "w", encoding="utf-8") as f:
+                        f.write("stop\n")
+                except OSError as exc:
+                    logger.warning("S5 无法写入上一轮 stop 文件 %s: %s", prev_stop, exc)
+                prev.join(timeout=3.0)
+                if prev.is_alive():
+                    logger.warning("S5 上一轮采集线程 3s 内未退出，端口可能仍被占用")
+
             # 清掉上一次会话遗留的控制文件。留着 .stop → 采集线程进来第一轮
             # 就退出，S5 永远 0 字节；留着 .pause → 采集线程把端口关掉后死等
             # 一个永远不会来的「Open」。两种都表现为「固件没在跑」，
@@ -1034,6 +1077,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             sample_ready = threading.Event()
             _sample_lines: list[str] = []
             _total_lines = [0]
+            # 打开端口失败的原因（由采集线程回填）——见 _collector_thread 同名参数
+            _open_errors: list[str] = []
 
             # Start collector thread (daemon — dies with MCP process)
             # 回读波特率取自板卡声明（board.yaml::serial.baudrate）。AVR 板卡
@@ -1042,7 +1087,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             read_baud = int(_serial_cfg.get("baudrate", 9600) or 9600)
             t = threading.Thread(
                 target=self._collector_thread,
-                args=(html_path, port, read_baud, sample_ready, _sample_lines, _total_lines, stages_summary, process_summary),
+                args=(html_path, port, read_baud, sample_ready, _sample_lines, _total_lines,
+                      stages_summary, process_summary, _open_errors),
                 daemon=True,
             )
             t.start()
@@ -1060,6 +1106,30 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             else:
                 sample_lines = []
                 total = 0
+
+            # 端口根本没打开：这是**前提缺失**，不是"固件没输出"。
+            # 两者处置完全不同（一个去清占用、一个去查波特率/接线/固件），
+            # 因此必须单独成一个 verdict，不能混进 empty。
+            if _open_errors:
+                stage.success = False
+                stage.verdict = VERDICT_PORT_BUSY
+                stage.error = (
+                    f"串口 {port} 打开失败：{_open_errors[0]}。"
+                    "常见原因：上一轮采集线程/面板仍持有该端口，"
+                    "或另一个 ff 进程正在使用同一串口。"
+                )
+                stage.details = {
+                    "port": port,
+                    "baud": read_baud,
+                    "verdict": VERDICT_PORT_BUSY,
+                    "sample_lines": [],
+                    "sample_count": 0,
+                    "total_lines": 0,
+                    "open_error": _open_errors[0],
+                }
+                stage.elapsed_ms = (time.time() - t0) * 1000
+                logger.info("S5 Verify: %s (%s)", stage.verdict, _open_errors[0])
+                return stage
 
             # 判定：只看机械事实，不含任何业务语义（详见 _decide_verify）。
             decision = _decide_verify(sample_lines, expected, port, read_baud)
@@ -1123,8 +1193,14 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
     def _collector_thread(self, html_path: str, port: str, baud: int,
                           sample_ready, sample_lines_out: list, total_lines_out: list,
-                          stages_info: str = "", process_info: str = "") -> None:
-        """Daemon thread — opens COM4, reads serial, writes HTML + signals sample."""
+                          stages_info: str = "", process_info: str = "",
+                          open_error_out: list | None = None) -> None:
+        """Daemon thread — opens COM4, reads serial, writes HTML + signals sample.
+
+        `open_error_out`：打开端口失败时的原因（异常文本）由这里回传主线程。
+        没有它，打开失败与「端口打开了但没数据」在 S5 里长得一模一样 ——
+        见下面 10 次重试那一处的注释。
+        """
         try:
             import json
             from pathlib import Path
@@ -1141,30 +1217,49 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # Open COM4 (retry up to 10x — avrdude may still be releasing port)
             from firmforge.providers.com_port import ComPort
             ser_wrapper = None
+            last_open_err = ""
             for _retry in range(10):
                 try:
                     ser_wrapper = ComPort(port, baud, timeout=0.3, parity=parity)
                     ser_wrapper.__enter__()
                     break
-                except Exception:
+                except Exception as exc:
+                    # 记下最后一次的真实原因。最常见的两条：
+                    #   PermissionError / "拒绝访问"  → 端口被别的进程持有
+                    #   FileNotFoundError            → 端口消失（拔线 / 驱动未装）
+                    # 这两条与「打开了但没数据」的处置完全不同，不能合并成一句话。
+                    last_open_err = f"{type(exc).__name__}: {exc}"
                     time.sleep(0.5)
             if ser_wrapper is None:
+                if open_error_out is not None:
+                    open_error_out.append(last_open_err or "unknown")
                 # Write crash log but don't crash MCP
                 with open(os.path.join(data_dir, "exit_trace.log"), "a") as f:
-                    f.write(f"[{time.strftime('%H:%M:%S')}] EXIT: Could not open {port}\n")
+                    f.write(f"[{time.strftime('%H:%M:%S')}] EXIT: Could not open {port}"
+                            f" ({last_open_err})\n")
                 sample_ready.set()  # Signal so verify doesn't hang
                 return
 
             ser = ser_wrapper.ser
-            time.sleep(2.0)  # MCU post-flash settle
+
+            # 先丢掉「打开之前」残留在驱动缓冲里的字节（上一轮遗留），再开始接收。
+            # 🔴 这一步必须在 settle **之前**做。放在 settle 之后会把 settle 期间
+            #    收到的数据整段丢弃 —— S4 刚烧录、目标复位并打印上电日志的正是那段
+            #    时间窗（约 200 B，115200 下 2 ms 发完）。原顺序（sleep 2 s 再 reset）
+            #    造成过「S4 确实烧录成功、S5 却报 8 s 没收到字节」的误导结论。
             try:
                 ser.reset_input_buffer()
             except Exception:
                 pass
+            # settle 只保「固件复位后的首帧」，不做缓冲清空。
+            # 500 ms 足够 HSE/PLL/VOS 起振 + 首行输出，且不侵占 8 s 采样窗。
+            time.sleep(0.5)
 
             buf = ""
             _sample_written = False
             _sample_timeout = 8.0
+            # 零字节时的宽限：一个字节都不来的固件，多等 7 秒不会变出第一行。
+            _no_data_grace = 1.5
             last_write = time.time()
             _start_time = time.time()
             lines: list[str] = []
@@ -1228,7 +1323,15 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
                 # Sample handoff — write first 3+ lines to shared list, signal parent
                 if not _sample_written:
-                    if len(lines) >= 3 or (time.time() - _start_time > _sample_timeout):
+                    # 一个字节都没收到就不等满 8 s：空输出的固件永远不会变出第一行，
+                    # 早退把每次"固件没输出"的诊断从 8 s 压到 1.5 s。判定依据是
+                    # **收到的字节数**而不是行数 —— 固件只打了不带换行的半截内容时
+                    # lines 也是空的，那种情况不该提前放弃。
+                    _grace = _sample_timeout if rx_total[0] else _no_data_grace
+                    if len(lines) >= 3 or (time.time() - _start_time > _grace):
+                        if rx_total[0] == 0:
+                            logger.info("S5 采样：%.1fs 内零字节，提前判定无输出"
+                                        "（不等满 %.0fs）", _no_data_grace, _sample_timeout)
                         sample_lines_out.extend(lines[:3] if lines else [])
                         total_lines_out[0] = len(lines)
                         try:

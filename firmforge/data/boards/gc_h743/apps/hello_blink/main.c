@@ -7,6 +7,10 @@
  *   3. HAL 的 SysTick 时基正常（心跳周期可测）
  *   4. USART1 能从 PA9 输出可读文本，供 S5 回读
  *
+ * 版本号随心跳周期上报（`HEARTBEAT ver=1 …`），不只在启动横幅打一次：
+ * S5 在烧录完成后才打开串口，上电时的一次性输出结构性采不到，
+ * 断言必须命中周期性输出，固件才有「能自证跑的是哪一版」的能力。
+ *
  * 硬件事实（board.yaml / 原理图）：
  *   LED1 = PE7，高电平点亮
  *   调试串口 = USART1，PA9(TX) / PA10(RX) → CH340N → miniUSB
@@ -16,6 +20,10 @@
  */
 
 #include "stm32h7xx_hal.h"
+
+/*: 冒烟固件版本 —— 随心跳周期上报，供 S5 断言（改版本改这里）。
+ *  不在启动横幅里单独打一次：S5 是烧录完成后才开串口，一次性输出采不到。 */
+#define GC_H743_SMOKE_VER "1"
 
 UART_HandleTypeDef huart1;
 
@@ -53,7 +61,7 @@ int main(void)
   while (1)
   {
     HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_7);
-    uart_write("HEARTBEAT tick=");
+    uart_write("HEARTBEAT ver=" GC_H743_SMOKE_VER " tick=");
     uart_write_u32(tick++);
     uart_write(" uptime_ms=");
     uart_write_u32(HAL_GetTick());

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -143,3 +144,77 @@ def test_no_false_alarm_about_port_occupancy(harness, caplog):
 
     noisy = [r.getMessage() for r in caplog.records if "未退出" in r.getMessage()]
     assert not noisy, f"采集线程已正常退出，却仍报端口占用：{noisy}"
+
+
+def test_open_failure_verdict_is_port_busy_not_empty(harness, monkeypatch):
+    """端口压根没打开 → port_busy。
+
+    以前这种情况会被报成 `empty`：「串口已打开（115200 bps）但 8s 内没收到
+    任何字节：固件没在跑 / 波特率不符 / TX 未接到 RX」。可实际是端口被占
+    （panel 常驻的采集线程还没退），固件根本没被检验过 —— 那句 error 会把人
+    整个往硬件故障上引。前提缺失和结果为空必须分开报。
+    """
+    runner, app, ctl = harness
+
+    def _busy_collector(self, html_path, port, baud, sample_ready, sample_lines_out,
+                        total_lines_out, stages_info="", process_info="",
+                        open_errors=None):
+        ctl["collector_started"] += 1
+        if open_errors is not None:
+            open_errors.append("PermissionError: 拒绝访问。")
+        sample_ready.set()  # 别让 verify 干等 8s
+
+    monkeypatch.setattr(PipelineRunner, "_collector_thread", _busy_collector)
+
+    result = runner.run_full(
+        source_dir=str(app), board_id="arduino_mega", expected="OK", panel_wait=0,
+    )
+
+    verify = next(s for s in result.stages if s.name == "Verify")
+    assert ctl["collector_started"] == 1
+    assert verify.success is False
+    assert verify.verdict == "port_busy", (
+        f"端口没打开却被报成 {verify.verdict!r} —— 固件从未被检验，"
+        "这个结论不能伪装成「打开了但没数据」"
+    )
+    assert "PermissionError" in verify.error
+    assert verify.details.get("verdict") == "port_busy"
+    assert verify.details.get("sample_count") == 0
+
+
+def test_next_verify_recycles_a_leftover_collector(harness, tmp_path, caplog):
+    """上一轮采集线程还活着（panel 常驻）→ 新一轮必须先叫停它，再开端口。
+
+    不回收就直接开新线程的后果：连续 10 次打开失败，最后被报成
+    「串口已打开但 8s 没收到字节」，排查被引向波特率 / 接线 / 固件。
+    """
+    runner, app, _ctl = harness
+    ctl_result = runner.run_full(
+        source_dir=str(app), board_id="arduino_mega", expected="OK", panel_wait=0,
+    )
+    assert ctl_result.overall_success is True, ctl_result
+    assert not runner._collector_alive.is_alive()
+
+    # 伪造「上一轮线程仍持着端口」：死等 stop 文件才退出。
+    leftover_stop = tmp_path / "leftover.stop"
+
+    def _hold_port():
+        deadline = time.time() + 15
+        while not leftover_stop.exists() and time.time() < deadline:
+            time.sleep(0.02)
+
+    leftover = threading.Thread(target=_hold_port, daemon=True)
+    leftover.start()
+    runner._collector_alive = leftover
+    runner._collector_stop_path = str(leftover_stop)
+
+    with caplog.at_level(logging.INFO):
+        runner.run_full(
+            source_dir=str(app), board_id="arduino_mega", expected="OK", panel_wait=0,
+        )
+
+    assert not leftover.is_alive(), (
+        "新一轮 S5 没有回收上一轮采集线程 —— 端口仍被占，打开必然失败"
+    )
+    assert leftover_stop.exists(), "回收信号没写到上一轮的 stop 路径上"
+    assert any("回收上一轮采集线程" in r.getMessage() for r in caplog.records)

@@ -102,12 +102,30 @@ def test_source_change_forces_reflash(harness):
 
 
 def test_unchanged_inputs_still_skip_flash(harness):
-    """输入没变时该跳还是要跳，别把增量缓存一并修没了。"""
+    """输入没变时该跳还是要跳，别把增量缓存一并修没了。
+
+    注意「给了断言」是例外：state 里的 `flash=done` 只能证明*曾经*烧过这份
+    hex，不能证明此刻板上跑的就是它（换板 / 手动烧录 / 擦除都不改 state）。
+    那样 S5 采到的是旧固件的输出 —— 见下一条测试。
+    """
+    runner, app, _fw, ctl = harness
+    runner.run_full(source_dir=str(app), board_id="arduino_mega")
+    r2 = runner.run_full(source_dir=str(app), board_id="arduino_mega")
+    assert ctl["flash_calls"] == 1
+    assert _stage(r2, "Flash").details.get("skipped") is True
+
+
+def test_expected_always_reflashes(harness):
+    """给了断言就必须真烧：跳过 S4 再跑 S5，是拿旧固件的输出冒充这次的验证。
+
+    实测踩过（M-01 首轮）：S4 [skipped] + S5 空串口 → 结论被写成
+    「波特率不符 / TX 未接 RX」，实际板子里是上一版固件。
+    """
     runner, app, _fw, ctl = harness
     runner.run_full(source_dir=str(app), board_id="arduino_mega", expected="OK")
     r2 = runner.run_full(source_dir=str(app), board_id="arduino_mega", expected="OK")
-    assert ctl["flash_calls"] == 1
-    assert _stage(r2, "Flash").details.get("skipped") is True
+    assert ctl["flash_calls"] == 2, "给了断言却跳过了烧录 —— S5 验的是未知固件"
+    assert not _stage(r2, "Flash").details.get("skipped")
 
 
 def test_port_change_forces_reflash_even_if_build_skipped(harness):
