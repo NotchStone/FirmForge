@@ -52,6 +52,9 @@ def _detect_payload(detector: BoardDetector, result, args) -> dict:
             }
             for c in result.candidates
         ],
+        # 探测失败的说明（探针在位但目标无响应 / DEV_ID 不符）。
+        # 与 candidates 分开：这些不是候选，是"哪些结论不能下"。
+        "notes": getattr(result, "notes", []) or [],
         "board_config": board_config,
     }
 
@@ -90,6 +93,15 @@ def cmd_detect(args: argparse.Namespace) -> int:
                 print(f"  LED built-in: Pin {led}")
             print(f"\nDetection confidence: {result.candidates[0].confidence:.0%} "
                   f"(source: {result.candidates[0].source})")
+            detail = result.candidates[0].details or {}
+            if result.candidates[0].source == "swd_probe":
+                # 说清这条结论的强度：DEV_ID 只能定到系列，"认出这块板"
+                # 还依赖「注册表里只有一块声明了该 DEV_ID 的板卡」。
+                print(f"  probe: {detail.get('probe') or '?'} | "
+                      f"DEV_ID={detail.get('dev_id')} REV_ID={detail.get('rev_id')} "
+                      f"({detail.get('elapsed_ms')} ms)")
+                print("  注：DEV_ID 只能确定到系列（H742/743/753/750 同为 0x450），"
+                      "板卡是按「唯一匹配的声明」推出来的")
 
             if args.intent:
                 print(f"\nIntent: {args.intent}")
@@ -99,6 +111,8 @@ def cmd_detect(args: argparse.Namespace) -> int:
     else:
         print("\nNo board automatically identified "
               "(need >= 75% confidence for auto-detection).")
+        for note in getattr(result, "notes", []) or []:
+            print(f"  ! {note}")
 
     # Show candidates even when below threshold — let user decide
     if result.candidates:

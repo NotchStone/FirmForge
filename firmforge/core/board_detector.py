@@ -4,17 +4,25 @@
 Detection order (first match wins):
   1. AVR chip probe (avrdude signature read — hardware identity, most reliable)
   2. USB VID/PID scan (only official Arduino / ST-Link, not generic bridges)
-  3. Workspace inference (source code register analysis — no hardware needed)
-  4. User text analysis (keyword match from natural language description)
+  3. STM32 SWD probe (OpenOCD reads DBGMCU_IDCODE through CMSIS-DAP / ST-Link)
+  4. Workspace inference (source code register analysis — no hardware needed)
+  5. User text analysis (keyword match from natural language description)
 
 CH340/CP210x/FT232 are explicitly excluded: they're USB-TTL bridges,
 not board identifiers, and carry no MCU identity information.
+
+STM32 needs its own probe rather than a VID/PID entry: a CMSIS-DAP adapter
+is an HID device with **no COM port**, so the COM-port scan can never see it
+(the historic failure was "add 0D28:0204 to the VID/PID table" — that entry
+could never be reached). And an adapter being present says nothing about the
+board: it only proves a debugger is plugged in.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -55,6 +63,9 @@ class DetectionResult:
     candidates: list[BoardCandidate] = field(default_factory=list)
     asked_user: bool = False
     user_confirmed: bool = False
+    #: 探测过程中的异常说明（探针在位但目标无响应、DEV_ID 与声明不符…）。
+    #: 与 candidates 分开存放：这些不是候选，是「哪些结论现在不能下」。
+    notes: list[str] = field(default_factory=list)
 
 
 class BoardDetector:
@@ -147,6 +158,21 @@ class BoardDetector:
                 logger.info("Detected: %s via USB VID/PID (%.0f%%)",
                             usb_cand.board_id, usb_cand.confidence * 100)
                 return result
+
+        # --- Source 3: STM32 SWD probe (CMSIS-DAP / ST-Link) ---
+        # 只在 AVR 与 USB 都没给出结论时才试。detect 是流水线 S1 的必经步骤：
+        # AVR 板插着时不该为 SWD 多付一次 OpenOCD 启动（约 1 s），
+        # 而两块板同时插着本来就该由调用方显式指定板卡。
+        swd_candidates, swd_notes = self._probe_stm32()
+        result.notes.extend(swd_notes)
+        if swd_candidates:
+            result.candidates.extend(swd_candidates)
+            result.boards = [c.board_id for c in swd_candidates]
+            if len(swd_candidates) == 1:
+                result.board_id = swd_candidates[0].board_id
+                logger.info("Detected: %s via SWD probe (%.0f%%)",
+                            result.board_id, swd_candidates[0].confidence * 100)
+            return result
 
         # --- Fallback: no hardware detection succeeded ---
         # Try workspace inference (source code analysis, board.json lookup)
@@ -605,6 +631,131 @@ class BoardDetector:
         return results
 
     # =====================================================================
+    # STM32 SWD probe — read DBGMCU_IDCODE through the debug adapter
+    # =====================================================================
+
+    #: DBGMCU_IDCODE 的绝对地址。DBGMCU_BASE = 0x5C001000、IDCODE 偏移 0x00，
+    #: 依据厂商头文件 stm32h743xx.h。实测 `mrw 0x5C001000` → 0x20036450
+    #: （REV_ID=0x2003 = Rev V、DEV_ID=0x450），与丝印和 DBGMCU 双确认一致。
+    #: 知识库里**没有** DBGMCU 外设（128 个组里没有），所以这个值只能内置。
+    _STM32_IDCODE_ADDR = 0x5C001000
+
+    def _stm32_boards(self) -> list[tuple[str, dict[str, Any]]]:
+        """列出 boards_dir 里所有 `platform: stm32` 的板卡声明。
+
+        按路径排序，保证多板时输出顺序可复现；`board_id` 缺省取目录名
+        （board.yaml 顶层只有 board_name，没有 board_id）。
+        """
+        out: list[tuple[str, dict[str, Any]]] = []
+        for path in sorted(self._boards_dir.glob("*/board.yaml")):
+            try:
+                cfg = self._load_board_file(path) or {}
+            except Exception as exc:        # noqa: BLE001
+                logger.debug("跳过 %s: %s", path, exc)
+                continue
+            if str(cfg.get("platform") or "").lower() != "stm32":
+                continue
+            out.append((cfg.get("board_id") or path.parent.name, cfg))
+        return out
+
+    def _probe_stm32(self) -> tuple[list[BoardCandidate], list[str]]:
+        """用 SWD 探针读 `DBGMCU_IDCODE`，与 `board.yaml::mcu.dev_id` 比对。
+
+        为什么不是往 VID/PID 表里加一条
+        ---------------------------------
+        CMSIS-DAP 是 **HID 设备、没有 COM 口**，而 `_scan_usb()` 只枚举
+        COM 口，所以 (0x0D28, 0x0204) 这条表项永远不会被命中 —— 这正是
+        "ff detect 认不到 DAPLink" 的真实原因（不是表里缺一行）。
+        而且探针在位只证明"插了个调试器"，不证明目标板是什么；
+        只有读到芯片自己吐的 IDCODE 才算硬件身份证据。
+
+        为什么置信度 0.85 而不是 AVR 的 0.95
+        ------------------------------------
+        DEV_ID 只能定到**系列**：H742/H743/H753/H750 同为 0x450，无法区分
+        具体型号。所以"认出 gc_h743"实际依赖两个前提：① 探针连得上目标；
+        ② 注册表里只有一块声明了该 DEV_ID 的板卡。第二个前提一旦被打破
+        （以后再添一块 H7 板卡），这里返回多候选、交给调用方指定 —— 不猜。
+
+        副作用：halt → 读 → resume，目标被暂停约 200 ms。与 avrdude probe
+        会复位 AVR 板属同一类副作用，都发生在"我要用这块板"的语义下。
+        """
+        boards = self._stm32_boards()
+        if not boards:
+            return [], []
+
+        try:
+            from firmforge.providers.stm32.debug import run_script
+            from firmforge.providers.stm32.toolchain import resolve_toolchain
+        except Exception as exc:            # noqa: BLE001
+            logger.debug("STM32 探针模块不可用: %s", exc)
+            return [], []
+
+        tc = resolve_toolchain()
+        if [p for p in tc.problems() if "openocd" in p or "scripts" in p]:
+            # 没装 OpenOCD 不是"检测失败"，是这条路没配 —— 静默跳过，
+            # 否则每次 detect 都多一条与用户无关的告警。
+            logger.debug("STM32 探针跳过：OpenOCD 未就绪")
+            return [], []
+
+        # 只读一个寄存器，但必须先 halt（Cortex-M 在 running 态读内存会失败）。
+        # 结尾 resume 把 CPU 放回去；FF_DONE 标记保证会话完整（见 debug.py）。
+        # 🔴 `shutdown` 必须自己写：run_script 只负责把脚本跑完，不会替你退出。
+        #    少了它，openocd 执行完脚本会进入交互模式等 stdin，一路挂到超时
+        #    —— 表现为"探针未连接或目标未上电"，与真实原因（脚本没退出）无关。
+        script = "\n".join([
+            'if {[catch {init} _e]} { echo "FF_INIT=ERR"; echo FF_DONE=1; shutdown; return }',
+            'if {[catch {halt} _e]} { echo "FF_HALT=ERR" } else { echo "FF_HALT=OK" }',
+            "set ff_id NA",
+            f"if {{[catch {{set ff_id [mrw 0x{self._STM32_IDCODE_ADDR:08X}]}} _e] == 0}} {{",
+            '    echo "FF_IDCODE=$ff_id"',
+            "}",
+            "catch {resume} _e",
+            "echo FF_DONE=1",
+            "shutdown",
+        ])
+
+        candidates: list[BoardCandidate] = []
+        notes: list[str] = []
+        for board_id, cfg in boards:
+            run = run_script(script, board_config=cfg, toolchain=tc, timeout=15.0)
+            idcode = _parse_idcode(run.text)
+            if idcode is None:
+                if _probe_absent(run.text):
+                    logger.debug("SWD: 未找到调试探针（%s）", board_id)
+                    continue
+                # 探针在、但目标没响应 —— 这是值得报告的信息：
+                # 与"没有探针"处置不同（一个查供电/接线，一个什么都不用做）。
+                detail = run.error or _swd_error(run.text) or "未读到 DBGMCU_IDCODE"
+                notes.append(f"SWD 探测 {board_id} 失败：{detail}")
+                continue
+
+            dev_id = idcode & 0xFFF
+            rev_id = (idcode >> 16) & 0xFFFF
+            declared = _as_int((cfg.get("mcu") or {}).get("dev_id"))
+            if declared is not None and declared != dev_id:
+                notes.append(
+                    f"SWD 读到 DEV_ID=0x{dev_id:03X}，与 {board_id} 声明的 "
+                    f"0x{declared:03X} 不符 —— 探针连的是另一颗芯片"
+                )
+                continue
+
+            candidates.append(BoardCandidate(
+                board_id=board_id,
+                source="swd_probe",
+                confidence=0.85,
+                details={
+                    "dev_id": f"0x{dev_id:03X}",
+                    "rev_id": f"0x{rev_id:04X}",
+                    "probe": _probe_name(run.text),
+                    "elapsed_ms": round(run.elapsed_ms),
+                },
+            ))
+            logger.info("SWD probe: %s → DEV_ID=0x%03X REV_ID=0x%04X",
+                        board_id, dev_id, rev_id)
+
+        return candidates, notes
+
+    # =====================================================================
     # Serial Bootloader Reset — DTR 1200 baud toggle for avrdude
     # =====================================================================
 
@@ -624,3 +775,73 @@ class BoardDetector:
             time.sleep(1.5)  # Wait for bootloader to enumerate and stabilize
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# SWD 探测的解析辅助函数
+# ---------------------------------------------------------------------------
+
+def _parse_idcode(text: str) -> int | None:
+    """从 OpenOCD 输出里取 `FF_IDCODE=<值>` 标记的值。
+
+    走标记而不是匹配 openocd 的内存打印格式：`mrw` 在命令行返回裸值、
+    在 `-f` 脚本里走 `echo`，两种输出的格式都不该由调用方去猜。
+    """
+    m = re.search(r"FF_IDCODE=(0x[0-9a-fA-F]+|\d+)", text or "")
+    if not m:
+        return None
+    try:
+        return int(m.group(1), 0)
+    except ValueError:
+        return None
+
+
+def _probe_absent(text: str) -> bool:
+    """输出表明「根本没有调试探针」，而不是「探针在但目标没响应」。
+
+    两者处置完全不同：没探针 = 这条路不适用（静默跳过，别报噪声）；
+    有探针但连不上目标 = 值得报告（去查目标供电、SWD 接线、复位）。
+    合并成一句"检测失败"会把后者也变成噪声，人就不看了。
+    """
+    t = (text or "").lower()
+    return any((
+        "unable to find a matching cmsis-dap" in t,
+        "unable to find a matching st-link" in t,
+        "no cmsis-dap device" in t,
+        "no st-link device" in t,
+        "could not find a matching" in t,
+    ))
+
+
+def _swd_error(text: str) -> str:
+    """取 OpenOCD 输出里第一条有内容的 `Error:` 行，作为失败原因。
+
+    `init` 失败时会话仍会正常收尾（脚本里 catch 住了），所以 run.error 是空的，
+    真实原因只在输出里。不把这句话带出来，调用方看到的就只有
+    "未读到 DBGMCU_IDCODE" —— 等于没说。
+    """
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if line.startswith("Error:") and len(line.strip()) > len("Error:"):
+            return line[len("Error:"):].strip()
+    return ""
+
+
+def _probe_name(text: str) -> str | None:
+    """从 OpenOCD 开场日志里取探针标识（CMSIS-DAP 的 Serial# 或 ST-Link）。"""
+    m = re.search(r"CMSIS-DAP:\s*Serial#\s*=\s*(\S+)", text or "")
+    if m:
+        return f"CMSIS-DAP {m.group(1)}"
+    if "ST-Link" in (text or ""):
+        return "ST-Link"
+    return None
+
+
+def _as_int(value: Any) -> int | None:
+    """把 board.yaml 里的 `"0x450"` / `1104` 统一成 int；读不出返回 None。"""
+    if value is None:
+        return None
+    try:
+        return int(str(value), 0)
+    except (TypeError, ValueError):
+        return None
