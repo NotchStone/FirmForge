@@ -181,6 +181,9 @@ class PipelineRunner:
         self._source_reviewer: SourceReviewer | None = None
         self._sr_chip: str | None = None  # chip of the cached source_reviewer
         self._sr_platform: str = ""       # board.yaml platform of the cached reviewer
+        # 豁免表来源路径。同一进程里跑多个 app 时，各自的 .ff-review.yaml
+        # 不同 —— 缓存键里不带它就会把上一个 app 的豁免套到下一个上。
+        self._sr_allow_origin: str = ""
         self._confidence_scorer: ConfidenceScorer | None = None
 
     def _skipped_stage(self, stage_num: int, name: str, reason: str = "") -> PipelineStage:
@@ -730,13 +733,21 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
              "status": cp.status, "cached": cp.cached},
             {"name": "review", "success": review_ok,
              "violations": len(c_result.violations) if c_result else 0,
-             "registers": [v.register for v in c_result.violations[:10]] if c_result else []},
+             "registers": [v.register for v in c_result.violations[:10]] if c_result else [],
+             # 「知识库缺口」与「幻觉」分开计：前者是工具的收录不全，后者才是
+             # 源码写错。混成一个数字，用户没法判断该改代码还是该补库。
+             "kb_gaps": c_result.kb_gaps if c_result else 0,
+             "allowed": len(c_result.allowed) if c_result else 0,
+             "cross_checked": c_result.cross_checked if c_result else False},
             {"name": "confidence", "success": conf_ok,
              "score": conf_result.overall_score if conf_result else 100,
              "review_items": len(conf_result.review_items) if conf_result else 0,
-             # 「分数为什么是这个数」必须能追到具体条目，否则 30% 会被
-             # 读成"代码质量差"，而实际可能只是单个文件的一个寄存器名。
-             "cap_reason": conf_result.cap_reason if conf_result else ""},
+             # 分项 —— 一个数字说不清"哪一块低"，分项能。
+             "categories": ({k: {"checked": v.checked, "resolved": v.resolved,
+                                 "score": round(v.score, 1)}
+                             for k, v in conf_result.category_scores.items()}
+                            if conf_result else {}),
+             "explanation": conf_result.explanation if conf_result else ""},
         ]
 
         # Build review details — 三类明细全部保留，供人读也供 Agent 读
@@ -757,20 +768,35 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 {"file": v.file, "register": v.register, "field": v.field,
                  "line": v.line, "severity": v.severity,
                  "text": v.line_text.strip()[:80],
-                 "reason": v.reason, "suggestion": v.suggestion}
-                for v in (c_result.violations + c_result.warnings)[:20]
+                 "reason": v.reason, "suggestion": v.suggestion,
+                 # 三态：error=阻断 / warning=线索 / kb-gap=工具缺口 /
+                 # allowed=项目已声明豁免。Agent 据此决定该改哪一边。
+                 "status": ("allowed" if v.allowed_reason
+                            else "kb-gap" if v.kb_gap else v.severity),
+                 "evidence": v.evidence,
+                 "allowed_reason": v.allowed_reason}
+                for v in (c_result.violations + c_result.warnings
+                          + c_result.allowed)[:20]
             ]
             details["review_counts"] = {
                 "registers_checked": c_result.registers_checked,
                 "registers_resolved": c_result.registers_resolved,
                 "fields_checked": c_result.fields_checked,
                 "fields_resolved": c_result.fields_resolved,
+                "kb_gaps": c_result.kb_gaps,
+                "allowed": len(c_result.allowed),
+                "cross_checked": c_result.cross_checked,
             }
         if conf_result:
             details["confidence"] = {
                 "score": round(conf_result.overall_score, 1),
-                "cap_reason": conf_result.cap_reason,
+                "explanation": conf_result.explanation,
                 "checks": len(conf_result.checks),
+                "categories": {k: {"checked": v.checked,
+                                    "resolved": v.resolved,
+                                    "score": round(v.score, 1),
+                                    "note": v.note}
+                                for k, v in conf_result.category_scores.items()},
                 "review_items": [
                     {"category": c.category, "identifier": c.identifier,
                      "score": round(c.score, 1), "note": c.note}
@@ -808,20 +834,39 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         if not review_ok:
             # 文件名 + 行号 + 寄存器名，一个都不能少：只给计数等于让读日志的
             # 人自己写脚本复现（本来就发生过）。
-            logger.warning("Code Review: FAIL —— %d 处引用校验未通过（不阻断）",
-                           len(c_result.violations))
+            gap_note = (f"，另有 {c_result.kb_gaps} 条属知识库缺口"
+                        if c_result and c_result.kb_gaps else "")
+            logger.warning("Code Review: FAIL —— %d 处引用校验未通过（不阻断）%s",
+                           len(c_result.violations), gap_note)
             for v in c_result.violations[:20]:
                 where = f"{v.file}:{v.line}" if v.file else f"line {v.line}"
                 logger.warning("  [review] %s  %s  %s", where,
                                f"{v.register}.{v.field}" if v.field else v.register,
-                               v.reason)
+                               v.reason + (f"（{v.evidence}）" if v.evidence else ""))
             if len(c_result.violations) > 20:
                 logger.warning("  … 另有 %d 条未逐条打印（--json 可看全量）",
                                len(c_result.violations) - 20)
 
-        if conf_result and conf_result.cap_reason:
+        # 知识库缺口单独一段：它不是源码错误，混在 FAIL 明细里会被当成待修 bug
+        if c_result and c_result.kb_gaps:
+            logger.info("Code Review: %d 条知识库缺口（芯片上有、库未收录）—— "
+                        "这些不计入失败，源码无需改动", c_result.kb_gaps)
+            for v in [x for x in c_result.warnings if x.kb_gap][:10]:
+                logger.info("  [kb-gap] %s:%s  %s  %s", v.file, v.line,
+                            v.register, v.evidence)
+
+        # 已声明豁免的条目照原样列出，标注理由 —— 豁免不等于看不见
+        if c_result:
+            for v in c_result.allowed[:10]:
+                logger.info("  [allowed] %s:%s  %s —— 项目已声明豁免：%s",
+                            v.file, v.line, v.register, v.allowed_reason)
+
+        if conf_result and conf_result.explanation:
             logger.warning("Confidence %.0f%% —— %s",
-                           conf_result.overall_score, conf_result.cap_reason)
+                           conf_result.overall_score, conf_result.explanation)
+        for key, cat in (conf_result.category_scores.items() if conf_result else []):
+            if cat.checked:
+                logger.info("  [confidence] %s", cat)
         for item in (conf_result.review_items[:10] if conf_result else []):
             logger.warning("  [confidence] %s %s = %.0f%%  %s",
                            item.category, item.identifier, item.score, item.note)
@@ -932,21 +977,42 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             return config["mcu"]["chip"].lower()
         return self._default_chip()
 
-    def _get_source_reviewer(self, board_id: str | None = None) -> SourceReviewer:
+    def _get_source_reviewer(self, board_id: str | None = None,
+                              source_dir: str | None = None) -> SourceReviewer:
+        from firmforge.core.review_allowlist import ReviewAllowlist, summarize
+        from firmforge.knowledge.device_truth import DeviceTruth
+
         config = self._resolve_board_config(board_id)
         chip = ((config or {}).get("mcu", {}).get("chip") or "").lower() \
             or self._default_chip()
         # 缓存键含平台：同一芯片在不同板卡上可能走不同寄存器库（不可能，
         # 但 `hal`/`arduino` 范式并存时平台路由不同，键里带上更安全）。
         platform = (config or {}).get("platform", "")
+        allowlist = ReviewAllowlist.load(source_dir) if source_dir \
+            else ReviewAllowlist()
         if self._sr_chip != chip or self._sr_platform != platform \
+                or self._sr_allow_origin != allowlist.origin \
                 or self._source_reviewer is None:
             self._load_knowledge_base(chip, config)
-            self._source_reviewer = SourceReviewer(self._knowledge_base)
+            self._source_reviewer = SourceReviewer(
+                self._knowledge_base,
+                # 器件头是「未收录 vs 幻觉」的第二判据。没有它时审查只能报
+                # warning —— 不知道就说不知道，不能把库的缺口当源码的错。
+                device_truth=DeviceTruth.load(chip),
+                allowlist=allowlist,
+            )
             self._sr_chip = chip
             self._sr_platform = platform
-            logger.info("SourceReviewer init for chip=%s platform=%s",
-                        chip, platform or "?")
+            self._sr_allow_origin = allowlist.origin
+            truth = self._source_reviewer.device_truth
+            logger.info("SourceReviewer init for chip=%s platform=%s 器件头=%s",
+                        chip, platform or "?",
+                        "有" if truth is not None and truth.available else "无")
+            summary = summarize(allowlist)
+            if summary:
+                logger.info("%s", summary)
+            for problem in allowlist.problems:
+                logger.warning("审查豁免表：%s", problem)
         return self._source_reviewer
 
     def _load_knowledge_base(self, chip: str,
@@ -1000,7 +1066,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     return None
 
         try:
-            validator = self._get_source_reviewer(board_id)
+            validator = self._get_source_reviewer(board_id, source_dir)
             if not source_path.is_dir():
                 return None
             # Aggregate results across all source files
@@ -1010,6 +1076,10 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     result = validator.validate_file(str(f))
                     aggregated.violations.extend(result.violations)
                     aggregated.warnings.extend(result.warnings)
+                    aggregated.allowed.extend(result.allowed)
+                    aggregated.kb_gaps += result.kb_gaps
+                    aggregated.registers_allowed += result.registers_allowed
+                    aggregated.cross_checked = result.cross_checked
                     aggregated.registers_checked += result.registers_checked
                     aggregated.registers_resolved += result.registers_resolved
                     aggregated.fields_checked += result.fields_checked

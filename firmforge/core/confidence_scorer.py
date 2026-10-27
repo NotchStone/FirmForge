@@ -58,15 +58,40 @@ class ConfidenceCheck:
 
 
 @dataclass
+class CategoryScore:
+    """一个分项的得分 —— 「惩罚局部化」的载体。
+
+    为什么必须有分项：一个数字（尤其是不带解释的 30%）无法区分「10 个寄存器
+    错了 2 个」与「整个文件不可信」。前者是局部缺口，后者是代码有问题，处理
+    方式完全不同。分项让扣分落在它该落的地方，不再一票打死全局。
+    """
+
+    label: str
+    checked: int = 0
+    resolved: int = 0
+    score: float = 100.0
+    note: str = ""
+
+    def __str__(self) -> str:
+        if not self.checked:
+            return f"{self.label} —（本次无此类引用）"
+        tail = f"，{self.note}" if self.note else ""
+        return (f"{self.label} {self.resolved}/{self.checked} "
+                f"({self.score:.0f}%){tail}")
+
+
+@dataclass
 class ConfidenceReport:
     """Aggregated confidence report for a Code→Build safety gate.
 
     Attributes:
         checks: Individual confidence checks.
-        overall_score: Weighted average of all checks (0-100).
-        needs_review: True if overall_score < DEFAULT_CONFIDENCE_THRESHOLD.
+        overall_score: 各分项按**检查条数**加权的平均（0-100）。
+        needs_review: 总分低于阈值，或**任一分项**低于阈值。
         review_items: List of checks that need review.
         source_review_passed: True if source review validation passed.
+        explanation: 分数为什么是这个数。空串 = 没有单项低于阈值。
+        category_scores: registers / fields / pins / baud_rate 四类分项。
     """
 
     checks: list[ConfidenceCheck] = field(default_factory=list)
@@ -74,23 +99,24 @@ class ConfidenceReport:
     needs_review: bool = False
     review_items: list[ConfidenceCheck] = field(default_factory=list)
     source_review_passed: bool = True
-    #: 源审查未通过时的具体条目（`file:line 名字`），用于解释分数上限。
+    #: 源审查未通过的具体条目（`file:line 名字`）
     source_review_failures: list[str] = field(default_factory=list)
-    #: 总分被"硬上限"压过时的原因。空串 = 分数就是加权平均的结果。
-    #: 没有这一行，30% 会被读成"代码质量差"，而实际可能只是单个寄存器的
-    #: 一个名字没在库里（2026-10-27 真实误判）。
-    cap_reason: str = ""
+    #: 分数解释。**不是**"被硬上限压过"，本类不存在硬上限。
+    explanation: str = ""
+    #: 分项得分。键：registers / fields / pins / baud_rate
+    category_scores: dict[str, CategoryScore] = field(default_factory=dict)
 
     def summary(self) -> str:
         lines = [
-            f"Confidence Report: {self.overall_score:.0f}% {'(NEEDS REVIEW)' if self.needs_review else '(OK)'}",
-            f"  Checks: {len(self.checks)}, Review items: {len(self.review_items)}",
+            f"Confidence Report: {self.overall_score:.0f}% "
+            f"{'(NEEDS REVIEW)' if self.needs_review else '(OK)'}",
+            "  " + " · ".join(str(c) for c in self.category_scores.values()),
             f"  Code Review: {'PASS' if self.source_review_passed else 'FAIL'}",
         ]
-        if self.cap_reason:
-            lines.append(f"  Why: {self.cap_reason}")
-        for c in self.review_items:
-            lines.append(f"  {c.summary()}")
+        if self.explanation:
+            lines.append(f"  Why: {self.explanation}")
+        for f in self.source_review_failures[:5]:
+            lines.append(f"  未解析: {f}")
         return "\n".join(lines)
 
 
@@ -140,79 +166,69 @@ class ConfidenceScorer:
             source_review_result = self._validator.validate(source_code)
         report.source_review_passed = source_review_result.passed
         report.source_review_failures = [
-            (f"{v.file}:{v.line} {v.register}" if v.file
-             else f"line {v.line} {v.register}")
-            for v in source_review_result.violations
+            (f"{_where(v)} {v.register}")
+            for v in (source_review_result.violations
+                      + source_review_result.allowed)
         ]
 
-        # Step 2: Score register assignments
-        self._score_registers(source_code, source_review_result, report)
+        # Step 2: 分项计分。registers / fields 直接用源审查的计数 —— 那是
+        # 唯一一份"实际扫过源码"的结果，另起一套正则只会得到两套不一致的数。
+        #
+        # 知识库缺口（`kb_gaps`）与已声明豁免（`registers_allowed`）都从分母
+        # 里剔除：这两类**工具没有判定过**，拿它们扣分等于因为自己没收录、
+        # 或因为用户已核对过而判源码有罪 —— 正是用户报的那类误判。
+        judged_regs = max(0, source_review_result.registers_checked
+                          - source_review_result.kb_gaps
+                          - source_review_result.registers_allowed)
+        notes = []
+        if source_review_result.kb_gaps:
+            notes.append(f"{source_review_result.kb_gaps} 条未收录（不判定）")
+        if source_review_result.registers_allowed:
+            notes.append(f"{source_review_result.registers_allowed} 条已豁免")
+        report.category_scores["registers"] = _category_from_review(
+            "registers", judged_regs,
+            source_review_result.registers_resolved,
+            note="，".join(notes))
+        report.category_scores["fields"] = _category_from_review(
+            "fields", source_review_result.fields_checked,
+            source_review_result.fields_resolved)
 
-        # Step 3: Score baud rate configurations
+        # Step 3: 波特率与引脚 —— 这两类各自的 check 自带分数
         self._score_baud_rate(source_code, board_config, report)
-
-        # Step 4: Score pin assignments
         self._score_pins(source_code, board_config, report)
+        report.category_scores["baud_rate"] = _category_from_checks(
+            report, "baud_rate", "baud_rate")
+        report.category_scores["pins"] = _category_from_checks(
+            report, "pin", "pins")
 
-        # Step 5: Compute overall score
+        # Step 4: Compute overall score（按检查条数加权，无硬上限）
         report.overall_score = self._compute_overall(report)
-        report.needs_review = report.overall_score < self._threshold
-        report.review_items = [c for c in report.checks if c.needs_review()]
 
-        logger.info("Confidence: %.0f%% (%d checks, %s)",
-                     report.overall_score, len(report.checks),
-                     "NEEDS_REVIEW" if report.needs_review else "OK")
-        if report.cap_reason:
-            logger.info("Confidence 上限原因: %s", report.cap_reason)
+        # Step 5: 哪个分项低于阈值 —— 只有这一层能说清"为什么低"
+        lows = [c for c in report.category_scores.values()
+                if c.checked and c.score < self._threshold]
+        if lows:
+            report.explanation = "低于阈值的分项：" + "；".join(
+                f"{c.label} {c.score:.0f}%（{c.resolved}/{c.checked} 条）"
+                for c in lows)
+            for c in lows:
+                report.review_items.append(ConfidenceCheck(
+                    category=c.label, identifier=f"{c.resolved}/{c.checked}",
+                    score=c.score, source="review", resolved=False,
+                    note=c.note or "未解析条目见 S2 的 [review] 明细"))
+        elif report.overall_score < self._threshold:
+            report.explanation = (
+                "没有单一分项低于阈值，是多项中等偏低累积的结果"
+                "（分项见上）")
+
+        report.needs_review = bool(lows) or report.overall_score < self._threshold
+
+        logger.info("Confidence: %.0f%% (%s)", report.overall_score,
+                    "NEEDS_REVIEW" if report.needs_review else "OK")
+        if report.explanation:
+            logger.info("Confidence 分项原因: %s", report.explanation)
 
         return report
-
-    def _score_registers(
-        self,
-        source_code: str,
-        source_review_result: SourceReviewResult,
-        report: ConfidenceReport,
-    ) -> None:
-        """Score register access confidence based on source review results.
-
-        High confidence: register + field both resolved in reference library.
-        Medium confidence: register resolved but field unresolved (macro/constant).
-        Zero confidence: register not resolved (hallucinated).
-        """
-        import re
-
-        # For registers found in reference library → high confidence
-        for line in source_code.splitlines():
-            # Find register assignments: REG =, REG |=, REG &=, etc.
-            for match in re.finditer(
-                r'\b([A-Z][A-Z0-9_]{2,})\s*(?:\|=|&=|<<=|>>=|^=|\+=|-=|\*=|/=|%=|=)',
-                line
-            ):
-                reg_name = match.group(1)
-                if reg_name in {"uint8_t", "uint16_t", "uint32_t", "int", "char"}:
-                    continue
-
-                reg = self._knowledge_base.lookup_register(reg_name)
-                if reg:
-                    report.checks.append(ConfidenceCheck(
-                        category="register",
-                        identifier=reg_name,
-                        score=100.0,
-                        source="reference",
-                        resolved=True,
-                        note=f"Register at {reg['address']}",
-                    ))
-
-        # Violations from Source Review → zero confidence for that register
-        for v in source_review_result.violations:
-            report.checks.append(ConfidenceCheck(
-                category="register",
-                identifier=v.register,
-                score=0.0,
-                source="none",
-                resolved=False,
-                note=f"Hallucinated register: {v.reason}",
-            ))
 
     def _score_baud_rate(
         self,
@@ -316,21 +332,12 @@ class ConfidenceScorer:
         """
         import re
 
-        # Direct PORT/DDR access patterns
-        for match in re.finditer(r'\b(DDR|PORT)([A-L])\b', source_code):
-            port_name = match.group(1) + match.group(2)
-            reg = self._knowledge_base.lookup_register(port_name)
-            if reg:
-                report.checks.append(ConfidenceCheck(
-                    category="pin",
-                    identifier=port_name,
-                    score=100.0,
-                    source="reference",
-                    resolved=True,
-                    note=f"Valid GPIO register at {reg['address']}",
-                ))
-
-        # Check pin number references (pinMode(13, ...), digitalWrite(13, ...))
+        # 引脚号查询（pinMode(13, ...) / digitalWrite(13, ...)）。
+        #
+        # 这里**不再重复统计** `DDRB = ...` / `PORTB = ...` 这类直接寄存器
+        # 访问：它们已经在 registers 分项里按同一个 lookup_register 查过一遍
+        # 了。同一处引用计两次，会让「一个寄存器写错」在总分里被算两遍，
+        # 也会让 pins 分项的条数虚高。
         for match in re.finditer(
             r'(?:pinMode|digitalWrite|digitalRead|analogRead|analogWrite)'
             r'\s*\(\s*(\d+)',
@@ -370,33 +377,58 @@ class ConfidenceScorer:
                     ))
 
     def _compute_overall(self, report: ConfidenceReport) -> float:
-        """Compute weighted average confidence score.
+        """各分项按**检查条数**加权的平均。
 
-        Source Review failures heavily penalize overall confidence.
+        **没有硬上限。** 旧实现里只要源审查有任何一个 error，总分就被
+        ``min(30, avg)`` 压到 30% —— 一个文件里错一个寄存器名字，整个工程
+        的置信度都是 30%，这个数字既不可解释也不能指导任何动作。加到
+        ``cap_reason`` 里解释「为什么是 30」只是在给错误的设计写说明书。
+
+        现在扣分只落在出错的那个分项上：10 个寄存器错 2 个 → registers 80%，
+        pins / baud 不受影响；总分按条数加权后自然反映错误密度。
         """
-        if not report.checks:
+        scored = [c for c in report.category_scores.values() if c.checked]
+        if not scored:
             return 100.0
+        total_checked = sum(c.checked for c in scored)
+        if total_checked <= 0:
+            return 100.0
+        return sum(c.score * c.checked for c in scored) / total_checked
 
-        # Source Review failures → strong confidence penalty
-        if not report.source_review_passed:
-            avg = sum(c.score for c in report.checks) / len(report.checks)
-            head = "; ".join(report.source_review_failures[:3])
-            more = (f" 等 {len(report.source_review_failures)} 处"
-                    if len(report.source_review_failures) > 3 else "")
-            report.cap_reason = (
-                "源审查未通过 → 总分被硬压到 30% 上限"
-                + (f"（{head}{more}）" if head else "")
-                + f"。这与其余 {len(report.checks)} 项 check 的得分无关："
-                  "上限是二值判定，不是加权平均的结果。"
-                  f"（不加上限时的加权平均为 {avg:.0f}%）")
-            return min(30.0, avg)
 
-        # Weighted average: resolved items get full weight, unresolved get half
-        total_weight = 0.0
-        weighted_sum = 0.0
-        for c in report.checks:
-            weight = 1.0 if c.resolved else 0.5
-            weighted_sum += c.score * weight
-            total_weight += weight
+# ---------------------------------------------------------------------------
+# 分项构建
+# ---------------------------------------------------------------------------
 
-        return weighted_sum / total_weight if total_weight > 0 else 100.0
+
+def _category_from_review(label: str, checked: int, resolved: int,
+                           note: str = "") -> CategoryScore:
+    """用源审查的计数造一个分项。
+
+    这里**不另起一套正则**重扫源码 —— 那样会得到两套互不一致的数（源审查
+    报了 9 个寄存器、置信度算出 10 个），而调用方无法判断该信哪个。
+    """
+    if not checked:
+        return CategoryScore(label, 0, 0, 100.0, note)
+    return CategoryScore(label, checked, resolved,
+                         100.0 * resolved / checked, note)
+
+
+def _category_from_checks(report: ConfidenceReport, key: str,
+                           label: str) -> CategoryScore:
+    """把一个类别的逐条 check 汇总成分项得分。"""
+    items = [c for c in report.checks if c.category == key]
+    if not items:
+        return CategoryScore(label)
+    score = sum(c.score for c in items) / len(items)
+    resolved = sum(1 for c in items if c.resolved)
+    return CategoryScore(label, len(items), resolved, score)
+
+
+def _where(item: Any) -> str:
+    """``file:line`` 落点。"""
+    file = getattr(item, "file", "")
+    line = getattr(item, "line", 0)
+    if file and line:
+        return f"{file}:{line}"
+    return f"line {line}" if line else "<unknown>"

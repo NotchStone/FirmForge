@@ -246,3 +246,106 @@ def test_field_prefix_boundary():
     assert kb.field_prefix_of("GPIO_MODER_BOGUS") == "GPIO_MODER_"
     assert kb.field_prefix_of("GPIO_PIN_7") is None
     assert kb.field_prefix_of("HAL_UART_Transmit") is None
+
+
+# --------------------------------------------------------------------------
+# 6. 「未收录」与「幻觉」必须分开
+# --------------------------------------------------------------------------
+# 只靠知识库时两者输出**一字不差**：都是 "Peripheral register 'X.Y' not
+# found in reference library"。可一个是工具该补库，一个是源码该改名 ——
+# 2026-10-27 的误判就出在这里（`TIM2->RCR` 是 gcc 认的真寄存器）。
+
+def test_kb_gap_is_warning_not_error(h743):
+    """SVD 未建模、但器件头有的寄存器 → warning，不算失败。
+
+    ``TIM2.RCR`` 是 H743 的重复计数器寄存器（RM0433 §40），SVD 里没有，
+    器件头 ``TIM_TypeDef.RCR`` 有 —— 这就是典型的知识库缺口。
+    """
+    _cfg, rv = h743
+    res = _review(rv, "  TIM2->RCR = 0;")
+    assert res.passed is True, "知识库缺口不该阻断源码"
+    assert res.violations == []
+    assert res.kb_gaps == 1
+    assert res.warnings and res.warnings[0].kb_gap is True
+    assert "器件头" in res.warnings[0].evidence, "必须给出第二判据的出处"
+
+
+def test_hallucinated_register_still_error(h743):
+    """两处都查不到 → 真幻觉，仍然阻断。"""
+    _cfg, rv = h743
+    res = _review(rv, "  GPIOA->BSRRR = 1;")
+    assert res.passed is False
+    assert res.kb_gaps == 0
+    assert res.violations and "无此成员" in res.violations[0].evidence
+
+
+def test_kb_gap_and_hallucination_are_distinguishable(h743):
+    """两者的 reason / evidence 必须不同 —— 否则调用方还是分不开。"""
+    _cfg, rv = h743
+    gap = _review(rv, "  TIM2->RCR = 0;").warnings[0]
+    hal = _review(rv, "  GPIOA->BSRRR = 1;").violations[0]
+    assert gap.reason != hal.reason
+    assert gap.kb_gap and not hal.kb_gap
+
+
+def test_no_device_truth_never_blames_source():
+    """没有器件头时不许下 error 结论 —— 不知道就说不知道。"""
+    cfg = BoardDetector().resolve_board("gc_h743")
+    kb = KnowledgeBase()
+    kb.load_for_board(cfg)
+    rv = SourceReviewer(kb)          # 故意不注入 DeviceTruth
+    res = rv.validate("void f(void){ TIM2->RCR = 0; }", "t.c")
+    assert res.cross_checked is False
+    assert res.passed is True
+    assert res.violations == []
+    assert res.warnings, "不判对错，但仍要把线索交出来"
+
+
+# --------------------------------------------------------------------------
+# 7. 驼峰实例名：SysTick / CoreDebug
+# --------------------------------------------------------------------------
+# 实例名正则曾写成 `[A-Z][A-Z0-9]{1,15}`，只认全大写。CMSIS 十个内核组里
+# SysTick 与 CoreDebug 是驼峰，于是 `SysTick->LOAD` 一个字都匹配不上 ——
+# 知识库明明有，审查完全空转，连 warning 都没有。
+
+def test_systick_is_reviewed(h743):
+    _cfg, rv = h743
+    res = _review(rv, "  SysTick->LOAD = 1000;\n  SysTick->VAL = 0;")
+    assert res.registers_checked == 2, "驼峰实例名必须被扫到"
+    assert res.registers_resolved == 2
+    assert res.violations == []
+
+
+def test_coredebug_is_reviewed(h743):
+    _cfg, rv = h743
+    res = _review(rv, "  CoreDebug->DHCSR = 1;")
+    assert res.registers_checked == 1
+    assert res.registers_resolved == 1
+
+
+def test_camelcase_hallucination_caught(h743):
+    """驼峰实例名下的错误寄存器同样要抓 —— 放开正则不是为了放过。"""
+    _cfg, rv = h743
+    res = _review(rv, "  SysTick->LOADX = 1;")
+    assert res.registers_checked == 1
+    assert res.passed is False
+
+
+def test_struct_member_chain_not_treated_as_peripheral(h743):
+    """`osc.PLL.PLLM` 是 HAL 结构体成员链，不是外设访问。"""
+    _cfg, rv = h743
+    res = _review(rv, "  osc.PLL.PLLM = 8;\n  huart1.Instance = USART1;")
+    assert res.registers_checked == 0, "小写 + 点 应整体跳过"
+
+
+# --------------------------------------------------------------------------
+# 8. 汇总日志必须带落点
+# --------------------------------------------------------------------------
+
+def test_fail_log_carries_file_and_line(h743, caplog):
+    _cfg, rv = h743
+    with caplog.at_level("WARNING", logger="firmforge.core.source_reviewer"):
+        rv.validate("void f(void){\n  GPIOA->BSRRR = 1;\n}", "app/bsp.c")
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "app/bsp.c:2" in text, f"汇总日志没有落点，读的人无从下手：{text}"
+    assert "GPIOA.BSRRR" in text

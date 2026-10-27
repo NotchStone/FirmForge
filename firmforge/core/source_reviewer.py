@@ -22,6 +22,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from firmforge.knowledge.device_truth import DeviceTruth, Verdict
 from firmforge.knowledge.knowledge_base import KnowledgeBase
 
 logger = logging.getLogger(__name__)
@@ -76,11 +77,22 @@ _FIELD_REF_RE = re.compile(
 _ALL_CAPS_IDENT_RE = re.compile(r'\b([A-Z][A-Z0-9_]{2,})\b')
 
 # Pattern 4: STM32 外设寄存器访问 —— PERIPH->REG 或 PERIPH.REG。
-# 外设实例名是全大写（GPIOA / USART1 / DMA1），HAL 句柄是小写（huart1），
-# 两者天然不撞。命中后必须用**限定名**查：STM32 的 CR1 / SR / DR 跨外设重名，
-# 用裸名查会解析到别的外设，且不报错。
+# 命中后必须用**限定名**查：STM32 的 CR1 / SR / DR 跨外设重名，用裸名查会
+# 解析到别的外设，且不报错。
+#
+# 实例名曾写成 `[A-Z][A-Z0-9]{1,15}`，只认全大写。CMSIS 的十个内核组里有
+# 两个是驼峰 —— `SysTick` 与 `CoreDebug` —— 于是 `SysTick->LOAD`、
+# `CoreDebug->DHCSR` **一个字都匹配不上**，连 warning 都没有：知识库明明有
+# （SysTick.LOAD = 0xE000E014，CoreDebug.DHCSR = 0xE000EDF0），审查却完全
+# 空转。用 SysTick 做时基的裸机项目，S2 这一段等于不存在。`DMA1_Stream0->CR`
+# 这种带下划线的实例名同样漏。所以实例名放宽到标识符全集。
+#
+# 放宽的代价是会把结构体成员链也抓进来（`osc.PLL.PLLM`、`huart1.Instance`）。
+# 用两个约束挡住：
+#   ① 点号形式只认**全大写**实例名 —— 小写 + `.` 几乎必然是结构体；
+#   ② 箭头形式仍走「寄存器在库里有主才算可疑」的三条件（见下方 Phase 0）。
 _PERIPH_ACCESS_RE = re.compile(
-    r'\b([A-Z][A-Z0-9]{1,15})\s*(?:->|\.)\s*([A-Z][A-Z0-9_]{1,24})\b'
+    r'\b([A-Za-z_][A-Za-z0-9_]{1,24})\s*(->|\.)\s*([A-Z][A-Z0-9_]{1,24})\b'
 )
 
 # Pattern 5: STM32 CMSIS 位宏 —— 至少含一个下划线，且整体全大写。
@@ -156,6 +168,11 @@ class SourceReviewViolation:
         severity: "error" (blocks compilation) or "warning" (informational).
         reason: Human-readable explanation of the violation.
         suggestion: How to fix the issue.
+        kb_gap: True = 器件头确认芯片上有、但知识库未收录。这类**不是**错，
+            是工具的收录缺口 —— 与"幻觉"在知识库里长得一样，必须分开报。
+        evidence: 判据来源（``器件头 TIM_TypeDef.RCR`` / 空）。空串表示本机
+            没有器件头，**未做交叉验证**，不下对错结论。
+        allowed_reason: 命中项目豁免表时填理由；非空表示不计入惩罚。
     """
 
     register: str
@@ -166,12 +183,23 @@ class SourceReviewViolation:
     severity: str = "error"
     reason: str = ""
     suggestion: str = ""
+    kb_gap: bool = False
+    evidence: str = ""
+    allowed_reason: str = ""
 
     def __str__(self) -> str:
         loc = f"{self.file}:{self.line}" if self.file and self.line \
             else (f"line {self.line}" if self.line else "unknown line")
         target = f"{self.register}.{self.field}" if self.field else self.register
-        return f"[{self.severity.upper()}] {loc}: {target} -- {self.reason}"
+        tag = f"[{self.severity.upper()}]"
+        if self.allowed_reason:
+            tag = "[ALLOWED]"
+        elif self.kb_gap:
+            tag = "[KB-GAP]"
+        tail = f"{self.reason}（{self.evidence}）" if self.evidence else self.reason
+        if self.allowed_reason:
+            tail += f" —— 已由项目声明豁免：{self.allowed_reason}"
+        return f"{tag} {loc}: {target} -- {tail}"
 
 
 @dataclass
@@ -186,6 +214,11 @@ class SourceReviewResult:
         registers_resolved: How many were found in reference library.
         fields_checked: Total bit-field references found.
         fields_resolved: How many fields were resolved.
+        allowed: 命中项目豁免表的条目（不计惩罚，但仍然列出来）。
+        kb_gaps: 器件头确认存在、知识库未收录的条目数 —— 这是工具的缺口，
+            **不是**源码的错。与 ``len(violations)`` 分开计，否则"知识库不全"
+            会被读成"代码有问题"。
+        cross_checked: 本次是否做了器件头交叉验证（无器件头时为 False）。
     """
 
     passed: bool = True
@@ -195,6 +228,12 @@ class SourceReviewResult:
     registers_resolved: int = 0
     fields_checked: int = 0
     fields_resolved: int = 0
+    allowed: list[SourceReviewViolation] = field(default_factory=list)
+    kb_gaps: int = 0
+    cross_checked: bool = False
+    #: 被项目声明豁免的寄存器条数。这些既不算缺口也不算错 —— 从置信度分母
+    #: 里剔出去，否则"豁免"只是不阻断、分数照样被打死，等于没豁免。
+    registers_allowed: int = 0
 
     def summary(self) -> str:
         """Human-readable summary string."""
@@ -205,10 +244,16 @@ class SourceReviewResult:
             f"  Errors: {len(self.violations)}",
             f"  Warnings: {len(self.warnings)}",
         ]
+        if self.kb_gaps:
+            lines.append(f"  KB gaps (芯片有、库未收录): {self.kb_gaps}")
+        if self.allowed:
+            lines.append(f"  Allowed by project: {len(self.allowed)}")
         for v in self.violations:
             lines.append(f"  {v}")
         for w in self.warnings:
             lines.append(f"  {w}")
+        for a in self.allowed:
+            lines.append(f"  {a}")
         return "\n".join(lines)
 
 
@@ -222,10 +267,19 @@ class SourceReviewer:
 
     Args:
         knowledge_base: KnowledgeBase instance with reference library loaded.
+        device_truth: 器件头查询层（``DeviceTruth``）。给了才能在「知识库查
+            不到」时区分「未收录」与「幻觉」；不给则一律按 warning 处理，
+            **不下 error 结论** —— 没有第二份证据就没有资格说源码写错了。
+        allowlist: 项目级豁免表（``ReviewAllowlist``）。命中的条目不计惩罚，
+            但仍原样列出。
     """
 
-    def __init__(self, knowledge_base: KnowledgeBase) -> None:
+    def __init__(self, knowledge_base: KnowledgeBase,
+                 device_truth: DeviceTruth | None = None,
+                 allowlist: Any = None) -> None:
         self._knowledge_base = knowledge_base
+        self._device_truth = device_truth
+        self._allowlist = allowlist
 
     @staticmethod
     def _strip_comments(source: str) -> str:
@@ -272,10 +326,16 @@ class SourceReviewer:
     def knowledge_base(self) -> KnowledgeBase:
         return self._knowledge_base
 
+    @property
+    def device_truth(self) -> DeviceTruth | None:
+        """器件头查询层。None = 未注入，此时不做交叉验证。"""
+        return self._device_truth
+
     @classmethod
     def for_board(cls, knowledge_base: KnowledgeBase,
                   paradigm: str = "arduino", chip: str | None = None,
-                  board: dict[str, Any] | None = None) -> SourceReviewer:
+                  board: dict[str, Any] | None = None,
+                  allowlist: Any = None) -> SourceReviewer:
         """Create a validator pre-loaded with the correct register library.
 
         Routes by ``board`` (preferred) or ``paradigm``:
@@ -295,7 +355,10 @@ class SourceReviewer:
             chip = (board.get("mcu") or {}).get("chip")
         knowledge_base.load_reference(platform, chip=chip,
                                       series=device_series(board, chip))
-        return cls(knowledge_base)
+        # 器件头只在有 CMSIS 的设备上存在（STM32）。AVR 侧返回不可用的实例，
+        # 三态判定退化为「不知道」，AVR 原有的前缀启发式照旧。
+        return cls(knowledge_base, device_truth=DeviceTruth.load(chip),
+                   allowlist=allowlist)
 
     def validate(self, source_code: str,
                  filename: str = "<generated>") -> SourceReviewResult:
@@ -327,6 +390,10 @@ class SourceReviewer:
         source_code = self._strip_comments(source_code)
 
         result = SourceReviewResult()
+        # 有没有第二份证据（器件头）。没有时本文件所有的"未解析"都只能
+        # 报 warning —— 不知道就说不知道，不能拿知识库的缺口当源码的错。
+        result.cross_checked = bool(
+            self._device_truth is not None and self._device_truth.available)
         lines = source_code.splitlines()
 
         # Track already-checked items to avoid duplicates
@@ -360,57 +427,23 @@ class SourceReviewer:
             peripheral_regs_on_line: set[str] = set()
             if peripherals:
                 for match in _PERIPH_ACCESS_RE.finditer(stripped):
-                    periph, reg = match.group(1).upper(), match.group(2).upper()
+                    periph = match.group(1).upper()
+                    op = match.group(2)
+                    reg = match.group(3).upper()
+
+                    # **首字母必须大写**才是实例名。CMSIS 的实例一律大写开头
+                    # （GPIOA / USART1 / DMA1_Stream0 / SysTick / CoreDebug），
+                    # 而结构体成员与变量都小写：`p->port->BSRR`、`osc.PLL.PLLM`、
+                    # `huart1->Instance`。这条判据比"点号 vs 箭头"更准 ——
+                    # 箭头形式下同样会出现成员指针链（`p->port->BSRR` 就曾被
+                    # 当成外设 PORT，报了一条 `PORT.BSRR` 的假 warning）。
+                    if not match.group(1)[0].isupper():
+                        continue
+
                     if periph not in peripherals:
-                        # 未知外设**不能一概跳过**：`GPIOZ->BSRR` 这种把外设名
-                        # 写错的地方，此前连 registers_checked 都不加 —— 源码
-                        # 里明明引用了一个不存在的 GPIO，审查却什么都不说，
-                        # 又是一处「信息截留」。
-                        #
-                        # 三条同时成立才提示，避免把 HAL 结构体成员链
-                        # （`osc.PLL.PLLM`）也当外设：
-                        #   ① 走的是 `->`（`.` 更可能是结构体成员）
-                        #   ② 寄存器名在库里有主 —— 说明它属于**别的**外设，
-                        #      这个组合几乎只可能是外设名写错
-                        #   ③ 同一组合没报过
-                        #
-                        # 只报 warning 不阻断：`GPIOZ` 未声明，gcc 必然拒，
-                        # 编译才是这类错的守门员。S2 的职责是把线索交出来，
-                        # 不能替编译器下判决。
-                        if "->" not in match.group(0):
-                            continue
-                        owner = self._knowledge_base.lookup_register(reg)
-                        if owner is None:
-                            continue
-                        if (periph, reg) in seen_unknown_periph:
-                            continue
-                        seen_unknown_periph.add((periph, reg))
-                        result.registers_checked += 1
-                        group = owner.get("_group") or "?"
-                        result.warnings.append(SourceReviewViolation(
-                            register=f"{periph}.{reg}",
-                            line=line_num,
-                            line_text=stripped,
-                            severity="warning",
-                            # ⚠ 措辞不能预判对错。两种可能都真实存在：
-                            #   ① 源码写错（`GPIOZ`）—— gcc 会拒，编译时暴露；
-                            #   ② 知识库缺这个名字 —— 如 H7 的 `IWDG1`，
-                            #      CMSIS 头里 `#define IWDG1 ((IWDG_TypeDef *) ...)`，
-                            #      而库里只有按 SVD 命名的 `IWDG`；DMA 更典型：
-                            #      SVD 是 `DMA1.S0CR` 拍平编号，源码是
-                            #      `DMA1_Stream0->CR`。
-                            # 本工具只知道自己库里有什么，**没有依据**判定是哪一种，
-                            # 所以只陈述事实 + 给出两种可能，不替调用方下结论。
-                            reason=(f"外设名 '{periph}' 不在知识库里 —— "
-                                    f"本次未审查它的寄存器（'{reg}' 在库里属于 "
-                                    f"{group}）"),
-                            suggestion=(f"两种可能：(a) {periph} 是 CMSIS 实例名而"
-                                        f"知识库按另一套命名收录（DMA1_Stream0 / "
-                                        f"IWDG1 这类，属知识库缺口）；"
-                                        f"(b) 外设名写错，gcc 会拒。"
-                                        f"用 'ff context <board> --topic {group}' "
-                                        f"核对；若确认是 (a)，本条可忽略。"),
-                        ))
+                        self._note_unknown_peripheral(
+                            result, periph, reg, op, stripped, line_num,
+                            seen_unknown_periph)
                         continue
                     peripheral_regs_on_line.add(reg)
 
@@ -423,18 +456,8 @@ class SourceReviewer:
                     if self._knowledge_base.lookup_register_qualified(periph, reg):
                         result.registers_resolved += 1
                     else:
-                        result.violations.append(SourceReviewViolation(
-                            register=f"{periph}.{reg}",
-                            line=line_num,
-                            line_text=stripped,
-                            severity="error",
-                            reason=(f"Peripheral register '{periph}.{reg}' not "
-                                    f"found in reference library"),
-                            suggestion=(f"外设 {periph} 存在，但 '{reg}' 不是它的"
-                                        f"寄存器。用 'ff context <board> "
-                                        f"--topic {periph}' 列出真名。"),
-                        ))
-                        result.passed = False
+                        self._record_unresolved(result, periph, reg, stripped,
+                                                 line_num)
 
             # --- Phase 1: Extract bit-field references FIRST ---
             # This lets us exclude them from register scanning
@@ -642,20 +665,241 @@ class SourceReviewer:
                     ))
                     result.passed = False
 
-        logger.info("Source review: %s (registers %d/%d, fields %d/%d, %s)",
-                     "PASS" if result.passed else "FAIL",
-                     result.registers_resolved, result.registers_checked,
-                     result.fields_resolved, result.fields_checked,
-                     filename)
-
         # 文件名必须在**每一条**违规上落地。跨文件聚合后如果只有计数、没有
         # 文件名，读日志的人只能自己 import 本模块逐个文件跑一遍才能定位
         # —— 这件事真实发生过（2026-10-27，用户用脚本逐个 validate_file 才
         # 找到 blackbox.c:161）。文件名是诊断的一部分，不是装饰。
+        # 顺序不能反：豁免规则可以限定到具体文件，匹配前必须先有文件名。
         for item in (*result.violations, *result.warnings):
             if not item.file:
                 item.file = filename
+
+        self._apply_allowlist(result)
+        self._log_verdict(result)
+
         return result
+
+    # ------------------------------------------------------------------
+    # 豁免与日志
+    # ------------------------------------------------------------------
+    def _apply_allowlist(self, result: SourceReviewResult) -> None:
+        """把命中项目豁免表的条目从"待处理"移到"已声明"。
+
+        豁免**只免惩罚，不免可见**：条目仍然进 ``result.allowed`` 并照原样
+        输出（带理由）。把已知无害的条目藏起来，等于让下一个人重新踩一遍。
+        """
+        table = self._allowlist
+        if not table:
+            return
+
+        kept: list[SourceReviewViolation] = []
+        for v in result.violations:
+            rule = table.match(_symbol_of(v), v.file)
+            if rule is None:
+                kept.append(v)
+                continue
+            v.allowed_reason = rule.reason
+            result.allowed.append(v)
+            if _is_register_level(v):
+                result.registers_allowed += 1
+        if len(kept) != len(result.violations):
+            result.violations = kept
+            result.passed = not kept
+
+        # warning 同样接受豁免 —— 「这处我核对过了，别再提示」
+        kept_w: list[SourceReviewViolation] = []
+        for w in result.warnings:
+            rule = table.match(_symbol_of(w), w.file)
+            if rule is None:
+                kept_w.append(w)
+                continue
+            w.allowed_reason = rule.reason
+            result.allowed.append(w)
+            if _is_register_level(w):
+                result.registers_allowed += 1
+        result.warnings = kept_w
+
+    def _log_verdict(self, result: SourceReviewResult) -> None:
+        """一行结论，**必须能直接落到源码某一行**。
+
+        旧写法只有 ``Source review: FAIL (registers 7/9)``：读这行的人知道
+        有两条没解析，但不知道是哪两条、在哪个文件 —— 只能自己写脚本重跑
+        一遍。汇总行不带落点，等于只报了个数。
+        """
+        gaps = (f"，{result.kb_gaps} 条未收录不判定"
+                if result.kb_gaps else "")
+        allowed = f"，已豁免 {len(result.allowed)} 条" if result.allowed else ""
+        # 分母里剔除「没判定过的」：知识库缺口 + 已声明豁免。这两类都混进
+        # 分母的话，PASS 的文件会显示成 `registers 0/1`，读起来像失败。
+        judged_regs = max(0, result.registers_checked - result.kb_gaps
+                          - result.registers_allowed)
+        counters = (f"registers {result.registers_resolved}/{judged_regs}"
+                    f"{gaps}，"
+                    f"fields {result.fields_resolved}/{result.fields_checked}")
+
+        if result.passed:
+            logger.info("Source review: PASS（%s%s）", counters, allowed)
+            return
+
+        head = "; ".join(
+            f"{_where(v)} {v.register}" for v in result.violations[:3])
+        more = (f" 等 {len(result.violations)} 处"
+                if len(result.violations) > 3 else "")
+        logger.warning("Source review: FAIL（%s）—— 落点 %s%s",
+                       counters, head, more)
+
+    # ------------------------------------------------------------------
+    # 三态判定：库命中 / 器件头有 / 两处都无
+    # ------------------------------------------------------------------
+    def _record_unresolved(self, result: SourceReviewResult, periph: str,
+                           reg: str, line_text: str, line_num: int) -> None:
+        """限定名在知识库里查不到 —— 这时才有资格谈「是不是写错了」。
+
+        判据不能只有知识库。知识库按 SVD 建，SVD 未建模的寄存器（H743 实测
+        约 100 条，如 `TIM2.RCR`）查不到；幻觉寄存器（`GPIOA.BOGUS`）也查
+        不到。**只靠知识库时两者输出一字不差** —— 工具在「不知道」的时候用
+        了「你错了」的语气，这是 2026-10-27 那条误判的根。
+
+        器件头是独立证据：厂商随 CMSIS 发布、gcc 直接拿它编译。于是分三态：
+
+          器件头有   → 芯片上有，是**知识库缺口** → warning（附器件头依据）
+          器件头也没有 → 真幻觉 → error，阻断
+          无器件头/无此实例 → 没有第二份证据 → warning，不下对错结论
+        """
+        truth = self._device_truth
+        verdict = (truth.check(periph, reg)
+                   if truth is not None else Verdict.UNAVAILABLE)
+        symbol = f"{periph}.{reg}"
+
+        if verdict == Verdict.PRESENT:
+            struct = truth.struct_of(periph) or "?"
+            result.kb_gaps += 1
+            result.warnings.append(SourceReviewViolation(
+                register=symbol,
+                line=line_num,
+                line_text=line_text,
+                severity="warning",
+                kb_gap=True,
+                evidence=f"器件头 {truth.source}: {struct}.{reg}",
+                reason=(f"知识库未收录 '{symbol}' —— 但芯片上有这个寄存器"),
+                suggestion=("源码没错，是知识库缺这一条（SVD 未建模）。"
+                            "gcc 能编译即说明名称正确；"
+                            "可在 board.yaml 同目录放 .ff-review.yaml 声明豁免"
+                            "以免每次重复提示。"),
+            ))
+            return
+
+        if verdict == Verdict.ABSENT:
+            struct = truth.struct_of(periph) or "?"
+            result.violations.append(SourceReviewViolation(
+                register=symbol,
+                line=line_num,
+                line_text=line_text,
+                severity="error",
+                evidence=f"器件头 {truth.source}: {struct} 无此成员",
+                reason=(f"'{symbol}' 不存在：器件头里 {struct} 也没有 '{reg}'，"
+                        f"知识库同样没有"),
+                suggestion=(f"外设 {periph} 存在，但 '{reg}' 不是它的寄存器。"
+                            f"用 'ff context <board> --topic {periph}' 列出真名。"),
+            ))
+            result.passed = False
+            return
+
+        # NO_INSTANCE / UNAVAILABLE：没有第二份证据，不下判决
+        if verdict == Verdict.NO_INSTANCE:
+            why = (f"器件头里没有名为 '{periph}' 的实例"
+                   f"（可能是别的宏体系，如 DMA1_Stream0）")
+        else:
+            why = ("本机没有该芯片的 CMSIS 器件头，未做交叉验证"
+                   "（`ff setup` 可装 SDK）")
+        result.warnings.append(SourceReviewViolation(
+            register=symbol,
+            line=line_num,
+            line_text=line_text,
+            severity="warning",
+            reason=(f"知识库没收录 '{symbol}'，且{why} —— "
+                    f"既不能说它对，也不能说它错"),
+            suggestion=(f"用 'ff context <board> --topic {periph}' 核对；"
+                        f"或装好 SDK 后重跑，届时能给出确定结论。"),
+        ))
+
+    def _note_unknown_peripheral(self, result: SourceReviewResult,
+                                  periph: str, reg: str, op: str,
+                                  line_text: str, line_num: int,
+                                  seen: set[tuple[str, str]]) -> None:
+        """外设实例名不在知识库里。
+
+        此前一律跳过：`GPIOZ->BSRR` 连 registers_checked 都不加 —— 源码里明明
+        引用了一个不存在的 GPIO，审查什么都不说，又是一处信息截留。
+
+        现在三档：
+          ① 器件头认这颗外设，且按结构体名能回推到库里的组 → **同一颗外设的
+             命名差异**（`IWDG1` → `IWDG_TypeDef` → 库组 `IWDG`），计入已解析
+          ② 器件头认这颗外设，但库里没有对应组 → 知识库缺口 → warning
+          ③ 器件头也不认 → 只陈述事实 + 两种可能，不替编译器下判决
+        """
+        if op != "->":
+            return
+        if (periph, reg) in seen:
+            return
+
+        truth = self._device_truth
+        if truth is not None and truth.available:
+            verdict = truth.check(periph, reg)
+            if verdict == Verdict.PRESENT:
+                seen.add((periph, reg))
+                result.registers_checked += 1
+                alias = self._alias_group(truth.struct_of(periph), reg)
+                if alias:
+                    # 器件头（实例 → 类型 → 成员）与知识库（组名 → 寄存器）
+                    # 两边都对上，这是确定的等价，不是猜测，因此计为已解析。
+                    result.registers_resolved += 1
+                    logger.debug("外设别名：%s.%s → %s.%s（器件头 %s）",
+                                 periph, reg, alias, reg, truth.source)
+                else:
+                    struct = truth.struct_of(periph) or "?"
+                    result.kb_gaps += 1
+                    result.warnings.append(SourceReviewViolation(
+                        register=f"{periph}.{reg}",
+                        line=line_num,
+                        line_text=line_text,
+                        severity="warning",
+                        kb_gap=True,
+                        evidence=f"器件头 {truth.source}: {struct}.{reg}",
+                        reason=(f"外设 '{periph}' 不在知识库里，但芯片上有 —— "
+                                f"知识库按另一套命名收录"),
+                        suggestion=(f"源码可编译即可。用 'ff context <board> "
+                                    f"--topic {struct} ' 查库里的真名。"),
+                    ))
+                return
+
+        owner = self._knowledge_base.lookup_register(reg)
+        if owner is None:
+            return
+        seen.add((periph, reg))
+        result.registers_checked += 1
+        group = owner.get("_group") or "?"
+        result.warnings.append(SourceReviewViolation(
+            register=f"{periph}.{reg}",
+            line=line_num,
+            line_text=line_text,
+            severity="warning",
+            reason=(f"外设名 '{periph}' 不在知识库里 —— "
+                    f"本次未审查它的寄存器（'{reg}' 在库里属于 {group}）"),
+            suggestion=(f"两种可能：(a) {periph} 是 CMSIS 实例名而"
+                        f"知识库按另一套命名收录（DMA1_Stream0 这类，属知识库"
+                        f"缺口）；(b) 外设名写错，gcc 会拒。"
+                        f"用 'ff context <board> --topic {group}' 核对。"),
+        ))
+
+    def _alias_group(self, struct: str | None, reg: str) -> str | None:
+        """器件头结构体名 → 知识库组名。查得到该寄存器才返回。"""
+        if not struct:
+            return None
+        base = struct[:-len("_TypeDef")] if struct.endswith("_TypeDef") else struct
+        if self._knowledge_base.lookup_register_qualified(base, reg):
+            return base
+        return None
 
     @staticmethod
     def _strip_strings(line: str) -> str:
@@ -765,3 +1009,29 @@ class SourceReviewer:
         except OSError:
             pass
         return self.validate(source, filename=label)
+
+
+# ---------------------------------------------------------------------------
+# 小工具
+# ---------------------------------------------------------------------------
+
+
+def _symbol_of(item: SourceReviewViolation) -> str:
+    """违规条目 → 可用于豁免匹配的符号名（``SCB.CFSR`` / ``GPIO_MODER_BOGUS``）。"""
+    return f"{item.register}.{item.field}" if item.field else item.register
+
+
+def _where(item: SourceReviewViolation) -> str:
+    """``file:line`` 形态的落点。没有文件名时退化为行号。"""
+    if item.file and item.line:
+        return f"{item.file}:{item.line}"
+    return f"line {item.line}" if item.line else "<unknown>"
+
+
+def _is_register_level(item: SourceReviewViolation) -> bool:
+    """这条豁免占的是 registers 计数还是 fields 计数。
+
+    外设级条目形如 ``GPIOA.BSRRR``（register 本身带点），位宏条目是裸名
+    （``GPIO_MODER_BOGUS``）。两者都算进 registers 计数的只有前者。
+    """
+    return bool(item.register) and "." in item.register and not item.field
