@@ -194,7 +194,21 @@ def _stage_extra(stage) -> str:
     if stage.name == "Build" and stage.details.get("compile_rounds", 0) > 1:
         extra = f" (attempt {stage.details['compile_rounds']})"
     if stage.details.get("skipped"):
-        extra += " [skipped]"
+        reason = stage.details.get("reason") or ""
+        extra += f" [skipped{': ' + reason if reason else ''}]"
+        # 跳过构建时说清「复用的是哪一份」—— 构建缓存跨项目共享，
+        # 只写 [skipped] 的话，「烧的是不是最新固件」只能自己去 dir 查。
+        fw = stage.details.get("firmware_path")
+        if fw:
+            if stage.details.get("firmware_exists") is False:
+                extra += f" — !! 产物不存在：{fw}"
+            else:
+                size = stage.details.get("firmware_size")
+                bits = [x for x in (
+                    stage.details.get("firmware_mtime"),
+                    f"{size} B" if size is not None else None,
+                ) if x]
+                extra += f" — 复用 {fw}" + (f"（{'，'.join(bits)}）" if bits else "")
     return extra
 
 
@@ -245,6 +259,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"  [{icon}] Stage {s.stage} {s.name} ({s.elapsed_ms:.0f}ms){extra}")
         if s.error and not s.details.get("skipped"):
             print(f"         Error: {s.error[:150]}")
+        note = s.details.get("note")
+        if note and note not in extra:
+            print(f"         Note: {note}")
 
     collected = [s for s in result.stages if getattr(s, "verdict", "") == "collected"]
     if result.overall_success:
@@ -580,7 +597,14 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     )
     p_ins.add_argument("board", nargs="?",
                        help="Board ID（缺省=唯一一台 STM32 板卡）")
-    p_ins.add_argument("--elf", help="ELF 路径（缺省取构建缓存里最新的 firmware.elf）")
+    p_ins.add_argument("--app", metavar="NAME",
+                       help="应用名（构建缓存 cache/build/<board>/<NAME>/ 下的 ELF）。"
+                            "与 --elf 二选一")
+    p_ins.add_argument("--elf", help="ELF 路径（缺省=构建缓存里唯一的 firmware.elf；"
+                                     "有多份时**必须**指定 --app 或 --elf）")
+    p_ins.add_argument("--pc", metavar="0xADDR", type=_parse_pc,
+                       help="只解析这个 PC 的源码位置，**不连探针**（离线）。"
+                            "故障现场从串口拿到 pc 后用，如 --pc 0x08001D78")
     p_ins.add_argument("--sym", action="append", metavar="NAME",
                        help="读一个变量/数组（可重复），如 --sym s_ticks")
     p_ins.add_argument("--sym-glob", action="append", metavar="PAT",
@@ -698,6 +722,22 @@ def cmd_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_pc(text: str) -> int:
+    """PC 一律按十六进制解析 —— 地址没有十进制写法。
+
+    接受 `0x08001D78` / `08001D78` / `0x0800_1D78` 三种常见写法。
+    不收十进制是为了避免 `--pc 800` 被读成 800 而不是 0x800。
+    """
+    t = text.strip().replace("_", "")
+    if t[:2].lower() == "0x":
+        t = t[2:]
+    try:
+        return int(t, 16)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--pc 需要十六进制地址（如 0x08001D78），收到 {text!r}") from None
+
+
 def cmd_inspect(args: argparse.Namespace) -> int:
     """ff inspect: 只读观测 —— 复位原因 / CPU 位置 / 关键变量 / 外设寄存器。"""
     from firmforge.providers.stm32.inspect import InspectRequest
@@ -741,8 +781,29 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         print(f"Error: {msg}")
         return 1
 
+    pc = getattr(args, "pc", None)
+    if pc is not None:
+        # --pc 是**离线**路径：只做 addr2line，不连探针。和读内存的选项
+        # 一起用会产生一个矛盾的数据包（一边说"没连板子"，一边给出变量值）。
+        # 不静默忽略 —— 猜用户想干什么正是这类工具最容易犯的错。
+        clash = [flag for flag, val in (
+            ("--sym", getattr(args, "sym", None)),
+            ("--sym-glob", getattr(args, "sym_glob", None)),
+            ("--periph", getattr(args, "periph", None)),
+        ) if val]
+        if clash:
+            msg = (f"--pc 是离线模式（只解析源码位置，不连探针），"
+                   f"不能与 {' / '.join(clash)} 同用。"
+                   f"要同时读板上变量，去掉 --pc 跑在线模式；只想查这一行，去掉那几个参数。")
+            if getattr(args, "json", False):
+                return _json_out({"error": msg}, 1)
+            print(f"Error: {msg}")
+            return 1
+
     req = InspectRequest(
         elf=getattr(args, "elf", None),
+        app=getattr(args, "app", None),
+        pc=pc,
         symbols=list(getattr(args, "sym", None) or []),
         sym_globs=list(getattr(args, "sym_glob", None) or []),
         peripherals=list(getattr(args, "periph", None) or []),
@@ -755,22 +816,58 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     )
 
     payload = run_inspect(config, req)
+
+    # 前提不成立（ELF 有歧义 / --elf 不存在）—— 报错退出，**不产出半份观测**。
+    # 这类错误以前只落在 warnings 里，于是命令以 0 退回、还打印了一个
+    # 属于另一个固件的 Where: 行。
+    if payload.get("error"):
+        if getattr(args, "json", False):
+            return _json_out(payload, 2)
+        print(f"Error: {payload['error']}")
+        for line in payload.get("candidates") or []:
+            print(f"  {line}" if line.startswith("  ") else f"  {line}")
+        if payload.get("hint"):
+            print(f"  {payload['hint']}")
+        return 2
+
     if getattr(args, "json", False):
-        return _json_out(payload, 0 if payload.get("target", {}).get("halted") else 1)
+        return _json_out(payload, _inspect_exit_code(payload))
 
     _print_inspect(payload)
-    return 0 if payload.get("target", {}).get("halted") else 1
+    return _inspect_exit_code(payload)
+
+
+def _inspect_exit_code(payload: dict) -> int:
+    """0 = 拿到了本次要的东西。
+
+    离线 `--pc` 没有 halted 概念（压根没连板子），判据换成「源码行解出来了没」。
+    """
+    if payload.get("mode") == "offline":
+        loc = payload.get("location") or {}
+        return 0 if loc.get("line") or loc.get("function") else 1
+    return 0 if (payload.get("target") or {}).get("halted") else 1
 
 
 def _print_inspect(p: dict) -> None:
     """人读格式。要的是判据，不是 JSON 的换行版。"""
     t = p.get("target") or {}
     frozen = t.get("watchdog_frozen")
-    state = "halted" if t.get("halted") else "NOT-HALTED"
-    print(f"Board: {t.get('board_id')} | {t.get('mcu')} | {state} | "
-          f"probe {t.get('probe') or '?'} | {p.get('elapsed_ms')} ms")
+    offline = p.get("mode") == "offline"
+
+    if offline:
+        # 离线 --pc：没连探针。halted / reset / stack / 看门狗这些字段
+        # **一个都不能打** —— 打出来就是让人以为连上板子了。
+        print(f"Mode:  offline (--pc) — 未连接探针，只解析符号与源码行 | "
+              f"{p.get('elapsed_ms')} ms")
+        print(f"Board: {t.get('board_id')} | {t.get('mcu')}")
+    else:
+        state = "halted" if t.get("halted") else "NOT-HALTED"
+        print(f"Board: {t.get('board_id')} | {t.get('mcu')} | {state} | "
+              f"probe {t.get('probe') or '?'} | {p.get('elapsed_ms')} ms")
     if t.get("elf"):
-        print(f"ELF:   {t['elf']}  ({t.get('elf_mtime') or '?'})")
+        size = t.get("elf_size")
+        size_txt = f", {size} B" if size else ""
+        print(f"ELF:   {t['elf']}  ({t.get('elf_mtime') or '?'}{size_txt})")
     if t.get("state_prior"):
         print(f"  （进会话前状态：{t['state_prior']}）")
 
@@ -790,12 +887,13 @@ def _print_inspect(p: dict) -> None:
             where = f"{_short_path(loc['file'])}:{loc.get('line') or '?'}"
         print(f"Where: {loc.get('pc')}  {loc.get('function') or '?'}  {where}".rstrip())
 
-    st = p.get("stack") or {}
-    fault = st.get("fault")
-    fault_txt = ("未判断" if fault is None
-                 else (fault.get("exception") or "none") if fault.get("in_exception")
-                 else "none")
-    print(f"Stack: sp={st.get('sp')}  lr={st.get('lr')}  exception={fault_txt}")
+    if not offline:
+        st = p.get("stack") or {}
+        fault = st.get("fault")
+        fault_txt = ("未判断" if fault is None
+                     else (fault.get("exception") or "none") if fault.get("in_exception")
+                     else "none")
+        print(f"Stack: sp={st.get('sp')}  lr={st.get('lr')}  exception={fault_txt}")
 
     syms = p.get("symbols") or []
     if syms:

@@ -115,11 +115,32 @@ _MEM_MARK_RE = re.compile(r"^MEM_0x([0-9a-fA-F]+)$")
 # 请求
 # --------------------------------------------------------------------------
 
+class InspectError(RuntimeError):
+    """观测前提不成立 —— 必须在**碰硬件之前**停下。
+
+    单独一个异常类型的原因：这类错误发生在会话建立前，绝不能走到
+    halt / 冻结看门狗那一步（那会改动目标状态，为一次注定要重跑的
+    命令复位板子是不划算的）。候选清单一起带出去，调用方照着改就行。
+    """
+
+    def __init__(self, message: str, *, candidates: list[str] | None = None,
+                 hint: str = "") -> None:
+        super().__init__(message)
+        self.candidates = list(candidates or [])
+        self.hint = hint
+
+
 @dataclass
 class InspectRequest:
     """一次观测请求。默认值即"人最常用"的那条路径。"""
 
     elf: str | None = None
+    #: 应用名（构建缓存里的子目录名）。与 `elf` 二选一，比 `elf` 更稳 ——
+    #: 它不依赖调用者知道 B 区绝对路径。
+    app: str | None = None
+    #: 只解析一个 PC 的源码位置，**不连探针**。故障现场从串口拿到 pc 后
+    #: 最常用的一次性查询；`None` = 走在线模式读当前 halt 的 PC。
+    pc: int | None = None
     symbols: list[str] = field(default_factory=list)
     sym_globs: list[str] = field(default_factory=list)
     peripherals: list[str] = field(default_factory=list)
@@ -141,11 +162,13 @@ def inspect(board_config: dict[str, Any], req: InspectRequest, *,
     start = time.perf_counter()
     tc = toolchain or resolve_toolchain()
     warnings: list[str] = []
-    kb = _load_kb(board_config, warnings)
+    # 知识库推迟到确认要走在线路径之后再加载：`--pc` 离线解析只需要
+    # addr2line，加载 2000+ 寄存器的知识库纯粹是白等。
 
     payload: dict[str, Any] = {
         "schema": SCHEMA,
         "target": _target_block(board_config, tc),
+        "mode": "online",
         "reset_cause": None,
         "location": None,
         "stack": {"sp": None, "lr": None, "fault": None},
@@ -160,7 +183,45 @@ def inspect(board_config: dict[str, Any], req: InspectRequest, *,
                               "串口请用 ff run --expected 或 ff monitor。")
 
     # --- 1. 找出要读的东西 ---------------------------------------------
-    elf_path, elf_note = _resolve_elf(board_config, req, warnings)
+    try:
+        elf_path, elf_note = _resolve_elf(board_config, req, warnings)
+    except InspectError as exc:
+        # 前提不成立就**不连探针**：会话会 halt 目标、冻结看门狗，
+        # 为一条注定要重跑的命令改动目标状态不划算。
+        payload["error"] = str(exc)
+        payload["candidates"] = exc.candidates
+        if exc.hint:
+            payload["hint"] = exc.hint
+        payload["elapsed_ms"] = round((time.perf_counter() - start) * 1000)
+        return payload
+
+    # ELF 一旦定下来就先回显：后面任何一行输出都必须能追溯是哪个固件，
+    # 包括「--pc 离线解析」这种根本不连板子的路径。
+    payload["target"]["elf"] = elf_path
+    if elf_path:
+        try:
+            st = Path(elf_path).stat()
+            payload["target"]["elf_mtime"] = datetime.datetime.fromtimestamp(
+                st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            payload["target"]["elf_size"] = st.st_size
+        except OSError:
+            pass
+
+    # --- 1b. 离线 PC 解析（--pc）----------------------------------------
+    # 故障现场从串口拿到 pc 后只需要 addr2line，完全不必连板子 ——
+    # 这个分支必须在构建读规划、跑 OpenOCD 之前返回。
+    if req.pc is not None:
+        payload["mode"] = "offline"
+        payload["target"]["state"] = "not-contacted"
+        payload["target"]["halted"] = None      # 三态：None = 压根没连
+        payload["target"]["elf"] = elf_path
+        if not elf_path:
+            payload["warnings"].append(elf_note or "未找到 ELF：--pc 无法解析源码行")
+        else:
+            payload["location"] = _location(elf_path, req.pc, tc, warnings)
+        payload["elapsed_ms"] = round((time.perf_counter() - start) * 1000)
+        return payload
+
     syms = _collect_symbols(elf_path, tc, req, warnings) if elf_path else []
 
     reads: list[tuple[int, int, int]] = []      # (addr, count, width_bytes)
@@ -176,6 +237,7 @@ def inspect(board_config: dict[str, Any], req: InspectRequest, *,
         reads.append((s["addr"], words, 4))
         sym_plan.append({**s, "words_wanted": words})
 
+    kb = _load_kb(board_config, warnings)
     periph_plan = _peripheral_plan(kb, req.peripherals, warnings)
     for _p in periph_plan:
         for r in _p["registers"]:
@@ -202,7 +264,6 @@ def inspect(board_config: dict[str, Any], req: InspectRequest, *,
     if not run.ok:
         payload["warnings"].append(run.error or "OpenOCD 会话失败")
         payload["target"]["state"] = "unknown"
-        payload["target"]["elf"] = elf_path
         _m = re.search(r"CMSIS-DAP:\s*Serial#\s*=\s*(\S+)", run.text)
         if _m:
             payload["target"]["probe"] = _m.group(1)
@@ -226,16 +287,8 @@ def inspect(board_config: dict[str, Any], req: InspectRequest, *,
 
     payload["target"].update(_target_state(markers, run))
     payload["target"]["state"] = ("halted" if markers.get("HALT") == "OK" else "unknown")
-    # ELF 必须显式回显：构建缓存是 B 区、跨项目共享的，
-    # `cache/build/<板卡>/<项目>/` 下可能同时躺着别的项目的固件。
-    # 不写出来，用户会把「另一个项目的变量值」当成这个项目的。
-    payload["target"]["elf"] = elf_path
-    if elf_path:
-        try:
-            payload["target"]["elf_mtime"] = datetime.datetime.fromtimestamp(
-                Path(elf_path).stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-        except OSError:
-            pass
+    # ELF 已在会话之前回显（见 1b 之前的代码），这里不再重复设置 ——
+    # 但会话失败的分支（`if not run.ok`）仍要自己补一次，它比回显更早返回。
     payload["reset_cause"] = _reset_cause(mem.get(RCC_RSR), warnings)
 
     # --- 3. 位置与符号 --------------------------------------------------
@@ -876,14 +929,33 @@ def _hex_of(value: Any) -> str | None:
 # ELF / 工具
 # --------------------------------------------------------------------------
 
+def _elf_candidates(root: Path) -> list[Path]:
+    """构建缓存里的全部 ELF，最新在前。"""
+    return sorted(root.glob("*/firmware.elf"),
+                  key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def _describe_elf(p: Path) -> str:
+    """候选清单的一行：应用名、大小、时间。缺一个都判断不出该选谁。"""
+    try:
+        st = p.stat()
+    except OSError:
+        return f"  {p.parent.name}  ({p})"
+    return (f"  --app {p.parent.name:<20s} "
+            f"{st.st_size:>7d} B  "
+            f"{datetime.datetime.fromtimestamp(st.st_mtime):%Y-%m-%d %H:%M:%S}")
+
+
 def _resolve_elf(board_config: dict[str, Any], req: InspectRequest,
                  warnings: list[str]) -> tuple[str | None, str]:
+    if req.elf and req.app:
+        raise InspectError("--elf 与 --app 只能给一个（两者都指向 ELF，给两个无法判断以谁为准）")
+
     if req.elf:
         p = Path(req.elf)
         if p.is_file():
             return str(p), ""
-        warnings.append(f"--elf 指向的文件不存在：{req.elf}")
-        return None, "--elf 无效"
+        raise InspectError(f"--elf 指向的文件不存在：{req.elf}")
 
     board_id = board_config.get("board_id") or ""
     try:
@@ -894,14 +966,31 @@ def _resolve_elf(board_config: dict[str, Any], req: InspectRequest,
     if not root.is_dir():
         return None, f"构建缓存里没有 {board_id}（先 ff build）"
 
-    hits = sorted(root.glob("*/firmware.elf"), key=lambda p: p.stat().st_mtime,
-                  reverse=True)
+    if req.app:
+        p = root / req.app / "firmware.elf"
+        if p.is_file():
+            return str(p), ""
+        avail = [x.parent.name for x in _elf_candidates(root)]
+        raise InspectError(
+            f"--app {req.app} 在构建缓存里没有 firmware.elf：{p}",
+            candidates=[f"可用：{', '.join(avail) or '（无）'}"],
+            hint=f"先 ff build {board_id} --app {req.app}，或换个 --app")
+
+    hits = _elf_candidates(root)
     if not hits:
         return None, f"{root} 下没有 firmware.elf（先 ff build）"
     if len(hits) > 1:
-        warnings.append(
-            f"构建缓存里有 {len(hits)} 个 ELF，取最新的一份：{hits[0]}"
-            f" —— 该目录跨项目共享，不是你要看的固件就用 --elf 指定")
+        # 多份时**拒绝猜测**。曾经按 mtime 取最新，在 app/ 与
+        # hello_blink/ 并存时选中了 hello_blink 的 ELF —— 于是
+        # `Where:` 打印出一个完全合理但属于另一个固件的函数名。
+        # 这比直接报错危险得多：错的答案看起来是对的，不会有人去查。
+        # mtime 也证明不了「是不是这份源码编的」：拷文件、解压、
+        # 单独 build 别的项目都会刷新它。
+        raise InspectError(
+            f"构建缓存里有 {len(hits)} 份 firmware.elf，无法判断你要看哪一份："
+            f"\n" + "\n".join(_describe_elf(p) for p in hits),
+            candidates=[f"用 --app <应用名> 指定，或 --elf <路径> 直接给文件"],
+            hint=f"目录 {root} 是跨项目共享的，不按修改时间猜")
     return str(hits[0]), ""
 
 
@@ -914,5 +1003,5 @@ def _sibling_tool(gcc: str, name: str) -> str | None:
     return None
 
 
-__all__ = ["inspect", "InspectRequest", "SCHEMA",
+__all__ = ["inspect", "InspectRequest", "InspectError", "SCHEMA",
            "DBGMCU_APB4FZ1", "IWDG1_FREEZE_BIT", "RCC_RSR", "RSR_POWER_ON_VALUE"]

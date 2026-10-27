@@ -316,3 +316,130 @@ def test_unknown_peripheral_warns_and_skips():
     warns: list[str] = []
     assert ins._peripheral_plan(_FakeKb({}), ["NOPE"], warns) == []
     assert any("NOPE" in w for w in warns)
+
+
+# --------------------------------------------------------------------------
+# ELF 选择：多份时必须拒绝猜测
+# --------------------------------------------------------------------------
+
+def _make_cache(tmp_path, *apps: str):
+    root = tmp_path / "build" / "gc_h743"
+    for a in apps:
+        d = root / a
+        d.mkdir(parents=True)
+        (d / "firmware.elf").write_bytes(b"\x7fELF" + a.encode())
+    return root
+
+
+def _patch_cache(monkeypatch, root):
+    from firmforge.infrastructure import paths
+    monkeypatch.setattr(paths, "build_cache_dir", lambda: root.parent)
+
+
+def test_multiple_elves_refuses_to_guess(tmp_path, monkeypatch):
+    """缓存里有两份 ELF 时**不能**按修改时间猜。
+
+    曾经取最新一份：`app/` 与 `hello_blink/` 并存时选中了 hello_blink，
+    于是 `Where:` 打出一个完全合理但属于另一个固件的函数名 ——
+    错的答案看起来是对的，不会有人去查。
+    """
+    root = _make_cache(tmp_path, "app", "hello_blink")
+    _patch_cache(monkeypatch, root)
+    with pytest.raises(ins.InspectError) as ei:
+        ins._resolve_elf({"board_id": "gc_h743"}, ins.InspectRequest(), [])
+    msg = str(ei.value)
+    # 候选必须带上「怎么指定」的写法，否则等于只说了句"不行"
+    assert "--app app" in msg and "--app hello_blink" in msg
+    assert max(len(c) for c in ei.value.candidates) > 10
+
+
+def test_app_picks_that_exact_elf(tmp_path, monkeypatch):
+    root = _make_cache(tmp_path, "app", "hello_blink")
+    _patch_cache(monkeypatch, root)
+    got, note = ins._resolve_elf({"board_id": "gc_h743"},
+                                 ins.InspectRequest(app="hello_blink"), [])
+    assert got.endswith("hello_blink" + str(__import__("os").sep) + "firmware.elf")
+    assert note == ""
+
+
+def test_single_elf_is_used_and_still_echoed(tmp_path, monkeypatch):
+    """只有一份时不算歧义，但仍要在 payload 里回显路径。"""
+    root = _make_cache(tmp_path, "app")
+    _patch_cache(monkeypatch, root)
+    got, _note = ins._resolve_elf({"board_id": "gc_h743"}, ins.InspectRequest(), [])
+    assert got and got.endswith("firmware.elf")
+
+
+def test_app_and_elf_are_mutually_exclusive(tmp_path):
+    with pytest.raises(ins.InspectError) as ei:
+        ins._resolve_elf({"board_id": "gc_h743"},
+                         ins.InspectRequest(app="app", elf="x.elf"), [])
+    assert "--elf" in str(ei.value) and "--app" in str(ei.value)
+
+
+def test_missing_app_lists_what_is_available(tmp_path, monkeypatch):
+    root = _make_cache(tmp_path, "app", "hello_blink")
+    _patch_cache(monkeypatch, root)
+    with pytest.raises(ins.InspectError) as ei:
+        ins._resolve_elf({"board_id": "gc_h743"},
+                         ins.InspectRequest(app="nosuch"), [])
+    assert "app" in " ".join(ei.value.candidates)
+    assert "hello_blink" in " ".join(ei.value.candidates)
+
+
+# --------------------------------------------------------------------------
+# --pc 离线解析：不碰探针
+# --------------------------------------------------------------------------
+
+class _NoProbeTC:
+    """只有离线路径会读到的字段 —— OpenOCD 相关一律留空。"""
+
+    gcc = ""
+    openocd = ""
+
+
+def _offline_payload(monkeypatch, tmp_path, *, pc=0x08001D78,
+                     apps=("app",), app="app"):
+    root = _make_cache(tmp_path, *apps)
+    _patch_cache(monkeypatch, root)
+    monkeypatch.setattr(ins, "_load_kb", lambda cfg, w: None)
+    # 会话一旦被启动就说明离线分支漏了 —— 直接炸，不要静默通过
+    def _boom(*a, **kw):
+        raise AssertionError("离线 --pc 不该启动 OpenOCD 会话")
+    monkeypatch.setattr(ins, "run_script", _boom)
+    return ins.inspect({"board_id": "gc_h743", "platform": "stm32"},
+                       ins.InspectRequest(app=app, pc=pc), toolchain=_NoProbeTC())
+
+
+def test_pc_mode_does_not_touch_the_probe(monkeypatch, tmp_path):
+    """从串口拿到 pc 只需要 addr2line —— 绝不能连板子（会复位、冻结看门狗）。"""
+    monkeypatch.setattr(ins, "_location",
+                        lambda elf, pc, tc, w: {"pc": f"0x{pc:08X}",
+                                                "function": "crash", "file": "a.c",
+                                                "line": 12})
+    p = _offline_payload(monkeypatch, tmp_path)
+    assert p["mode"] == "offline"
+    assert p["location"]["function"] == "crash"
+
+
+def test_offline_payload_does_not_fake_hardware_fields(monkeypatch, tmp_path):
+    """没连板子就不能有 sp/lr/reset_cause —— 打出来等于说"连上了"。"""
+    monkeypatch.setattr(ins, "_location",
+                        lambda elf, pc, tc, w: {"pc": "0x08001D78", "function": "f",
+                                                "file": "a.c", "line": 1})
+    p = _offline_payload(monkeypatch, tmp_path)
+    assert p["target"]["halted"] is None          # 三态：None = 压根没连
+    assert p["target"]["state"] == "not-contacted"
+    assert p["reset_cause"] is None
+    assert p["stack"] == {"sp": None, "lr": None, "fault": None}
+
+
+def test_offline_mode_echoes_which_elf_was_used(monkeypatch, tmp_path):
+    """离线也要回显 ELF：cache/build 跨项目共享，答对了也不知道对的是谁。"""
+    monkeypatch.setattr(ins, "_location",
+                        lambda elf, pc, tc, w: {"pc": "0x08001D78", "function": "f",
+                                                "file": "a.c", "line": 1})
+    p = _offline_payload(monkeypatch, tmp_path)
+    assert p["target"]["elf"].endswith("firmware.elf")
+    assert p["target"]["elf_size"] > 0
+    assert p["target"]["elf_mtime"]

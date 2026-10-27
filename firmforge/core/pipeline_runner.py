@@ -8,6 +8,7 @@ State.json fingerprints drive incremental skip decisions.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import time
@@ -40,6 +41,30 @@ def _salient_error(text: str, limit: int = 200) -> str:
         if "error" in low or "fail" in low:
             return ln[:limit]
     return lines[-1][:limit]
+
+
+def _artifact_info(path: str) -> dict[str, Any]:
+    """产物的可核对信息：路径 + 时间 + 大小。
+
+    跳过构建/烧录时必须打出来。只报一句 `[skipped]` 的话，「现在板上跑的
+    是不是这份源码编的固件」只能自己去 dir 查 —— 而构建缓存在
+    `cache/build/<板卡>/<项目>/` 下跨项目共享，查错目录的代价是烧错固件。
+    文件不存在也照实报，不猜。
+    """
+    if not path:
+        return {}
+    p = Path(path)
+    try:
+        st = p.stat()
+    except OSError:
+        return {"firmware_path": path, "firmware_exists": False}
+    return {
+        "firmware_path": str(p),
+        "firmware_exists": True,
+        "firmware_mtime": datetime.datetime.fromtimestamp(
+            st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        "firmware_size": st.st_size,
+    }
 
 
 # S5 的六种结局。ff 只判断「有没有数据」和「调用方给的断言命中没有」，
@@ -317,9 +342,15 @@ class PipelineRunner:
 
         if s3.details.get("skipped"):
             fw_path = state.data.get("stages", {}).get("build", {}).get("hex", "")
+            # 复用的是哪一份产物，必须跟 [skipped] 一起打出来。
+            s3.details.update(_artifact_info(fw_path))
+            if not fw_path:
+                s3.details["note"] = ("state 里没有记录上次的 hex 路径 —— "
+                                      "无法确认复用的是什么（用 --no-cache 或删 .ff-run 重跑）")
         else:
             fw_path = s3.details.get("firmware_path", "")
             state.mark_done("build", hex=fw_path)
+            s3.details.update(_artifact_info(fw_path))
 
         fps = compute_fingerprints(
             board_id or "", detected_port, build_source, fw_path,
@@ -351,6 +382,10 @@ class PipelineRunner:
         flash_done_before = state.data.get("stages", {}).get("flash", {}).get("status") == "done"
         if not expected and flash_done_before and state.should_skip_flash(fps):
             s4 = self._skipped_stage(4, "Flash", "fingerprints match")
+            # 跳过烧录 = 板上跑的是**上次**烧进去的那份。必须说出来：
+            # 否则「S3 换了新 hex、S4 显示 skipped」会被读成「新固件已生效」。
+            s4.details["note"] = (f"未烧录，板上仍是上次烧的固件；"
+                                  f"本次产物 {fw_path or '?'} 没有进芯片")
         else:
             s4 = self._stage_flash(board_id, fw_path)
         result.stages.append(s4)
