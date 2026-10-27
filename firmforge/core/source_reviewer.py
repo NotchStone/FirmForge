@@ -48,8 +48,16 @@ _ASSIGN_OPS = r'(?:\|=|&=|<<=|>>=|^=|\+=|-=|\*=|/=|%=|=)'
 # Pattern 1: Register in assignment context:  IDENTIFIER op= value
 # Matches: PORTB = 0xFF, UCSR0B |= (1<<RXEN0), DDRB &= ~(1<<7)
 # The identifier must be ALL_CAPS (register naming convention)
+#
+# 前置断言 `(?<![.>])` 排除**成员访问**：`osc.PLL.PLLM = BSP_PLL_M;` 里的
+# `PLLM` 是 HAL 结构体成员，不是寄存器。少了这个断言，`\b` 会在 `.` 与 `P`
+# 之间成立，把裸名 `PLLM` 抓进赋值上下文 —— 实测在 bsp_init.c 上误报 8 条
+# （PLLM/PLLN/PLLP/PLLQ/PLLR/PLLRGE/PLLVCOSEL/PLLFRACN，全部是
+# `RCC_OscInitTypeDef::PLL` 的成员），把「寄存器审查」计数污染成 2/10，
+# 让人误以为有 8 个寄存器没解析出来。
+# `PERIPH->REG` / `PERIPH.REG` 由 Pattern 4 用限定名单独负责，不会漏。
 _REGISTER_ASSIGN_RE = re.compile(
-    r'\b([A-Z][A-Z0-9_]{2,})\s*' + _ASSIGN_OPS
+    r'(?<![.>])\b([A-Z][A-Z0-9_]{2,})\s*' + _ASSIGN_OPS
 )
 
 # Pattern 2: Bit-field in shift/macro context:  (1 << NAME) or _BV(NAME)
@@ -323,6 +331,9 @@ class SourceReviewer:
 
         # Track already-checked items to avoid duplicates
         seen_registers: set[tuple[str, int]] = set()
+        # 未知外设名的提示，按 (外设, 寄存器) 全局去重 —— 同一个 `GPIOZ->BSRR`
+        # 在文件里出现 5 次，报 1 条就够。
+        seen_unknown_periph: set[tuple[str, str]] = set()
         seen_fields: set[tuple[str, int]] = set()
 
         # 已知外设实例名（USART1 / GPIOA / DMA1）。空集说明当前芯片的知识库
@@ -351,6 +362,55 @@ class SourceReviewer:
                 for match in _PERIPH_ACCESS_RE.finditer(stripped):
                     periph, reg = match.group(1).upper(), match.group(2).upper()
                     if periph not in peripherals:
+                        # 未知外设**不能一概跳过**：`GPIOZ->BSRR` 这种把外设名
+                        # 写错的地方，此前连 registers_checked 都不加 —— 源码
+                        # 里明明引用了一个不存在的 GPIO，审查却什么都不说，
+                        # 又是一处「信息截留」。
+                        #
+                        # 三条同时成立才提示，避免把 HAL 结构体成员链
+                        # （`osc.PLL.PLLM`）也当外设：
+                        #   ① 走的是 `->`（`.` 更可能是结构体成员）
+                        #   ② 寄存器名在库里有主 —— 说明它属于**别的**外设，
+                        #      这个组合几乎只可能是外设名写错
+                        #   ③ 同一组合没报过
+                        #
+                        # 只报 warning 不阻断：`GPIOZ` 未声明，gcc 必然拒，
+                        # 编译才是这类错的守门员。S2 的职责是把线索交出来，
+                        # 不能替编译器下判决。
+                        if "->" not in match.group(0):
+                            continue
+                        owner = self._knowledge_base.lookup_register(reg)
+                        if owner is None:
+                            continue
+                        if (periph, reg) in seen_unknown_periph:
+                            continue
+                        seen_unknown_periph.add((periph, reg))
+                        result.registers_checked += 1
+                        group = owner.get("_group") or "?"
+                        result.warnings.append(SourceReviewViolation(
+                            register=f"{periph}.{reg}",
+                            line=line_num,
+                            line_text=stripped,
+                            severity="warning",
+                            # ⚠ 措辞不能预判对错。两种可能都真实存在：
+                            #   ① 源码写错（`GPIOZ`）—— gcc 会拒，编译时暴露；
+                            #   ② 知识库缺这个名字 —— 如 H7 的 `IWDG1`，
+                            #      CMSIS 头里 `#define IWDG1 ((IWDG_TypeDef *) ...)`，
+                            #      而库里只有按 SVD 命名的 `IWDG`；DMA 更典型：
+                            #      SVD 是 `DMA1.S0CR` 拍平编号，源码是
+                            #      `DMA1_Stream0->CR`。
+                            # 本工具只知道自己库里有什么，**没有依据**判定是哪一种，
+                            # 所以只陈述事实 + 给出两种可能，不替调用方下结论。
+                            reason=(f"外设名 '{periph}' 不在知识库里 —— "
+                                    f"本次未审查它的寄存器（'{reg}' 在库里属于 "
+                                    f"{group}）"),
+                            suggestion=(f"两种可能：(a) {periph} 是 CMSIS 实例名而"
+                                        f"知识库按另一套命名收录（DMA1_Stream0 / "
+                                        f"IWDG1 这类，属知识库缺口）；"
+                                        f"(b) 外设名写错，gcc 会拒。"
+                                        f"用 'ff context <board> --topic {group}' "
+                                        f"核对；若确认是 (a)，本条可忽略。"),
+                        ))
                         continue
                     peripheral_regs_on_line.add(reg)
 

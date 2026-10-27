@@ -69,15 +69,23 @@ _PERIPH_MACRO_RE = re.compile(
 
 #: 成员声明：`__IOM uint32_t SHCSR;` / `uint32_t RESERVED0[1U];` / `__IM uint8_t SHPR[12U];`
 _MEMBER_RE = re.compile(
-    r"^\s*(?:(__IM|__IOM|__OM)\s+)?"
+    # 限定符全套。内核头用 `__IOM / __IM / __OM`，器件头三种都用：
+    #   `__IO`（读写）、`__I`（只读）、`__O`（只写）
+    # —— `SDMMC_TypeDef` 的 `DCOUNT` / `STA` 是 `__I`，漏掉它们会让后面
+    #     全部成员的偏移整体前移 8 字节，DMA 寄存器全部错位。
+    # 少了任何一类，结构体名还在、成员表是静默残缺的 —— 这正是「算错了但
+    # 不报错」最难查的形态，所以这里按长度降序把全部变体列全。
+    r"^\s*(?:(__IOM|__IO|__IM|__OM|__I|__O)\s+)?"
     r"(uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t)\s+"
     r"([A-Za-z_]\w*)\s*"
     r"(?:\[\s*(\w+)\s*\])?\s*;")
 
 #: 成员行尾的偏移注释：`/*!< Offset: 0x028 (R/W)  Configurable Fault Status Register */`
-_OFFSET_COMMENT_RE = re.compile(r"Offset:\s*0x([0-9A-Fa-f]+)")
+#: 器件头则写成 `Address offset: 0x00` —— 同一个信息，两种措辞。
+_OFFSET_COMMENT_RE = re.compile(r"(?:Address\s+)?[Oo]ffset:\s*0x([0-9A-Fa-f]+)")
 
-_ACCESS_FROM_QUALIFIER = {"__IM": "ro", "__IOM": "rw", "__OM": "wo"}
+_ACCESS_FROM_QUALIFIER = {"__IM": "ro", "__IOM": "rw", "__OM": "wo",
+                          "__IO": "rw", "__I": "ro", "__O": "wo"}
 
 #: 位域宏：`#define SCB_CFSR_IBUSERR_Pos 0U`
 #: 注意取值可能是**表达式**：`#define SCB_CFSR_MMARVALID_Pos (SCB_CFSR_MEMFAULTSR_Pos + 7U)`
@@ -89,8 +97,18 @@ _FIELD_MSK_RE = re.compile(r"^#define\s+([A-Za-z_]\w*)_Msk\s+\(?\s*(0x[0-9A-Fa-f
 #: 基址宏：`#define SCB_BASE (SCS_BASE + 0x0D00UL)` / `(0xE000E000UL)`
 #: 注意 `re.MULTILINE`：整份头文件按全文匹配时，`^` 默认只认字符串开头；
 #: 还要容忍前导空白 —— `  #define MPU_BASE ...` 是写在外层 #if 里的缩进形态。
-_BASE_RE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*_BASE)[ \t]+\(([^)]*)\)",
-                      re.M)
+#:
+#: 取值有**两种**形态，必须都认：
+#:   ① `(表达式)` —— 绝大多数
+#:   ② `纯别名`（无括号）—— H7 器件头的
+#:      `#define D2_APB1PERIPH_BASE        PERIPH_BASE`
+#:      只认 ① 会让这一条整链断掉：`DAC1_BASE` / `OPAMP1_BASE` /
+#:      `SWPMI1_BASE` / `FDCAN_CCU_BASE` 全部求不出基址而被跳过 ——
+#:      实测丢掉 4 个外设组，且**没有任何报错**，只是库里少了它们。
+_BASE_RE = re.compile(
+    r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*_BASE)[ \t]+"
+    r"(\([^)]*\)|[A-Za-z_]\w*)",
+    re.M)
 
 _TYPES = {"uint8_t": 8, "uint16_t": 16, "uint32_t": 32,
           "int8_t": 8, "int16_t": 16, "int32_t": 32}
@@ -209,9 +227,11 @@ def parse_structs(text: str) -> tuple[dict[str, list[dict[str, Any]]], list[str]
                 count = 1
                 if count_raw:
                     raw = count_raw.rstrip("Uu")
-                    if raw.isdigit():
-                        count = int(raw)
-                    else:
+                    try:
+                        # 器件头有十六进制长度：USB OTG 的 `DIEPTXF[0x0F]`。
+                        # 只认 `isdigit()` 会把它当"不是常量"，整条成员丢掉。
+                        count = int(raw, 0) if raw else 1
+                    except ValueError:
                         problems.append(f"{name}: 数组长度不是常量（{count_raw}）")
                 found = _OFFSET_COMMENT_RE.search(line)
                 members.append({

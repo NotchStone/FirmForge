@@ -67,12 +67,15 @@ from pathlib import Path
 from typing import Any
 
 import firmforge.knowledge.extractors.cmsis_core as core
+import firmforge.knowledge.extractors.cmsis_instances as instances
 import firmforge.knowledge.extractors.stm32_devheader as dev
 
 #: 生成器版本 —— 参与 lock.json 的失效判定。
 #: **改提取逻辑必须递增它**，否则「改了规则但缓存没失效」会变成幽灵 bug。
 #: 1.1.0：并入 CMSIS 内核块（SCB / DWT / CoreDebug …），见 `cmsis_core`。
-EXTRACTOR_VERSION = "stm32-registers/1.1.0"
+#: 1.2.0：并入器件头的外设实例视图（DMA1_Stream0 / IWDG1 / DBGMCU …），
+#:        见 `cmsis_instances` —— SVD 按外设拍平编号，源码按实例指针访问。
+EXTRACTOR_VERSION = "stm32-registers/1.2.0"
 
 #: SVD 的 access 全称 → 项目 schema 的缩写。
 #: 后两条是规范允许但本机未出现的取值，一并登记免得日后静默变成 None。
@@ -605,6 +608,20 @@ def extract_stm32_registers(
         core_info["counts"] = _count_groups(
             {n: groups[n] for n in core_groups})
 
+    inst_info: dict[str, Any] | None = None
+    if header_path is not None:
+        inst_groups, inst_info = instances.build_instance_groups(
+            header_path, svd_groups=groups)
+        # 返回的组有两种：全新实例（DMA1_Stream0）与**已合并**的 SVD 组
+        # （TIM2 多了 CCMR1 这类同址别名）。后者必须整个替换掉原 SVD 组，
+        # 否则别名进不了库 —— 而 `TIM2->CCMR1` 正是源码里的常见写法。
+        merged = sorted(n for n in inst_groups if n in groups)
+        for name, grp in inst_groups.items():
+            groups[name] = grp
+        inst_info["merged_into_svd_groups"] = merged
+        inst_info["added_groups"] = sorted(n for n in inst_groups
+                                          if n not in merged)
+
     counts = _count_groups(groups)
 
     return {
@@ -613,11 +630,13 @@ def extract_stm32_registers(
         "platform": platform,
         "mcu": mcu,
         "mcu_series": mcu_series,
-        "version": "1.1.0",
+        "version": "1.2.0",
         "source": (f"Generated from CMSIS-SVD {svd_path.name} "
                    f"(device {parsed['device']}, version {parsed['version']}) "
                    + (f"+ CMSIS Core {Path(core_header).name} "
                       if core_info else "")
+                   + (f"+ CMSIS device {Path(header_path).name} "
+                      if inst_info else "")
                    + f"by {EXTRACTOR_VERSION}"),
         "description": ("寄存器骨架 —— 由厂商 CMSIS-SVD 生成，**不含**寄存器/位域"
                         "的语义描述与数据手册章节引用（与 AVR 骨架同口径）。"
@@ -627,7 +646,13 @@ def extract_stm32_registers(
                            "MPU / FPU / CoreDebug / SCnSCB）取自 ARM 官方 "
                            "CMSIS Core 头，**不用 SVD 的写法** —— 源码里写的、"
                            "编译器认的都是 CMSIS 结构体成员名。"
-                           if core_info else "真机验证前属 known 级。")),
+                           if core_info else "")
+                        + ("设备外设实例（DMA1_Stream0..7 / BDMA_Channel* / "
+                           "DFSDM1_* / IWDG1 / WWDG1 / DBGMCU …）取自器件头，"
+                           "SVD 把这些按外设拍平编号（DMA1.S0CR），源码用的是"
+                           "实例指针（DMA1_Stream0->CR），两边都得有。"
+                           if inst_info else "")
+                        + ("真机验证前属 known 级。")),
         "register_groups": groups,
         "_generator": {
             "name": "firmforge.knowledge.extractors.stm32_registers",
@@ -662,6 +687,19 @@ def extract_stm32_registers(
                 "unresolved_fields": core_info["unresolved_fields"][:50],
                 "sha256": sha256_of(core_header),
             } if core_info else None),
+            "instances": ({
+                **inst_info,
+                # 与 header 同理：明细留头部，全量靠重跑定位。
+                "problems": inst_info["problems"][:50],
+                "added_groups": inst_info["added_groups"][:200],
+                "merged_into_svd_groups": inst_info["merged_into_svd_groups"][:200],
+                "offset_conflicts": inst_info["offset_conflicts"][:50],
+                "base_offset_notes": inst_info["base_offset_notes"][:50],
+                "svd_name_differences": inst_info["svd_name_differences"][:100],
+                "address_not_in_svd": inst_info["address_not_in_svd"][:100],
+                "not_modeled_by_svd": inst_info["not_modeled_by_svd"][:100],
+                "sha256": sha256_of(header_path),
+            } if inst_info else None),
             "counts": counts,
             # SVD 侧的原始规模 —— 供核对「内核块到底补了多少」
             "svd_counts": svd_counts,
@@ -858,11 +896,13 @@ def main(argv: list[str] | None = None) -> int:
     counts = result["_generator"]["counts"]
     svd_counts = result["_generator"]["svd_counts"]
     core_info = result["_generator"].get("core") or {}
+    inst_info = result["_generator"].get("instances") or {}
     align = (result["_generator"].get("header") or {}).get("alignment") or {}
     if args.as_json:
         print(json.dumps({"output": str(out), "lock": str(lock_path),
                           "counts": counts, "svd_counts": svd_counts,
-                          "core": core_info, "alignment": align},
+                          "core": core_info, "instances": inst_info,
+                          "alignment": align},
                          ensure_ascii=False, indent=2))
         return 0
 
@@ -881,6 +921,21 @@ def main(argv: list[str] | None = None) -> int:
         if core_info["unresolved_fields"]:
             print(f"  ! 位号求值不出 {len(core_info['unresolved_fields'])} 条")
         for problem in core_info["problems"]:
+            print(f"  ! {problem}")
+    if inst_info:
+        ic = inst_info["counts"]
+        print(f"  其中设备实例: 新增寄存器 {ic['registers']} / 同址别名 "
+              f"{ic['aliases_merged']}"
+              f"（并入 {inst_info['source_file']}，"
+              f"新增组 {len(inst_info['added_groups'])} 个，"
+              f"合并进 SVD 组 {len(inst_info['merged_into_svd_groups'])} 个）")
+        if inst_info["offset_conflicts"]:
+            print(f"  ! 实例偏移交叉验证不一致 "
+                  f"{len(inst_info['offset_conflicts'])} 条")
+        if inst_info["not_modeled_by_svd"]:
+            print(f"  · SVD 未建模的地址 {len(inst_info['not_modeled_by_svd'])} 个"
+                  f"（共用结构体里的多余字段，**不收录**；明细见 _generator）")
+        for problem in inst_info["problems"]:
             print(f"  ! {problem}")
     if align:
         print(f"器件头对齐: 命中 {align['fields_aligned']}，"

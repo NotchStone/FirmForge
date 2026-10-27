@@ -255,7 +255,17 @@ def test_generator_is_bit_reproducible(data, tmp_path):
 
         if i == 0:
             align = result["_generator"]["header"]["alignment"]
-            assert result["_generator"]["counts"]["peripherals"] == 128
+            counts = result["_generator"]["counts"]
+            svd_counts = result["_generator"]["svd_counts"]
+            inst = result["_generator"].get("instances") or {}
+            # 不写死总组数：知识库补一块（内核块 / 器件头实例视图），总数就变。
+            # 写死会让「测试红灯」被训练成「改个数字就好」，真正该守的东西
+            # （SVD 侧规模没变、总组数恰好是 SVD + 新增实例）反而失守。
+            assert svd_counts["peripherals"] == 128, "SVD 侧外设规模变了"
+            assert svd_counts["registers"] == 2955, "SVD 侧寄存器规模变了"
+            assert counts["peripherals"] == (
+                svd_counts["peripherals"] + len(inst["added_groups"])), \
+                "总组数 ≠ SVD 组数 + 器件头新增组数 —— 有组被静默吞掉或重复计数"
             assert align["peripherals_mapped"] == 115
             assert align["fields_aligned"] > 8000
             assert align["registers_conflict"] == 0

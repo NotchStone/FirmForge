@@ -85,6 +85,73 @@ def test_dot_form_is_recognised(h743):
     assert res.registers_checked >= 1
 
 
+def test_unknown_peripheral_on_arrow_is_reported(h743):
+    """``GPIOZ->BSRR``：外设名写错不能静默。
+
+    实测 2026-10-27 在线验证时发现：``periph not in peripherals`` 直接
+    ``continue``，连 ``registers_checked`` 都不加 —— 源码里明明引用了一个
+    不存在的外设，审查报告却是「0 处检查、PASS」，等于把线索吞掉。
+    ``['BSRR']`` 在库里属于 GPIOA，这个组合几乎只可能是外设名写错。
+
+    只报 warning 不阻断：``GPIOZ`` 未声明，gcc 必然拒 —— 编译才是这类错
+    的守门员，S2 只负责把线索交出来。
+    """
+    _cfg, rv = h743
+    res = _review(rv, "  GPIOZ->BSRR = 1;")
+    assert res.passed is True, "不该替编译器下判决"
+    assert "GPIOZ.BSRR" in {w.register for w in res.warnings}
+    assert res.registers_checked >= 1, "报了就得算进检查数，否则计数又在说谎"
+    warn = next(w for w in res.warnings if w.register == "GPIOZ.BSRR")
+    assert "GPIOZ" in warn.reason and "BSRR" in warn.reason
+
+
+def test_unknown_peripheral_warning_is_deduplicated(h743):
+    """同一个错写在不同行上只报一次，不然 20 行能把日志淹了。"""
+    _cfg, rv = h743
+    res = _review(rv,
+                  "  GPIOZ->BSRR = 1;\n"
+                  "  GPIOZ->BSRR = 2;\n"
+                  "  GPIOZ->BSRR = 3;")
+    hits = [w for w in res.warnings if w.register == "GPIOZ.BSRR"]
+    assert len(hits) == 1
+
+
+def test_unknown_peripheral_with_dot_stays_silent(h743):
+    """``A.B`` 形态保持静默 —— 它更可能是结构体成员链，不是外设。
+
+    外设访问在 CMSIS 里一律走 ``->``；``.`` 出现在 HAL 结构体成员链上
+    （``osc.PLL.PLLM``）的概率远高于外设。用 ``.`` 报错会把正常 HAL
+    配置代码全部打成可疑。
+    """
+    _cfg, rv = h743
+    res = _review(rv, "  GPIOZ.BSRR = 1;")
+    assert res.warnings == []
+
+
+def test_hal_struct_member_chain_is_not_a_register(h743):
+    """``osc.PLL.PLLM = ...`` 是 HAL 结构体成员，不是寄存器赋值。
+
+    实测 ``bsp_init.c`` 上误报 8 条（PLLM/PLLN/PLLP/PLLQ/PLLR/PLLRGE/
+    PLLVCOSEL/PLLFRACN，全部是 ``RCC_OscInitTypeDef::PLL`` 的成员），
+    把寄存器审查计数污染成 ``2/10`` —— 让人以为有 8 个寄存器没解析出来。
+    根因：赋值上下文的 ``\\b`` 在 ``.`` 与 ``P`` 之间成立。
+    """
+    _cfg, rv = h743
+    body = (
+        "  RCC_OscInitTypeDef o = {0};\n"
+        "  o.PLL.PLLM = 5;\n"
+        "  o.PLL.PLLN = 160;\n"
+        "  o.PLL.PLLP = 2;\n"
+        "  o.PLL.PLLRGE = 1;\n"
+        "  o.PLL.PLLVCOSEL = 0;\n"
+        "  o.PLL.PLLFRACN = 0;"
+    )
+    res = _review(rv, body)
+    assert res.violations == []
+    assert res.warnings == [], "成员名被当寄存器查，噪声会淹没真问题"
+    assert res.registers_checked == 0
+
+
 # --------------------------------------------------------------------------
 # 2. 位宏：全名命中 / 前缀命中 / 两者都不命中
 # --------------------------------------------------------------------------
