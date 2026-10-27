@@ -141,6 +141,8 @@ class SourceReviewViolation:
     Attributes:
         register: Register or field name found in code.
         field: Field name if applicable (empty for register-level).
+        file: Source file the reference came from (基名或相对路径)。
+            跨文件聚合时这是定位的唯一线索，缺了等于只能靠数数。
         line: 1-based line number in source code.
         line_text: The actual source line text.
         severity: "error" (blocks compilation) or "warning" (informational).
@@ -150,6 +152,7 @@ class SourceReviewViolation:
 
     register: str
     field: str = ""
+    file: str = ""
     line: int = 0
     line_text: str = ""
     severity: str = "error"
@@ -157,7 +160,8 @@ class SourceReviewViolation:
     suggestion: str = ""
 
     def __str__(self) -> str:
-        loc = f"line {self.line}" if self.line else "unknown line"
+        loc = f"{self.file}:{self.line}" if self.file and self.line \
+            else (f"line {self.line}" if self.line else "unknown line")
         target = f"{self.register}.{self.field}" if self.field else self.register
         return f"[{self.severity.upper()}] {loc}: {target} -- {self.reason}"
 
@@ -578,11 +582,19 @@ class SourceReviewer:
                     ))
                     result.passed = False
 
-        logger.info("Source review: %s (registers %d/%d, fields %d/%d)",
+        logger.info("Source review: %s (registers %d/%d, fields %d/%d, %s)",
                      "PASS" if result.passed else "FAIL",
                      result.registers_resolved, result.registers_checked,
-                     result.fields_resolved, result.fields_checked)
+                     result.fields_resolved, result.fields_checked,
+                     filename)
 
+        # 文件名必须在**每一条**违规上落地。跨文件聚合后如果只有计数、没有
+        # 文件名，读日志的人只能自己 import 本模块逐个文件跑一遍才能定位
+        # —— 这件事真实发生过（2026-10-27，用户用脚本逐个 validate_file 才
+        # 找到 blackbox.c:161）。文件名是诊断的一部分，不是装饰。
+        for item in (*result.violations, *result.warnings):
+            if not item.file:
+                item.file = filename
         return result
 
     @staticmethod
@@ -685,4 +697,11 @@ class SourceReviewer:
             )
 
         source = p.read_text(encoding="utf-8", errors="replace")
-        return self.validate(source, filename=str(p.name))
+        # 传**相对路径**（能带上子目录），不是 basename：同目录下可能有两份
+        # 同名头文件，只给基名等于制造歧义。
+        label = str(p)
+        try:
+            label = p.resolve().as_posix()
+        except OSError:
+            pass
+        return self.validate(source, filename=label)

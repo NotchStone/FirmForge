@@ -250,6 +250,34 @@ class TestFileValidation:
         assert result.passed is False
         assert "File not found" in result.violations[0].reason
 
+    def test_violations_carry_the_filename(self, validator: SourceReviewer,
+                                           tmp_path):
+        """违规条目必须带文件名 —— 否则日志里只有「registers 7/9」。
+
+        2026-10-27 的真实经历：只输出 `Source review: FAIL (registers 7/9,
+        fields 0/0)`，没有文件、没有行号、没有寄存器名，`--verbose` 也没用，
+        最后只能自己写脚本 import SourceReviewer 逐个文件跑，才定位到
+        `blackbox.c:161` / `bsp_init.c:439`。工具的结论里必须自带落点。
+        """
+        f = tmp_path / "blackbox.c"
+        f.write_text("DDRB = 0xFF;\nPORTZ = 0xFF;\n", encoding="utf-8")
+
+        result = validator.validate_file(str(f))
+
+        assert result.passed is False
+        violation = next(v for v in result.violations if v.register == "PORTZ")
+        assert violation.file.endswith("blackbox.c"), "缺文件名就无法定位"
+        assert violation.line >= 1
+        assert "blackbox.c" in str(violation), "__str__ 也要带文件名"
+
+    def test_validate_labels_violations_with_the_filename(self,
+                                                          validator):
+        """`validate(code)` 没有路径可依，调用方给的 filename 要被填进去。"""
+        result = validator.validate("PORTZ = 0xFF;\n",
+                                    filename="src/bsp_init.c")
+        v = next(v for v in result.violations if v.register == "PORTZ")
+        assert v.file == "src/bsp_init.c"
+
 
 # Statistics tests ----------------------------------------------------------
 

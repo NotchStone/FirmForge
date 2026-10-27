@@ -185,6 +185,40 @@ class Stm32BuildProvider(BuildProvider):
         from firmforge.providers.stm32.toolchain import version_of
         return version_of(self._toolchain.gcc)
 
+    def cppcheck_context(self) -> "CppcheckContext":
+        """S2 静态分析的编译上下文（include / 宏 / 编译器内建宏 / 问题）。
+
+        纪律：**与 `_common_flags()` 同源**。缺 include 时 cppcheck 会把
+        `#include "stm32h7xx_hal.h"` 报成 missingInclude，并让整个 TU 的
+        `#if` 按"宏未定义"取值 —— 那时它给出的诊断与真实编译对象无关。
+        宏同理：`STM32H743xx` 缺失会让器件条件编译段整段落空。
+
+        编译器内建宏（`__GNUC__` / `__arm__` / `__ARM_ARCH_7EM__`）必须一起给：
+        cppcheck 不预定义它们，`cmsis_compiler.h` 会因此落到
+        `#error Unknown compiler`，报出来的是一条**假 error**。
+        """
+        from firmforge.providers.cppcheck_support import (
+            CppcheckContext, predefines_header)
+
+        lay = self._resolve_sdk()
+        defines = [str(d) for d in (self._build_cfg.get("defines") or [])]
+        ctx = CppcheckContext(include_dirs=list(lay.includes), defines=defines,
+                              problems=list(lay.problems))
+        # 厂家 SDK 根：CMSIS / HAL / device 三件套全在 packages/stm32 下。
+        ctx.vendor_roots = [str(paths.packages_dir() / "stm32")]
+
+        fpu = self._build_cfg.get("fpu", "fpv5-d16")
+        abi = self._build_cfg.get("float_abi", "hard")
+        header, why = predefines_header(
+            self._toolchain.gcc,
+            ["-mcpu=cortex-m7", "-mthumb", f"-mfpu={fpu}", f"-mfloat-abi={abi}"],
+            tag="stm32h7")
+        if header:
+            ctx.force_includes.append(header)
+        elif why:
+            ctx.problems.append(f"编译器内建宏不可用：{why}")
+        return ctx
+
     # ------------------------------------------------------------------
     # SDK 与板级文件解析
     # ------------------------------------------------------------------

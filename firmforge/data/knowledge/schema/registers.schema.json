@@ -160,8 +160,8 @@
           "description": "SVD 里的原名（仅当与 name 不同时出现）。STM32 路线的 name 取**器件头宏基名**（源码里出现的是它，如 GPIO_MODER_MODER0_Pos 去掉 _Pos），SVD 的叫法（MODE0）留在这里供回溯。"
         },
         "name_source": {
-          "enum": ["norm", "digit", "prefix", "numbered"],
-          "description": "名字的命中档位。缺省 = exact（精确键）。norm/digit/prefix 是降级兜底，出现即说明两边命名口径不一致，核对时可优先看这些条目。"
+          "enum": ["norm", "digit", "prefix", "numbered", "cmsis_macro"],
+          "description": "名字的来源与命中档位。缺省 = exact（精确键）。norm/digit/prefix/numbered 是对齐器件头时的降级兜底，出现即说明两边命名口径不一致，核对时可优先看这些条目；cmsis_macro 表示该位域名直接取自 ARM CMSIS Core 头里的位域宏（`SCB_CFSR_IBUSERR` 这类），不对应器件头，属内核外设的正常形态。"
         },
         "bit_source": {
           "enum": ["svd", "header"],

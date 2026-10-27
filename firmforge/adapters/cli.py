@@ -19,6 +19,7 @@ import json
 import logging
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from firmforge import __version__
@@ -957,7 +958,13 @@ def _json_mode_loop() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Main entry point for ff CLI."""
+    """Main entry point for ff CLI.
+
+    `--json` 调用方（Agent / 集成层）必须永远拿到一个 JSON 对象：
+    旧实现在中途抛异常时**一行都不输出**，重定向得到 0 字节，
+    调用方只能去 import 内部 API 才能取结果 —— 那等于把结构化接口废掉。
+    现在任何未捕获异常都会落成一个 `{"error": ...}` 帧。
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(levelname)s [%(name)s] %(message)s",
@@ -969,6 +976,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_mode:
         return _json_mode_loop()
 
+    try:
+        return _dispatch(args, parser)
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:                       # noqa: BLE001 — 顶层兜底
+        logger.error("命令执行失败：%s", exc)
+        logging.getLogger(__name__).debug("traceback", exc_info=True)
+        if getattr(args, "json", False):
+            return _json_out({
+                "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(),
+            }, 2)
+        raise
+
+
+def _dispatch(args, parser) -> int:
+    """按子命令分发。抽出来是为了让 `main()` 有一处统一的异常出口。"""
     if args.command == "detect":
         return cmd_detect(args)
     elif args.command == "run":

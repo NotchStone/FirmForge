@@ -148,11 +148,53 @@ def test_context_avr_specs(ctx):
 
 def test_context_registers_topic_is_a_mode_not_a_keyword(ctx):
     """``--topic registers`` 是主题。曾经被当成关键字，永远返回 0 条。"""
+    import json
+
+    from firmforge.knowledge.extractors.stm32_registers import registers_path
+
+    payload = json.loads(
+        registers_path("stm32h743zit6", series="stm32h7")
+        .read_text(encoding="utf-8"))
+
     p = ctx("gc_h743", "registers")
     assert p["topic_mode"] == "registers"
-    assert p["register_total"] == 2955
-    assert len(p["register_groups"]) == 128
+    # 对着产物自己的计数断言，而不是写死 2955/128 —— 那些数字随 CMSIS 头
+    # 与 SVD 版本漂移，写死只会让每次重新生成都要改测试，却证明不了
+    # 「context 报的数与库里的数一致」这件真正要守的事。
+    assert p["register_total"] == payload["_generator"]["counts"]["registers"]
+    assert (len(p["register_groups"])
+            == payload["_generator"]["counts"]["peripherals"])
     assert p["registers"], "概览至少要给几条样例"
+
+
+def test_context_registers_include_cmsis_core_block(ctx):
+    """内核外设必须在库里 —— 缺了它，诊断/计时类固件的源审查恒定失败。
+
+    `SCB` / `NVIC` / `MPU` / `FPU` 在 SVD 里也有，但寄存器名是 SVD 自己的
+    写法（`CFSR_UFSR_BFSR_MMFSR` / `SHCRS`），源码写 `SCB->CFSR` 查不到就
+    被判成幻觉寄存器；`DWT` / `CoreDebug` / `SysTick` / `ITM` / `TPI` 则
+    整个不在 SVD 里。这条测试盯的是「这些名字查得到」，不是「组数对不对」。
+    """
+    p = ctx("gc_h743", "registers")
+    groups = set(p["register_groups"])
+    assert {"SCB", "DWT", "CoreDebug", "SysTick", "ITM", "NVIC"} <= groups
+
+    # (外设, 寄存器, 是否必须有位域)。CYCCNT 是纯计数器，没有位域是正常的。
+    for probe, register, want_fields in (
+            ("SCB", "CFSR", True),        # 崩溃转储要 SCB_CFSR_IBUSERR 这类宏
+            ("SCB", "SHCSR", True),       # SVD 拼成 SHCRS，源码写 SHCSR
+            ("DWT", "CYCCNT", False),     # 周期计时只要地址
+            ("CoreDebug", "DEMCR", True)):
+        q = ctx("gc_h743", f"{probe}.{register}")
+        hit = [r for r in q["registers"]
+               if r["group"] == probe and r["name"] == register]
+        assert hit, f"{probe}.{register} 不在库里 —— 会被判成幻觉寄存器"
+        if want_fields:
+            assert hit[0].get("fields"), f"{probe}.{register} 没有位域"
+
+    # SVD 的写法不该再出现（留着等于允许源码写一个编译器不认的寄存器名）
+    q = ctx("gc_h743", "SCB.CFSR_UFSR_BFSR_MMFSR")
+    assert not q["registers"], "SVD 的 SCB 寄存器名未被 CMSIS 名字替换"
 
 
 def test_context_peripheral_query(ctx):

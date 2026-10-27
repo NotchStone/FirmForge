@@ -66,11 +66,13 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+import firmforge.knowledge.extractors.cmsis_core as core
 import firmforge.knowledge.extractors.stm32_devheader as dev
 
 #: 生成器版本 —— 参与 lock.json 的失效判定。
 #: **改提取逻辑必须递增它**，否则「改了规则但缓存没失效」会变成幽灵 bug。
-EXTRACTOR_VERSION = "stm32-registers/1.0.0"
+#: 1.1.0：并入 CMSIS 内核块（SCB / DWT / CoreDebug …），见 `cmsis_core`。
+EXTRACTOR_VERSION = "stm32-registers/1.1.0"
 
 #: SVD 的 access 全称 → 项目 schema 的缩写。
 #: 后两条是规范允许但本机未出现的取值，一并登记免得日后静默变成 None。
@@ -526,6 +528,7 @@ def extract_stm32_registers(
     chip_slug: str | None = None,
     header_path: Path | str | None = None,
     known_issues: list[Any] | None = None,
+    core_header: Path | str | None = None,
 ) -> dict[str, Any]:
     """生成一份 registers.json。
 
@@ -535,6 +538,14 @@ def extract_stm32_registers(
     给了 `header_path` 就走第二来源对齐（位域名取器件头宏基名、位号按
     裁定表定夺）；不给则只产 SVD 原始骨架 —— 那种数据的位域名源码里
     根本不会出现，**只配调试，不该入库**。
+
+    给了 `core_header`（`core_cm7.h`）就并入 **CMSIS 内核块**。这一步不是
+    可有可无的补全：SVD 里的 `SCB` / `NVIC` / `MPU` / `FPU` 用的是 SVD 自己
+    的寄存器名（`CFSR_UFSR_BFSR_MMFSR`、`SHCRS`），源码写的是
+    `SCB->CFSR` / `SCB->SHCSR`，对不上就被 S2 判成幻觉寄存器；而
+    `DWT` / `CoreDebug` / `SysTick` / `ITM` / `TPI` **根本没进 SVD**。
+    不并这一块，任何用异常栈帧或 `DWT->CYCCNT` 计时的固件都会恒定
+    源审查失败。详见 `cmsis_core` 的模块注释。
     """
     svd_path = Path(svd_path)
     parsed = parse_svd(svd_path)
@@ -547,7 +558,6 @@ def extract_stm32_registers(
             known_issues=known_issues)
 
     groups: dict[str, dict[str, Any]] = {}
-    n_regs = n_fields = 0
     for per in parsed["peripherals"]:
         rows: list[dict[str, Any]] = []
         for reg in per["registers"]:
@@ -567,9 +577,7 @@ def extract_stm32_registers(
                 entry["address_source"] = reg["address_source"]
             if reg.get("fields"):
                 entry["fields"] = reg["fields"]
-                n_fields += len(reg["fields"])
             rows.append(entry)
-            n_regs += 1
 
         if not rows:
             continue
@@ -578,20 +586,48 @@ def extract_stm32_registers(
             desc += f", groupName {per['group_name']}"
         groups[per["name"]] = {"description": desc, "registers": rows}
 
+    # 计数先在并入内核块之前存一份 —— 之后就查不到 SVD 侧的原始规模了，
+    # 而「SVD 收了多少 / 内核块补了多少」是两份独立证据，报告里要分开。
+    svd_counts = _count_groups(groups)
+
+    core_info: dict[str, Any] | None = None
+    if core_header is not None:
+        core_header = Path(core_header)
+        core_groups, core_info = core.build_core_groups(core_header,
+                                                       svd_groups=groups)
+        # 同名组由 CMSIS 覆盖：源码里写的是 CMSIS 结构体成员名，SVD 的写法
+        # 在这几个内核外设上反而是错的一方（`SHCRS` 是 SVD 自己的拼写错误）。
+        # 被覆盖的 SVD 组不静默丢弃 —— 名字差异逐条记进 core_info。
+        replaced = sorted(n for n in core_groups if n in groups)
+        for name, grp in core_groups.items():
+            groups[name] = grp
+        core_info["replaced_svd_groups"] = replaced
+        core_info["counts"] = _count_groups(
+            {n: groups[n] for n in core_groups})
+
+    counts = _count_groups(groups)
+
     return {
         "$schema": "knowledge/schema/registers.schema.json",
         "$id": f"cache/knowledge/{platform}/{slug}/registers.json",
         "platform": platform,
         "mcu": mcu,
         "mcu_series": mcu_series,
-        "version": "1.0.0",
+        "version": "1.1.0",
         "source": (f"Generated from CMSIS-SVD {svd_path.name} "
                    f"(device {parsed['device']}, version {parsed['version']}) "
-                   f"by {EXTRACTOR_VERSION}"),
+                   + (f"+ CMSIS Core {Path(core_header).name} "
+                      if core_info else "")
+                   + f"by {EXTRACTOR_VERSION}"),
         "description": ("寄存器骨架 —— 由厂商 CMSIS-SVD 生成，**不含**寄存器/位域"
                         "的语义描述与数据手册章节引用（与 AVR 骨架同口径）。"
                         "分组 key 是 SVD 的外设层级；寄存器为裸名，"
-                        "限定名按 '外设.寄存器' 现拼。真机验证前属 known 级。"),
+                        "限定名按 '外设.寄存器' 现拼。"
+                        + ("内核外设（SCB / NVIC / SysTick / ITM / DWT / TPI / "
+                           "MPU / FPU / CoreDebug / SCnSCB）取自 ARM 官方 "
+                           "CMSIS Core 头，**不用 SVD 的写法** —— 源码里写的、"
+                           "编译器认的都是 CMSIS 结构体成员名。"
+                           if core_info else "真机验证前属 known 级。")),
         "register_groups": groups,
         "_generator": {
             "name": "firmforge.knowledge.extractors.stm32_registers",
@@ -617,12 +653,34 @@ def extract_stm32_registers(
                     "register_conflicts": alignment["register_conflicts"][:50],
                 },
             } if header_path is not None else None),
-            "counts": {
-                "peripherals": len(groups),
-                "registers": n_regs,
-                "fields": n_fields,
-            },
+            "core": ({
+                **core_info,
+                # 与 header 同理：明细留头部，全量靠重跑定位。
+                "problems": core_info["problems"][:50],
+                "offset_conflicts": core_info["offset_conflicts"][:50],
+                "svd_name_differences": core_info["svd_name_differences"][:100],
+                "unresolved_fields": core_info["unresolved_fields"][:50],
+                "sha256": sha256_of(core_header),
+            } if core_info else None),
+            "counts": counts,
+            # SVD 侧的原始规模 —— 供核对「内核块到底补了多少」
+            "svd_counts": svd_counts,
         },
+    }
+
+
+def _count_groups(groups: dict[str, dict[str, Any]]) -> dict[str, int]:
+    """从分组表**数**规模，而不是在循环里累加。
+
+    累加器的问题是「并组 / 覆盖 / 跳过」之后容易与真实内容脱节，而这份
+    数字要进 lock.json 参与比对 —— 数出来的不会错位。
+    """
+    return {
+        "peripherals": len(groups),
+        "registers": sum(len(g.get("registers", ())) for g in groups.values()),
+        "fields": sum(len(r.get("fields", ()))
+                      for g in groups.values()
+                      for r in g.get("registers", ())),
     }
 
 
@@ -712,7 +770,8 @@ def main(argv: list[str] | None = None) -> int:
     Usage::
 
         python -m firmforge.knowledge.extractors.stm32_registers \\
-            [--mcu stm32h743zit6] [--svd PATH] [--header PATH] [--out PATH]
+            [--mcu stm32h743zit6] [--svd PATH] [--header PATH]
+            [--core-header PATH] [--out PATH]
     """
     import argparse
 
@@ -722,9 +781,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--series", help="芯片系列（缺省按型号推：stm32h743zit6 -> stm32h7）")
     ap.add_argument("--svd", type=Path, help="SVD 路径（缺省查 B 区缓存）")
     ap.add_argument("--header", type=Path, help="器件头路径（缺省查 packages）")
+    ap.add_argument("--core-header", type=Path,
+                    help="CMSIS Core 头路径（缺省查 packages/stm32/cmsis_5）")
     ap.add_argument("--out", type=Path, help="输出路径（缺省 B 区 cache）")
     ap.add_argument("--no-align", action="store_true",
                     help="跳过器件头对齐（仅调试；产物位域名是 SVD 名）")
+    ap.add_argument("--no-core", action="store_true",
+                    help="不并入内核寄存器块（仅调试；SCB/DWT/CoreDebug 将缺失）")
     ap.add_argument("--json", action="store_true", dest="as_json")
     args = ap.parse_args(argv)
 
@@ -753,13 +816,39 @@ def main(argv: list[str] | None = None) -> int:
             print(f"找不到器件头: {header}", file=sys.stderr)
             return 2
 
+    core_header: Path | None = None
+    if not args.no_core:
+        core_header = args.core_header or core.default_core_header()
+        if core_header is None or not core_header.is_file():
+            # 缺内核块不是「少一点数据」：SCB / DWT 缺失会让任何做异常
+            # 栈帧或周期计时的固件在源审查里恒定失败。所以默认行为是
+            # 报错退出，要生成残缺数据必须显式 --no-core。
+            from firmforge.infrastructure import paths
+            print("找不到 CMSIS Core 头（core_cm7.h），已查 "
+                  f"{paths.packages_dir() / 'stm32' / 'cmsis_5'}/<ver>/"
+                  "CMSIS/Core/Include/\n"
+                  "    下载 ARM-software/CMSIS_5 的 CMSIS/Core/Include 到该"
+                  "目录即可，或用 --core-header 指定；\n"
+                  "    确认要生成缺内核块的数据请显式 --no-core。",
+                  file=sys.stderr)
+            return 2
+
     t0 = time.time()
-    result = extract_stm32_registers(svd, mcu=args.mcu, header_path=header)
+    result = extract_stm32_registers(svd, mcu=args.mcu, header_path=header,
+                                     core_header=core_header)
     out = Path(args.out) if args.out else registers_path(args.mcu, series=series)
     write_registers(result, out)
 
-    params = {"mcu": args.mcu, "mcu_series": series, "align": header is not None}
+    params = {
+        "mcu": args.mcu, "mcu_series": series,
+        "align": header is not None,
+        # 内核块的有无 / 版本会改变份数据内容，必须进参数指纹，
+        # 否则换一份 CMSIS 头重跑会被判成「一致即复用」。
+        "core": core_header.name if core_header else None,
+    }
     inputs: list[Path] = [svd] + ([header] if header else [])
+    if core_header:
+        inputs.append(core_header)
     lock = build_lock(result, output_path=out, inputs=inputs, params=params,
                       elapsed_ms=(time.time() - t0) * 1000)
     lock_path = out.parent / "lock.json"
@@ -767,15 +856,32 @@ def main(argv: list[str] | None = None) -> int:
                          encoding="utf-8")
 
     counts = result["_generator"]["counts"]
+    svd_counts = result["_generator"]["svd_counts"]
+    core_info = result["_generator"].get("core") or {}
     align = (result["_generator"].get("header") or {}).get("alignment") or {}
     if args.as_json:
         print(json.dumps({"output": str(out), "lock": str(lock_path),
-                          "counts": counts, "alignment": align},
+                          "counts": counts, "svd_counts": svd_counts,
+                          "core": core_info, "alignment": align},
                          ensure_ascii=False, indent=2))
         return 0
 
     print(f"寄存器 {counts['registers']} / 位域 {counts['fields']} "
           f"/ 外设 {counts['peripherals']}")
+    if core_info:
+        cc = core_info["counts"]
+        print(f"  其中内核块: 寄存器 {cc['registers']} / 位域 {cc['fields']} "
+              f"/ 外设 {cc['peripherals']}"
+              f"（并入 {core_info['source_file']}，"
+              f"覆盖 SVD 同名组 {', '.join(core_info['replaced_svd_groups']) or '无'}）")
+        print(f"  SVD 侧原始: 寄存器 {svd_counts['registers']} / "
+              f"位域 {svd_counts['fields']} / 外设 {svd_counts['peripherals']}")
+        if core_info["offset_conflicts"]:
+            print(f"  ! 内核寄存器偏移交叉验证不一致 {len(core_info['offset_conflicts'])} 条")
+        if core_info["unresolved_fields"]:
+            print(f"  ! 位号求值不出 {len(core_info['unresolved_fields'])} 条")
+        for problem in core_info["problems"]:
+            print(f"  ! {problem}")
     if align:
         print(f"器件头对齐: 命中 {align['fields_aligned']}，"
               f"改名 {align['fields_renamed']}")

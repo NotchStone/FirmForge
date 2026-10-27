@@ -504,6 +504,99 @@ class ArduinoBuildProvider(BuildProvider):
                 pass
         return False
 
+    # ------------------------------------------------------------------
+    # 编译上下文复用（S2 静态分析要用与编译**同一份** include / 宏）
+    # ------------------------------------------------------------------
+
+    def _core_base(self) -> str:
+        """Arduino Core 根目录：B 区 packages 优先，A 区 vendor 兜底。
+
+        找不到返回 `""` —— 调用方自己判断"缺什么、怎么办"，不在里层编默认值。
+        """
+        import os
+        from firmforge.core.resources import vendor_dir as _vendor_dir
+        for candidate in [
+            str(paths.packages_dir() / "arduino" / "avr" / "1.8.6"),
+            os.path.join(str(_vendor_dir()), "arduino"),
+        ]:
+            if os.path.exists(os.path.join(candidate, "cores", "arduino", "Arduino.h")):
+                return os.path.abspath(candidate)
+        return ""
+
+    def _arduino_libraries(self, core_base: str) -> tuple[list[str], list[str]]:
+        """Arduino 库的 (include 目录, 需参与链接的源文件)。
+
+        源文件筛选规则同 Arduino IDE：库根目录的文件 + `avr/` + `utility/`
+        子目录，避开多平台实现（Servo 的 `sam/`、`esp8266/`）造成的重复符号。
+        """
+        import os
+        lib_base = os.path.join(core_base, "libraries")
+        dirs: list[str] = []
+        sources: list[str] = []
+        if not core_base or not os.path.isdir(lib_base):
+            return dirs, sources
+        for lib_dir in os.listdir(lib_base):
+            src_dir = os.path.join(lib_base, lib_dir, "src")
+            if not os.path.isdir(src_dir):
+                continue
+            dirs.append(src_dir)
+            _avr_prefixes = ("", "avr", "utility")
+            for ext in ("*.c", "*.cpp", "*.S"):
+                for f in sorted(Path(src_dir).rglob(ext)):
+                    rel = f.relative_to(src_dir)
+                    if len(rel.parts) == 1 or rel.parts[0] in _avr_prefixes:
+                        sources.append(str(f))
+            util_dir = os.path.join(src_dir, "utility")
+            if os.path.isdir(util_dir):
+                dirs.append(util_dir)
+            logger.debug("Library: %s (+%d sources)", src_dir, len(sources))
+        return dirs, sources
+
+    def cppcheck_context(self):
+        """S2 静态分析的编译上下文（include / 宏 / 编译器内建宏 / 问题）。
+
+        纪律：**必须与 `_compile_with_arduino_core()` 同源**。给 cppcheck 另一份
+        include 等于让它分析"另一个工程"，诊断看着像样、对象却不是同一份代码。
+
+        `defines` 不带 `-D` 前缀（由 cppcheck 模块统一拼）。`AVR`/`F_CPU`
+        这类宏缺失会让 `#if` 分支取错，是"位号自检 `#error` 恒真"的根因；
+        编译器内建宏（`__AVR__` / `__GNUC__` / `__AVR_ATmega2560__`）同理，
+        而且 avr-gcc 的 `-mmcu=` 会改变它们，所以必须带上同一个 `-mmcu`。
+        """
+        import os
+        from firmforge.providers.cppcheck_support import (
+            CppcheckContext, predefines_header)
+
+        core_base = self._core_base()
+        if not core_base:
+            return CppcheckContext(
+                problems=["Arduino Core 未安装 —— 静态分析缺少 include 路径"])
+        core_inc = os.path.join(core_base, "cores", "arduino")
+        variant_inc = os.path.join(core_base, "variants", self._resolve_variant())
+        lib_dirs, _ = self._arduino_libraries(core_base)
+        ctx = CppcheckContext(include_dirs=[core_inc, variant_inc, *lib_dirs])
+        ctx.vendor_roots = [core_base] if core_base else []
+        ctx.defines = [
+            f"F_CPU={self._parse_f_cpu(self._board_config)}UL",
+            f"ARDUINO={self._get_arduino_version()}",
+            "ARDUINO_ARCH_AVR",
+            "AVR",
+        ]
+        for d in self._get_board_defines():
+            ctx.defines.append(d[2:] if d.startswith("-D") else d)
+
+        header, why = predefines_header(
+            self._toolchain.avr_gcc, [f"-mmcu={self._mcu}"],
+            tag=f"avr_{self._mcu}")
+        if header:
+            ctx.force_includes.append(header)
+        elif why:
+            ctx.problems.append(f"编译器内建宏不可用：{why}")
+
+        if not os.path.exists(os.path.join(core_inc, "Arduino.h")):
+            ctx.problems.append(f"Arduino.h 不在 {core_inc}")
+        return ctx
+
     def _compile_with_arduino_core(
         self, user_sources: list[str], elf_path: str, hex_path: str,
     ) -> tuple[str, str, int]:
@@ -524,16 +617,7 @@ class ArduinoBuildProvider(BuildProvider):
         # A区 = vendor/arduino/ (bundled fallback inside firmforge/data/vendor)
         # TODO: read version from vendor/manifests/core/arduino_avr_core.yaml
         #       when package_manager is introduced (planned with STM32 expansion).
-        from firmforge.core.resources import vendor_dir as _vendor_dir
-        for core_base in [
-            str(paths.packages_dir() / "arduino" / "avr" / "1.8.6"),
-            os.path.join(str(_vendor_dir()), "arduino"),
-        ]:
-            if os.path.exists(os.path.join(core_base, "cores", "arduino", "Arduino.h")):
-                break
-        else:
-            core_base = ""
-        core_base = os.path.abspath(core_base)
+        core_base = self._core_base()
         core_inc = os.path.join(core_base, "cores", "arduino")
         variant = self._resolve_variant()
         variant_inc = os.path.join(core_base, "variants", variant)
@@ -553,32 +637,11 @@ class ArduinoBuildProvider(BuildProvider):
                 core_sources.append(str(f))
 
         # Arduino library include paths (SPI, Wire, EEPROM, etc.)
-        lib_base = os.path.join(core_base, "libraries")
-        lib_includes: list[str] = []
-        if os.path.isdir(lib_base):
-            for lib_dir in os.listdir(lib_base):
-                src_dir = os.path.join(lib_base, lib_dir, "src")
-                if os.path.isdir(src_dir):
-                    lib_includes.extend(["-I", src_dir])
-                    # Also add library source files for compilation.
-                    # Use rglob to find sources in subdirectories (Servo/src/avr/ etc.)
-                    # but filter to only AVR-relevant paths to avoid multi-platform
-                    # Servo.cpp link conflicts.
-                    _avr_prefixes = ("", "avr", "utility")
-                    for ext in ("*.c", "*.cpp", "*.S"):
-                        for f in sorted(Path(src_dir).rglob(ext)):
-                            rel = f.relative_to(src_dir)
-                            # Include files at src root (parts=("file.cpp",))
-                            # or in allowed subdirs (parts=("avr","Servo.cpp"))
-                            if len(rel.parts) == 1 or rel.parts[0] in _avr_prefixes:
-                                core_sources.append(str(f))
-                    # Check for utility subdirectory (SPI library uses this)
-                    util_dir = os.path.join(src_dir, "utility")
-                    if os.path.isdir(util_dir):
-                        lib_includes.extend(["-I", util_dir])
-                        # Sources in utility/ are already picked up by rglob above
-                    logger.debug("Library: %s (+%d sources)", src_dir,
-                                 len(core_sources))
+        # 与 `cppcheck_context()` 共用同一个来源：静态分析看到的是**编译用的
+        # 那份 include**，否则两边说的是两个工程。
+        lib_dirs, lib_sources = self._arduino_libraries(core_base)
+        lib_includes = [f"-I{d}" for d in lib_dirs]
+        core_sources.extend(lib_sources)
 
         # Board-specific Arduino define
         board_defines = self._get_board_defines()

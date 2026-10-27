@@ -133,6 +133,11 @@ class KnowledgeBase:
         self._field_prefixes: dict[str, int] = {}
         # 已知外设实例名（``USART1`` / ``GPIOA``），STM32 的限定名查找入口
         self._peripheral_names: set[str] = set()
+        # 分组 → 寄存器数。**键保留数据里的原始大小写**：事后从
+        # `_qualified_index` 反推会拿到全大写（索引键统一 upper），
+        # CMSIS 内核组的 `SysTick` / `CoreDebug` / `SCnSCB` 就会变成
+        # `SYSTICK` / `COREDEBUG`，跟数据里的组名对不上，按名字比对时会漏。
+        self._group_counts: dict[str, int] = {}
         self._pin_index: dict[int, dict[str, Any]] = {}  # arduino_pin -> pin entry
         self._pin_map_cache: dict[str, dict[str, Any]] = {}  # board_id -> pins_*.json
         self._ref_origin: dict[str, dict[str, Any]] = {}  # platform -> 实际命中来源
@@ -254,12 +259,15 @@ class KnowledgeBase:
             new_index: dict[str, dict[str, Any]] = {}
             new_qualified: dict[str, dict[str, Any]] = {}
             new_dups: set[str] = set()
+            new_group_counts: dict[str, int] = {}
 
             for group_name, group in reg_data.get("register_groups", {}).items():
+                n_named = 0
                 for reg in group.get("registers", []):
                     name = reg.get("name", "")
                     if not name:
                         continue
+                    n_named += 1
                     reg_entry = dict(reg)
                     reg_entry["_group"] = group_name
                     reg_entry["_platform"] = platform
@@ -275,10 +283,13 @@ class KnowledgeBase:
                                      name, reg.get("address", "?"))
                     new_qualified.setdefault(
                         f"{group_name}.{name}".upper(), reg_entry)
+                if n_named:
+                    new_group_counts[group_name] = n_named
 
             self._register_index = new_index
             self._qualified_index = new_qualified
             self._duplicate_register_names = new_dups
+            self._group_counts = new_group_counts
             self._field_index, self._field_prefixes = _build_field_index(
                 new_qualified)
             self._peripheral_names = {
@@ -410,16 +421,13 @@ class KnowledgeBase:
         return loose[:limit], len(loose) > limit
 
     def register_groups(self) -> dict[str, int]:
-        """外设组名 → 寄存器数（当前已加载芯片）。
+        """外设组名 → 寄存器数（当前已加载芯片），**组名保留原始大小写**。
 
-        统计口径走 ``_qualified_index`` 而不是 ``_register_index``：后者只留
-        非歧义的裸名（STM32 上 1761 / 2955），拿它算分组会系统性少算。
+        计数由 `load_reference()` 在导入数据时攒好。此前从 ``_qualified_index``
+        反推，键是全大写，于是 CMSIS 内核组的 `SysTick` / `CoreDebug` 显示成
+        `SYSTICK` / `COREDEBUG` —— 数对了，名字错了，按组名比对的地方会漏。
         """
-        counts: dict[str, int] = {}
-        for key in self._qualified_index:
-            group = key.split(".", 1)[0]
-            counts[group] = counts.get(group, 0) + 1
-        return counts
+        return dict(self._group_counts)
 
     def lookup_register_field(self, reg_name: str,
                                field_name: str,

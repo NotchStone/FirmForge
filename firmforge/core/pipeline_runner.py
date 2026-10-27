@@ -669,18 +669,16 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         t0 = time.time()
 
         # Phase 1: Cppcheck static analysis (logic bugs, uninit vars, etc.)
-        cppcheck_warnings: list[dict] = []
-        cppcheck_errors = 0  # severity=error → blocking
-        try:
-            from firmforge.providers.arduino.cppcheck import run_cppcheck
-            cppcheck_warnings = run_cppcheck(source_dir)
-            if cppcheck_warnings:
-                cppcheck_errors = sum(1 for w in cppcheck_warnings if w.get("severity") == "error")
-                logger.info("Cppcheck: %d potential issues found (%d errors)", len(cppcheck_warnings), cppcheck_errors)
-        except FileNotFoundError:
-            logger.debug("Cppcheck not installed, skipping static analysis")
-        except Exception as e:
-            logger.debug("Cppcheck skipped: %s", e)
+        #
+        # 纪律（2026-10-27 修）：**工具说了什么就往上带什么**。此前的写法只留
+        # 两个聚合数字（`len(warnings)` / `errors`），于是
+        #   ① 解析层把 Windows 路径的盘符冒号切错 → severity 变成行号字符串
+        #      → error 恒为 0 → 闸门静默失效，日志却报 "0 errors"；
+        #   ② 就算计数对，没有文件名行号，读日志的人也无从下手。
+        # 现在：明细（file:line: id message）+ 原始输出 + 分桶计数 + 降级说明
+        # 全部进 details，日志按 error 打点，不靠一个数字让人猜。
+        cp = self._run_cppcheck(board_id, source_dir, board_config)
+        cppcheck_errors = len(cp.blocking)
 
         # Phase 2: Register review (hallucinated register detection)
         c_result = self._review_check(board_id, source_dir, board_config)
@@ -691,39 +689,115 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         conf_ok = not (conf_result and conf_result.needs_review)
 
         sub_stages = [
-            {"name": "cppcheck", "success": cppcheck_errors == 0,
-             "issues": len(cppcheck_warnings), "errors": cppcheck_errors},
+            {"name": "cppcheck", "success": cp.ok and cppcheck_errors == 0,
+             "issues": len(cp.issues), "errors": cppcheck_errors,
+             "vendor_errors": len(cp.vendor_errors),
+             "status": cp.status, "cached": cp.cached},
             {"name": "review", "success": review_ok,
              "violations": len(c_result.violations) if c_result else 0,
              "registers": [v.register for v in c_result.violations[:10]] if c_result else []},
             {"name": "confidence", "success": conf_ok,
              "score": conf_result.overall_score if conf_result else 100,
-             "review_items": len(conf_result.review_items) if conf_result else 0},
+             "review_items": len(conf_result.review_items) if conf_result else 0,
+             # 「分数为什么是这个数」必须能追到具体条目，否则 30% 会被
+             # 读成"代码质量差"，而实际可能只是单个文件的一个寄存器名。
+             "cap_reason": conf_result.cap_reason if conf_result else ""},
         ]
 
-        # Build review details — always include cppcheck results
+        # Build review details — 三类明细全部保留，供人读也供 Agent 读
         details: dict[str, Any] = {
             "sub_stages": sub_stages,
-            "cppcheck": cppcheck_warnings,
+            "cppcheck": [i.as_dict() for i in cp.issues],
+            "cppcheck_meta": [i.as_dict() for i in cp.meta],
+            "cppcheck_unparsed": list(cp.unparsed),
+            "cppcheck_buckets": [{"id": k, "count": v} for k, v in cp.buckets()],
+            "cppcheck_status": cp.status,
+            "cppcheck_notes": list(cp.notes),
+            "cppcheck_command": list(cp.command),
+            "cppcheck_raw": cp.raw,
+            "cppcheck_elapsed_ms": round(cp.elapsed_ms, 1),
         }
         if c_result:
             details["warnings"] = [
-                {"register": v.register, "line": v.line,
+                {"file": v.file, "register": v.register, "field": v.field,
+                 "line": v.line, "severity": v.severity,
                  "text": v.line_text.strip()[:80],
-                 "reason": v.reason}
+                 "reason": v.reason, "suggestion": v.suggestion}
                 for v in (c_result.violations + c_result.warnings)[:20]
             ]
+            details["review_counts"] = {
+                "registers_checked": c_result.registers_checked,
+                "registers_resolved": c_result.registers_resolved,
+                "fields_checked": c_result.fields_checked,
+                "fields_resolved": c_result.fields_resolved,
+            }
+        if conf_result:
+            details["confidence"] = {
+                "score": round(conf_result.overall_score, 1),
+                "cap_reason": conf_result.cap_reason,
+                "checks": len(conf_result.checks),
+                "review_items": [
+                    {"category": c.category, "identifier": c.identifier,
+                     "score": round(c.score, 1), "note": c.note}
+                    for c in conf_result.review_items[:20]
+                ],
+            }
+
+        # -- 日志：先打"分析有没有跑成"，再打每一条 error 的落点 ----------
+        if not cp.ok:
+            # 没跑成 ≠ 没问题。旧写法这时会安静地报 0 errors。
+            logger.warning("S2 Review: 静态分析未完成 —— %s", cp.summary_line())
+        else:
+            logger.info("S2 Review: cppcheck %s（%s）",
+                        cp.summary_line(),
+                        ", ".join(f"{k}×{v}" for k, v in cp.buckets()[:6]) or "无诊断")
+            if cp.cached:
+                logger.info("S2 Review: cppcheck 结果来自内容哈希缓存")
+        for issue in cp.blocking[:20]:
+            logger.warning("  [cppcheck error] %s  %s: %s",
+                           issue.where(), issue.id, issue.message)
+        if len(cp.blocking) > 20:
+            logger.warning("  … 另有 %d 条 error 未逐条打印（--json 可看全量）",
+                           len(cp.blocking) - 20)
+        # 厂家库里的 error 照实打出来，但不计入阻断（CMSIS/HAL 是官方代码，
+        # 它过不过 cppcheck 与用户固件对不对无关）。不打印等于藏起来。
+        for issue in cp.vendor_errors[:10]:
+            logger.info("  [vendor error] %s  %s: %s",
+                        issue.where(), issue.id, issue.message)
+        if len(cp.vendor_errors) > 10:
+            logger.info("  … 厂家库另有 %d 条 error（不阻断）",
+                        len(cp.vendor_errors) - 10)
+        for note in cp.notes:
+            logger.warning("S2 Review: %s", note)
 
         if not review_ok:
-            logger.warning("Code Review WARNING: %d potential register issues (not blocking)",
+            # 文件名 + 行号 + 寄存器名，一个都不能少：只给计数等于让读日志的
+            # 人自己写脚本复现（本来就发生过）。
+            logger.warning("Code Review: FAIL —— %d 处引用校验未通过（不阻断）",
                            len(c_result.violations))
-        elif not conf_ok:
-            logger.warning("Confidence below threshold: %.0f%% — needs review",
-                           conf_result.overall_score)
+            for v in c_result.violations[:20]:
+                where = f"{v.file}:{v.line}" if v.file else f"line {v.line}"
+                logger.warning("  [review] %s  %s  %s", where,
+                               f"{v.register}.{v.field}" if v.field else v.register,
+                               v.reason)
+            if len(c_result.violations) > 20:
+                logger.warning("  … 另有 %d 条未逐条打印（--json 可看全量）",
+                               len(c_result.violations) - 20)
+
+        if conf_result and conf_result.cap_reason:
+            logger.warning("Confidence %.0f%% —— %s",
+                           conf_result.overall_score, conf_result.cap_reason)
+        for item in (conf_result.review_items[:10] if conf_result else []):
+            logger.warning("  [confidence] %s %s = %.0f%%  %s",
+                           item.category, item.identifier, item.score, item.note)
 
         if cppcheck_errors:
             stage.success = False
-            stage.error = f"Cppcheck: {cppcheck_errors} error(s) found — review required"
+            stage.error = (
+                f"Cppcheck: {cppcheck_errors} 处 error —— "
+                + "; ".join(f"{i.where()} {i.id}" for i in cp.blocking[:5])
+                + (" …" if len(cp.blocking) > 5 else ""))
+            stage.details = details
             stage.elapsed_ms = (time.time() - t0) * 1000
             logger.warning("S2 Review: BLOCKED (%d cppcheck errors)", cppcheck_errors)
             return stage
@@ -733,9 +807,63 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
         stage.elapsed_ms = (time.time() - t0) * 1000
         logger.info("S2 Review: PASS (cppcheck=%d, register=%d)",
-                     len(cppcheck_warnings),
+                     len(cp.issues),
                      len(c_result.violations) if c_result else 0)
         return stage
+
+    # ------------------------------------------------------------------
+    # S2 Phase 1：cppcheck
+    # ------------------------------------------------------------------
+
+    def _run_cppcheck(self, board_id: str | None, source_dir: str | None,
+                      board_config: dict):
+        """跑 cppcheck，并用**编译用的同一份** include / 宏 / 内建宏喂它。
+
+        拿不到构建上下文不等于不跑 —— 但要把"结果带水分"这件事写进 notes。
+        返回 `CppcheckReport`；任何异常都落成一个 `ok=False` 的报告，
+        绝不是一个空列表（空列表的含义是"干净"，两者不能混）。
+        """
+        from firmforge.providers.arduino.cppcheck import CppcheckReport, run_cppcheck
+
+        if not source_dir:
+            return CppcheckReport(ok=False, status="skipped",
+                                  skip_reason="没有源码目录")
+
+        include_dirs: list[str] = []
+        defines: list[str] = []
+        force_includes: list[str] = []
+        vendor_roots: list[str] = []
+        context_problems: list[str] = []
+        try:
+            from firmforge.providers import get_build_provider
+            cfg = board_config or {}
+            builder = get_build_provider(cfg.get("platform", "arduino"), cfg)
+            getter = getattr(builder, "cppcheck_context", None)
+            if getter is None:
+                context_problems.append(
+                    f"{type(builder).__name__} 未提供 cppcheck_context()")
+            else:
+                ctx = getter()
+                include_dirs = list(getattr(ctx, "include_dirs", []))
+                defines = list(getattr(ctx, "defines", []))
+                force_includes = list(getattr(ctx, "force_includes", []))
+                vendor_roots = list(getattr(ctx, "vendor_roots", []))
+                context_problems = list(getattr(ctx, "problems", []))
+        except Exception as exc:                     # 提供者缺失/构造失败
+            context_problems.append(f"取构建上下文失败：{type(exc).__name__}: {exc}")
+
+        try:
+            report = run_cppcheck(source_dir, include_dirs=include_dirs,
+                                  defines=defines,
+                                  force_includes=force_includes,
+                                  vendor_roots=vendor_roots)
+        except Exception as exc:
+            return CppcheckReport(ok=False, status="crashed",
+                                  skip_reason=f"{type(exc).__name__}: {exc}")
+        for problem in context_problems:
+            report.notes.append(f"构建上下文不完整：{problem}")
+        return report
+
 
     # ===================================================================
     # Code Review & Confidence Scoring (shared helpers)

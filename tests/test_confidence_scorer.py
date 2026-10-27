@@ -223,6 +223,43 @@ class TestOverallConfidence:
         assert report.source_review_passed is True
 
 
+class TestCapAttribution:
+    """`Confidence: 30%` 必须说清"为什么是 30%"。
+
+    2026-10-27 的实际误判：一个 STM32 工程报 30%，被读成"代码质量差"。
+    真相是**单个寄存器名**（`SCB->CFSR`）不在知识库里 → 源审查二值判定
+    FAIL → 总分被硬压到 30%，而其余 41 项 check 的加权平均是 93%。
+    这两个数字含义完全不同，日志里不给归因就等于误导。
+    """
+
+    def test_cap_reason_names_the_offending_register(self, scorer):
+        code = "DDRB = 0xFF;\nPORTZ = 0xFF;\n"
+        report = scorer.analyze(code)
+
+        assert not report.source_review_passed
+        assert report.cap_reason, "被硬压时必须给出原因"
+        assert "PORTZ" in report.cap_reason, "要点名具体是哪个标识符"
+        assert "30%" in report.cap_reason
+        # 必须点出「这与其余 check 的得分无关」，否则会被读成质量差
+        assert "硬压" in report.cap_reason
+        assert "加权平均" in report.cap_reason
+
+    def test_cap_reason_is_absent_when_not_capped(self, scorer):
+        report = scorer.analyze("DDRB = 0xFF;\nPORTB = 0xFF;\n")
+        assert report.source_review_passed is True
+        assert report.cap_reason == "", "没被压过就不要解释"
+
+    def test_cap_reason_surfaces_in_summary(self, scorer):
+        report = scorer.analyze("PORTZ = 0xFF;\n")
+        assert "Why:" in report.summary()
+
+    def test_failures_carry_file_and_line(self, scorer):
+        """落点要能直接跳转 —— 只有计数的话只能自己写脚本逐个文件跑。"""
+        report = scorer.analyze("DDRB = 0xFF;\nPORTZ = 0xFF;\n")
+        assert report.source_review_failures
+        assert any("PORTZ" in f for f in report.source_review_failures)
+
+
 class TestThreshold:
     def test_custom_threshold(self, kb: KnowledgeBase):
         scorer = ConfidenceScorer(kb, threshold=90.0)

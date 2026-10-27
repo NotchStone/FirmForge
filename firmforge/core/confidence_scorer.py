@@ -74,6 +74,12 @@ class ConfidenceReport:
     needs_review: bool = False
     review_items: list[ConfidenceCheck] = field(default_factory=list)
     source_review_passed: bool = True
+    #: 源审查未通过时的具体条目（`file:line 名字`），用于解释分数上限。
+    source_review_failures: list[str] = field(default_factory=list)
+    #: 总分被"硬上限"压过时的原因。空串 = 分数就是加权平均的结果。
+    #: 没有这一行，30% 会被读成"代码质量差"，而实际可能只是单个寄存器的
+    #: 一个名字没在库里（2026-10-27 真实误判）。
+    cap_reason: str = ""
 
     def summary(self) -> str:
         lines = [
@@ -81,6 +87,8 @@ class ConfidenceReport:
             f"  Checks: {len(self.checks)}, Review items: {len(self.review_items)}",
             f"  Code Review: {'PASS' if self.source_review_passed else 'FAIL'}",
         ]
+        if self.cap_reason:
+            lines.append(f"  Why: {self.cap_reason}")
         for c in self.review_items:
             lines.append(f"  {c.summary()}")
         return "\n".join(lines)
@@ -131,6 +139,11 @@ class ConfidenceScorer:
         if source_review_result is None:
             source_review_result = self._validator.validate(source_code)
         report.source_review_passed = source_review_result.passed
+        report.source_review_failures = [
+            (f"{v.file}:{v.line} {v.register}" if v.file
+             else f"line {v.line} {v.register}")
+            for v in source_review_result.violations
+        ]
 
         # Step 2: Score register assignments
         self._score_registers(source_code, source_review_result, report)
@@ -149,6 +162,8 @@ class ConfidenceScorer:
         logger.info("Confidence: %.0f%% (%d checks, %s)",
                      report.overall_score, len(report.checks),
                      "NEEDS_REVIEW" if report.needs_review else "OK")
+        if report.cap_reason:
+            logger.info("Confidence 上限原因: %s", report.cap_reason)
 
         return report
 
@@ -364,7 +379,17 @@ class ConfidenceScorer:
 
         # Source Review failures → strong confidence penalty
         if not report.source_review_passed:
-            return min(30.0, sum(c.score for c in report.checks) / len(report.checks))
+            avg = sum(c.score for c in report.checks) / len(report.checks)
+            head = "; ".join(report.source_review_failures[:3])
+            more = (f" 等 {len(report.source_review_failures)} 处"
+                    if len(report.source_review_failures) > 3 else "")
+            report.cap_reason = (
+                "源审查未通过 → 总分被硬压到 30% 上限"
+                + (f"（{head}{more}）" if head else "")
+                + f"。这与其余 {len(report.checks)} 项 check 的得分无关："
+                  "上限是二值判定，不是加权平均的结果。"
+                  f"（不加上限时的加权平均为 {avg:.0f}%）")
+            return min(30.0, avg)
 
         # Weighted average: resolved items get full weight, unresolved get half
         total_weight = 0.0
