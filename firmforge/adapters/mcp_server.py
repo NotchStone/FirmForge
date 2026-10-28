@@ -386,10 +386,12 @@ def _do_run(board: str = "", app: str = "", expected: str = "",
             board_id=board or None,
             expected=expected or "",
             progress_callback=_on_progress,
-            # 必须显式给 0：panel_wait 默认 None 会让 join(timeout=None) 无限阻塞，
-            # 等人点 Stop / 关窗。MCP 调用没有「人在面板前」这回事，不传就等于
-            # 工具调用永远不返回（CLI/json-mode 那条路已经修过，这里当时漏了）。
-            # 面板文件仍然随结果返回，需要看的人自己打开。
+            # MCP 调用没有「人在面板前」这回事。默认值本来就是「全关」
+            # （panel_open="none" + panel_wait=0），这里显式写出来，是为了让
+            # 「MCP 永远不碰面板」成为读得到的事实，而不是要靠猜默认值。
+            # 面板文件仍在 stage.details 里（panel_url / panel_file），
+            # 需要实时看的人自己调用 start_monitor 或打开那个文件。
+            panel_open="none",
             panel_wait=0,
         )
     except Exception as e:
@@ -505,7 +507,9 @@ if MCP_AVAILABLE and mcp is not None:
                workspace: str = "") -> dict[str, Any]:
         """Compile, flash and run MCU code on real hardware.
         Full pipeline: Detect → Review → Build → Flash → Verify.
-        Call AFTER writing code. Returns sample serial lines for analysis + panel file for live monitor.
+        Call AFTER writing code. Returns sample serial lines for analysis; the full
+        capture is written to .ff-run/serial_live.html (no live HTTP panel — call
+        ff_monitor explicitly if a human needs to watch it).
         `expected` must match periodic output (heartbeat / status line); a one-shot boot banner cannot be seen,
         because S5 opens the serial port only after flashing finishes."""
         _add_project_root_to_path()

@@ -292,8 +292,8 @@ class PipelineRunner:
         firmware: str = "",
         app_name: str = "",
         progress_callback: Callable[[str, bool, dict, str | None], None] | None = None,
-        panel_open: str = "auto",
-        panel_wait: float | None = None,
+        panel_open: str = "none",
+        panel_wait: float | None = 0.0,
     ) -> PipelineResult:
         """Execute the 5-Stage Pipeline.
 
@@ -305,11 +305,23 @@ class PipelineRunner:
                 不是"执行动作"，少了它连走 SWD 还是 avrdude 都不知道。
             firmware: 只跑 flash 时直接指定 hex。空则按 state → 构建缓存解析。
             app_name: 只跑 flash 时用哪个应用名去构建缓存里找（`--app app`）。
+            panel_wait: S5 采完样本后**等面板多久**。语义与默认值都是故意这么定的：
+                ``0.0``（默认）**且** ``panel_open="none"`` = 完全没有面板
+                （不开窗、不等待、不打印地址）—— ff 的调用方主要是 Agent / CI / MCP，
+                它们没有「人坐在面板前点 Stop」这件事，等下去就是工具调用永不返回；
+                ``N > 0`` = 等 N 秒，期间人可以去点 Stop；
+                ``None`` = 无限等，**只允许 `--panel` 无值这种显式要求**（且非 tty
+                会被 `_clamp_panel_wait` 折掉）。
+                历史：默认值曾经是 ``panel_open="auto"`` + ``panel_wait=None``，
+                于是每个调用方都必须「记得」传 0，漏一个就挂死一个 —— mcp_server
+                与 json-mode 各挂过一次（见各自注释）。危险的默认值迟早会被再来一次。
         """
         want: set[str] = set(only) if only else {
             "review", "build", "flash", "verify"}
         if stop_after == "build":                 # 旧入口（ff build）的等价写法
             want = {"review", "build"}
+        # 结构性保证，不靠纪律：无限等只在「真的有人在终端前」时允许生效。
+        panel_wait = self._clamp_panel_wait(panel_wait)
         result = PipelineResult()
         start = time.time()
         state = PipelineState(self._workspace)
@@ -475,7 +487,11 @@ class PipelineRunner:
         elif not expected and flash_done_before and fps and state.should_skip_test(fps):
             s5 = self._skipped_stage(5, "Verify", "fingerprints match")
         else:
-            s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html, process_summary=process_html)
+            s5 = self._stage_verify(
+                board_id, expected,
+                stages_summary=stages_summary_html,
+                process_summary=process_html,
+                panel=self._panel_enabled(panel_open, panel_wait))
         if s5 is not None:
             result.stages.append(s5)
             self._notify_progress(progress_callback, s5)
@@ -502,27 +518,21 @@ class PipelineRunner:
         # （`ff flash` / `ff review` 没有 S5，采集线程也不存在）
         if s5 is not None and hasattr(self, '_collector_alive') \
                 and self._collector_alive.is_alive():
-            # 面板地址必须打出来。ff 自己不负责开浏览器（全历史无 webbrowser/startfile），
-            # 以前是 MCP 客户端拿 panel_url 去开窗；走 CLI 这条路时没人接手，
-            # 如果不打印地址，S5 就等于没有面板。
-            panel_url = s5.details.get("panel_url") or ""
-            if panel_wait == 0:
-                # 🔴 panel_wait=0 = 采样完立刻退出，HTTP 服务随进程一起消失。
-                # 这时把地址打出来，人点开只会得到「连接被拒」——比不打更糟
-                # （实测有人照着提示的地址去开，结论是「S5 面板不见了」）。
-                # 地址仍留在 stage.details 里给 MCP / json 调用方：那边进程常驻，地址有效。
-                logger.info(
-                    "S5 面板未保留（panel_wait=0）：进程退出后地址即失效；"
-                    "要实时看面板，用 --panel-wait 120（或去掉该参数常驻）")
-            else:
+            # 面板是**显式要求**才有的东西（`--panel [SEC]` / 帧里的 panel 字段）。
+            # 默认路径一个字都不打：这是 Agent 的解析输出，每次调用都刷一句
+            # 「面板未保留」既没用，又会被读成「哪一步出了问题」。
+            if self._panel_enabled(panel_open, panel_wait):
+                # 面板地址必须打出来。ff 自己不负责开浏览器（全历史无 webbrowser/startfile），
+                # 以前是 MCP 客户端拿 panel_url 去开窗；走 CLI 这条路时没人接手，
+                # 如果不打印地址，S5 就等于没有面板。
+                panel_url = s5.details.get("panel_url") or ""
                 logger.info("S5 面板：%s", panel_url or "(未启动)")
-            self._maybe_open_panel(panel_url, panel_open, panel_wait)
-            if panel_wait == 0:
-                logger.info("S5 不等面板（panel_wait=0），采样完即结束")
-            elif panel_wait:
-                logger.info("S5 panel live — 点 Stop / 关窗结束，或 %.0fs 后自动结束", panel_wait)
-            else:
-                logger.info("S5 panel live — 点 Stop 或关窗结束（无限等）")
+                self._maybe_open_panel(panel_url, panel_open, panel_wait)
+                if panel_wait:
+                    logger.info("S5 panel live — 点 Stop / 关窗结束，或 %.0fs 后自动结束",
+                                panel_wait)
+                else:
+                    logger.info("S5 panel live — 点 Stop 或关窗结束（无限等）")
             try:
                 self._collector_alive.join(timeout=panel_wait)
             except KeyboardInterrupt:
@@ -558,6 +568,45 @@ class PipelineRunner:
         result.total_elapsed_ms = work_ms
         result.panel_wait_ms = max(0.0, (time.time() - start) * 1000 - work_ms)
         return result
+
+    @staticmethod
+    def _panel_enabled(panel_open: str, panel_wait: float | None) -> bool:
+        """面板是否被**显式**要求 —— 默认关闭，这是唯一判据。
+
+        默认值（``"none"`` + ``0.0``）必须走「关闭」这条路：S5 照样打开串口采样本、
+        照样做断言，只是不留面板、不开窗、不等人。**采集是 S5 的实质，面板是附加的
+        人机界面** —— 两件事在同一根线程里，但只有后者会让命令不返回。
+
+        调用方要面板只有两种写法：`--panel`（常驻）或 `--panel 120`（留 120 秒），
+        两者都会把 ``panel_open`` 置为 auto 或 ``panel_wait`` 置为非零。
+        """
+        if (panel_open or "none").strip().lower() not in ("", "none"):
+            return True
+        return panel_wait is None or panel_wait > 0
+
+    @staticmethod
+    def _clamp_panel_wait(wait: float | None) -> float | None:
+        """把「无限等面板」限制在**真的有人在终端前**的情况。
+
+        这是一道结构性护栏，不是纪律条款：走到这里的 ``None`` 只可能来自
+        显式的 `--panel`（无值）。非 tty 场景下没人在面板前点 Stop，无限等
+        必然变成「工具调用永不返回」，所以折成 0 并**明确警告**——
+        静默折叠会让人以为 `--panel` 坏了。
+        """
+        if wait is not None:
+            return wait
+        import os
+        import sys
+        try:
+            interactive = sys.stdout.isatty() and not (
+                os.environ.get("CI") or os.environ.get("SSH_CONNECTION"))
+        except Exception:                     # 被重定向的 stdout 上 isatty 可能抛
+            interactive = False
+        if interactive:
+            return None
+        logger.warning("要求面板常驻（--panel 不带秒数），但 stdout 不是交互终端 —— "
+                       "没有人能点 Stop，改为采完即返回。要留面板请用 --panel <秒>")
+        return 0.0
 
     @staticmethod
     def _maybe_open_panel(url: str, mode: str, wait: float | None) -> None:
@@ -1479,11 +1528,16 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # ===================================================================
 
     def _stage_verify(self, board_id: str | None, expected: str = "",
-                       stages_summary: str = "", process_summary: str = "") -> PipelineStage:
+                       stages_summary: str = "", process_summary: str = "",
+                       panel: bool = False) -> PipelineStage:
         """S5 Verify — start collector thread, get 3 sample lines, return.
 
         Thread-based (no subprocess). Collector runs in daemon thread.
-        Agent gets sample_lines. User opens panel for live view.
+        Agent gets sample_lines.
+
+        ``panel=True`` 才会额外起 HTTP 服务并生成跳转页（`--panel` 显式要求）。
+        默认 `False`：照样开串口采样、照样做断言，只是不对外提供 web 面板 ——
+        采集是 S5 的实质，面板是可选的人机界面，两者不该绑在一起默认开启。
         """
         stage = PipelineStage(stage=5, name="Verify")
         t0 = time.time()
@@ -1637,19 +1691,24 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 if decision.pattern_error:
                     stage.details["pattern_error"] = decision.pattern_error
 
-            # Start HTTP server + write redirect (MCP persistent — panel lives)
-            try:
-                from firmforge.adapters.mcp_server import _start_monitor_httpd
-                http_port = _start_monitor_httpd(str(root))
-                if http_port:
-                    goto_panel = str(paths.runtime_dir(root) / "goto_panel.html")
-                    with open(goto_panel, "w", encoding="utf-8") as f:
-                        f.write(f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>')
-                    stage.details["panel_url"] = f"http://127.0.0.1:{http_port}/serial_live.html"
-                    stage.details["panel_file"] = (
-                        f"{paths.RUNTIME_DIR_NAME}/goto_panel.html")
-            except Exception:
-                pass
+            # HTTP 面板只在**显式要求**时起。
+            # 以前这里是无条件的：每次 S5 都绑一个端口、起一个服务线程、写
+            # goto_panel.html，哪怕调用方根本不看面板。代价是端口占用、进程残留、
+            # 以及「命令要不要等人」这个判断被藏进了另一个线程里。
+            # 采集本身照旧（数据写 serial_live.html），只是不再对外提供 web 服务。
+            if panel:
+                try:
+                    from firmforge.adapters.mcp_server import _start_monitor_httpd
+                    http_port = _start_monitor_httpd(str(root))
+                    if http_port:
+                        goto_panel = str(paths.runtime_dir(root) / "goto_panel.html")
+                        with open(goto_panel, "w", encoding="utf-8") as f:
+                            f.write(f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>')
+                        stage.details["panel_url"] = f"http://127.0.0.1:{http_port}/serial_live.html"
+                        stage.details["panel_file"] = (
+                            f"{paths.RUNTIME_DIR_NAME}/goto_panel.html")
+                except Exception:
+                    pass
 
         except Exception as e:
             # 这里以前是 success=True —— 连 S5 自己崩了都算通过。

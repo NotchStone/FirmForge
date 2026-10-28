@@ -75,9 +75,9 @@ def stub_stages(monkeypatch):
 
 
 def _ns(**kw) -> argparse.Namespace:
+    # panel=None = 没加 `--panel`（默认关闭）。所有阶段命令的单测都走这条默认路径。
     base = dict(board="gc_h743", app=None, apps="", firmware=None, expected="",
-                boards_dir=None, workspace=None, json=False,
-                open_panel="none", panel_wait=0)
+                boards_dir=None, workspace=None, json=False, panel=None)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -114,7 +114,7 @@ def test_run_still_runs_everything(stub_stages, tmp_path):
     app = tmp_path / "app"
     app.mkdir()
     (app / "main.c").write_text("int main(void){return 0;}", encoding="utf-8")
-    cli.cmd_run(_ns(app=str(app), workspace=str(tmp_path), panel_wait=0))
+    cli.cmd_run(_ns(app=str(app), workspace=str(tmp_path)))
     assert stub_stages == ["detect", "review", "build", "flash", "verify"]
 
 
@@ -331,47 +331,54 @@ class _Pipe:
         pass
 
 
-def test_panel_wait_is_zero_when_stdout_is_piped(monkeypatch):
-    """管道 / 子进程里 `ff run` 必须会结束。
+def test_panel_is_off_by_default():
+    """默认什么都不加 —— 面板功能完全关闭（这是产品定位，不是普通默认值）。
 
-    2026-10-28 实测：五个阶段 44 秒跑完，然后挂在 `join()` 里 400 秒 ——
-    对 CI 和 Agent 调用方，这就是「命令永不返回」。
+    2026-10-28 用户定调：ff 主要给 Agent 调用，运行完就要返回。
+    「默认开着面板、靠调用方记得传 0」已经被证明会挂死（CLI / json / MCP
+    三条路里两条漏过），所以默认必须是关。
     """
-    import sys
-    _clean_env(monkeypatch)
-    monkeypatch.setattr(sys, "stdout", _Pipe())
-    assert cli._resolve_panel_wait(_ns(panel_wait=None)) == 0.0
+    assert cli._resolve_panel(_ns()) == ("none", 0.0)
 
 
-def test_panel_wait_is_infinite_on_a_real_terminal(monkeypatch):
-    """人在终端前看时保持原行为：等他点 Stop。"""
+def test_panel_is_off_by_default_even_on_a_real_terminal(monkeypatch):
+    """终端在前也不自动开面板：要看就明说，别让默认行为随环境漂移。"""
     import sys
     _clean_env(monkeypatch)
     monkeypatch.setattr(sys, "stdout", _Tty())
-    assert cli._resolve_panel_wait(_ns(panel_wait=None)) is None
+    assert cli._resolve_panel(_ns()) == ("none", 0.0)
 
 
-def test_explicit_panel_wait_wins(monkeypatch):
-    import sys
-    _clean_env(monkeypatch)
-    monkeypatch.setattr(sys, "stdout", _Tty())
-    assert cli._resolve_panel_wait(_ns(panel_wait=120)) == 120
-    assert cli._resolve_panel_wait(_ns(panel_wait=0)) == 0
+def test_panel_flag_without_value_is_resident():
+    """`--panel` 不带值 = 常驻等人点 Stop（唯一的无限等入口）。"""
+    assert cli._resolve_panel(_ns(panel=cli._PANEL_INFINITE)) == ("auto", None)
 
 
-def test_json_mode_never_waits_for_panel(monkeypatch):
-    import sys
-    _clean_env(monkeypatch)
-    monkeypatch.setattr(sys, "stdout", _Tty())
-    assert cli._resolve_panel_wait(_ns(json=True, panel_wait=None)) == 0.0
+def test_panel_flag_with_seconds():
+    assert cli._resolve_panel(_ns(panel=120)) == ("auto", 120.0)
 
 
-def test_ci_env_never_waits_for_panel(monkeypatch):
-    import sys
-    monkeypatch.delenv("SSH_CONNECTION", raising=False)
-    monkeypatch.setenv("CI", "true")
-    monkeypatch.setattr(sys, "stdout", _Tty())
-    assert cli._resolve_panel_wait(_ns(panel_wait=None)) == 0.0
+def test_panel_zero_means_off():
+    assert cli._resolve_panel(_ns(panel=0)) == ("none", 0.0)
+
+
+def test_default_path_says_nothing_about_panel(capsys):
+    """默认路径不许刷任何面板字样。
+
+    那是每次调用的噪声；更糟的是「面板未保留」会被读成「哪一步出了问题」。
+    """
+    cli._note_panel(_ns(), "none", 0.0)
+    err = capsys.readouterr().err
+    assert "面板" not in err, f"默认路径不该提面板：{err!r}"
+
+
+def test_panel_enabled_only_when_explicitly_asked():
+    """面板开关的唯一判据：显式要求才算开。"""
+    assert not PipelineRunner._panel_enabled("none", 0.0)
+    assert not PipelineRunner._panel_enabled("", 0)
+    assert PipelineRunner._panel_enabled("auto", 0.0)
+    assert PipelineRunner._panel_enabled("none", 120)
+    assert PipelineRunner._panel_enabled("none", None)
 
 
 def test_elapsed_desc_separates_panel_wait():
@@ -385,3 +392,105 @@ def test_elapsed_desc_separates_panel_wait():
 
     r2 = PipelineResult(total_elapsed_ms=44468.0, panel_wait_ms=0.0)
     assert cli._elapsed_desc(r2) == "44468ms"
+
+
+# ---------------------------------------------------------------------------
+# 结构性护栏：默认值 + 核心层折叠
+#
+# ff 的主要调用方是 Agent / CI / MCP，它们没有「人坐在面板前点 Stop」这件事。
+# 危险的值（无限等）绝不能是默认值，也不能只靠「每个调用方都记得传 0」——
+# CLI / json-mode / mcp_server 三条路各手写过一遍 0，其中两条漏过一次。
+# ---------------------------------------------------------------------------
+
+
+def test_run_full_defaults_mean_no_panel_at_all():
+    """核心层默认必须是「完全无面板」：不开窗、不等待。
+
+    只把 panel_wait 改成 0 还不够 —— panel_open 若仍是 "auto"，S5 依然会尝试
+    开浏览器。默认值要一起关，否则「默认不涉及面板」只是半句话。
+    """
+    import inspect
+
+    sig = inspect.signature(PipelineRunner.run_full)
+    assert sig.parameters["panel_wait"].default == 0.0, \
+        "panel_wait 的默认值只能是 0（返回），不能是 None（无限等）"
+    assert sig.parameters["panel_open"].default == "none", \
+        "panel_open 的默认值必须是 none，否则默认路径仍会开浏览器"
+
+
+def test_clamp_turns_infinite_wait_into_zero_off_terminal(monkeypatch):
+    import sys
+
+    _clean_env(monkeypatch)
+    monkeypatch.setattr(sys, "stdout", _Pipe())
+    assert PipelineRunner._clamp_panel_wait(None) == 0.0, \
+        "非交互终端上宁可没有面板，也不能让工具调用永不返回"
+
+
+def test_clamp_keeps_infinite_wait_on_a_terminal(monkeypatch):
+    import sys
+
+    _clean_env(monkeypatch)
+    monkeypatch.setattr(sys, "stdout", _Tty())
+    assert PipelineRunner._clamp_panel_wait(None) is None
+
+
+def test_clamp_leaves_explicit_values_alone(monkeypatch):
+    import sys
+
+    _clean_env(monkeypatch)
+    monkeypatch.setattr(sys, "stdout", _Pipe())
+    assert PipelineRunner._clamp_panel_wait(0.0) == 0.0
+    assert PipelineRunner._clamp_panel_wait(120) == 120
+
+
+def test_run_returns_even_if_a_caller_forgets_panel_wait(stub_stages, tmp_path,
+                                                         monkeypatch):
+    """不带任何面板参数调用 `run_full` 也必须返回 —— 模拟「将来的第四个调用方」。"""
+    import sys
+    import threading
+    import time as _t
+
+    _clean_env(monkeypatch)
+    monkeypatch.setattr(sys, "stdout", _Pipe())
+
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "main.c").write_text("int main(void){return 0;}", encoding="utf-8")
+
+    # 假的「采集线程」：像真实采集那样每 100 ms 轮询 stop 文件。
+    # 它**必须**响应 stop —— 真实线程不响应就是串口一直被占着，下一次烧录
+    # 会以「1 秒内走完全部波特率、bytes_written=0」的假失败出现。
+    stop_flag = tmp_path / "stop.flag"
+
+    def fake_collector():
+        for _ in range(30):                # 3 秒上限
+            if stop_flag.exists():
+                return
+            _t.sleep(0.1)
+
+    alive = threading.Thread(target=fake_collector, daemon=True)
+    alive.start()
+
+    orig_verify = PipelineRunner._stage_verify
+
+    def verify_with_collector(self, board_id, expected="", **kw):   # noqa: ANN001
+        self._collector_alive = alive
+        self._collector_stop_path = str(stop_flag)
+        return orig_verify(self, board_id, expected, **kw)
+
+    monkeypatch.setattr(PipelineRunner, "_stage_verify", verify_with_collector)
+
+    t0 = _t.time()
+    result = PipelineRunner(workspace=tmp_path).run_full(
+        source_dir=str(app), board_id="gc_h743")          # 关键：不传面板参数
+    spent = _t.time() - t0
+
+    assert result.stages, "流水线没有产出阶段结果"
+    assert spent < 2.0, f"等了 {spent:.1f}s —— 默认值又变成无限等了"
+    assert result.panel_wait_ms < 2000, \
+        f"panel_wait_ms={result.panel_wait_ms:.0f}，说明等待被算进了面板时间"
+    assert not alive.is_alive(), \
+        "run_full 返回时采集线程还活着 —— 串口没释放，下一次烧录会假失败"
+    assert not stop_flag.exists(), \
+        "停止文件没清掉，下一次运行进来第一轮就会被赶走（S5 永远 0 字节）"

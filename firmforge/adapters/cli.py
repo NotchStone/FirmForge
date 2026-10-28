@@ -269,39 +269,43 @@ def _stage_extra(stage) -> str:
     return extra
 
 
-def _resolve_panel_wait(args: argparse.Namespace) -> float | None:
-    """`--panel-wait` 不写时，S5 采完样本后该等多久。
+_PANEL_INFINITE = -1.0             # `--panel` 不带值：常驻，等人点 Stop
 
-    判据与 `--open-panel auto` 同源（stdout 是不是 tty、有没有 CI / SSH）：
-    **有人在终端前看** → 无限等（他点 Stop 结束）；**被脚本 / IDE / Agent 接管**
-    → 采完即返回。
 
-    为什么这个区分是必须的：默认无限等意味着 `ff run` 在管道里**永远不返回**。
-    2026-10-28 实测 —— 五个阶段 44 秒跑完，然后挂在 `join()` 里 400 秒，
-    直到有人手动写 stop 文件。对命令行工具来说这不是"产品特性"，是把 CI 和
-    Agent 调用方一起卡死（外部观察到的现象是"卡住不动"，与"cppcheck 慢"长得一模一样，
-    但根因完全不同）。
+def _resolve_panel(args: argparse.Namespace) -> tuple[str, float | None]:
+    """把 `--panel` 一个开关翻译成（开窗模式, 等待秒数）。
+
+    **默认关闭**。这不是随手定的默认值，是产品定位：ff 的主要调用方是
+    Agent / CI / MCP，它们没有「人坐在面板前点 Stop」这件事 —— 任何
+    默认开启面板的路径，最终都会表现为「工具调用不返回」。2026-10-28 实测：
+    五个阶段 44 秒跑完，然后挂在 `join()` 里 400 秒等一个不会来的 Stop。
+
+    想看实时串口就显式要：
+      - `--panel`     → 常驻，人点 Stop / 关窗结束
+      - `--panel 120` → 留 120 秒后自动结束
+      - 不写（默认）  → 不开窗、不等待、不打印地址、不打面板日志
     """
-    explicit = getattr(args, "panel_wait", None)
-    if explicit is not None:
-        return explicit
-    if getattr(args, "json", False):
-        return 0.0                 # 要的是结果帧，不是面板
-    import os
-    if os.environ.get("CI") or os.environ.get("SSH_CONNECTION"):
-        return 0.0
-    try:
-        return None if sys.stdout.isatty() else 0.0
-    except Exception:              # 某些被重定向的 stdout 上 isatty 会抛
-        return 0.0
+    want = getattr(args, "panel", None)
+    if want is None:
+        return "none", 0.0
+    if want == _PANEL_INFINITE:
+        return "auto", None
+    if want <= 0:                  # `--panel 0` = 显式关掉，等价于不写
+        return "none", 0.0
+    return "auto", float(want)
 
 
-def _note_panel_wait(args: argparse.Namespace, wait: float | None) -> None:
-    """因非交互而放弃常驻面板时**必须说出来**，否则"面板没了"会被当成缺陷。"""
-    if wait is not None or getattr(args, "json", False):
+def _note_panel(args: argparse.Namespace, mode: str, wait: float | None) -> None:
+    """面板相关的话**只在显式要面板时说**。
+
+    默认路径必须一个面板字都不打 —— 那是 Agent 的解析输出，多一行
+    「面板未保留」就是每次调用都刷的噪声，还会让人以为哪一步出了问题。
+    """
+    if getattr(args, "json", False) or mode == "none":
         return
-    print("  （非交互终端：S5 采完样本即结束，面板不常驻；"
-          "要留面板看实时波形，用 --panel-wait 120）", file=sys.stderr, flush=True)
+    if wait is None:
+        print("  （S5 面板常驻：点 Stop / 关窗结束。这是显式 --panel 才有的行为）",
+              file=sys.stderr, flush=True)
 
 
 def _elapsed_desc(result) -> str:
@@ -338,9 +342,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     notes = _Notes()
+    panel_open, panel_wait = _resolve_panel(args)
     if not getattr(args, "json", False):
         notes.header(board_id or "(自动识别)", source_dir)
-        _note_panel_wait(args, _resolve_panel_wait(args))
+        _note_panel(args, panel_open, panel_wait)
 
     runner = PipelineRunner(
         boards_dir=args.boards_dir or str(_bdir()),
@@ -353,8 +358,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         board_id=board_id or None,
         expected=expected,
         progress_callback=notes.stage_done,
-        panel_open=getattr(args, "open_panel", "auto"),
-        panel_wait=_resolve_panel_wait(args),
+        panel_open=panel_open,
+        panel_wait=panel_wait,
     )
 
     if getattr(args, "json", False):
@@ -582,9 +587,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
         return 1
 
     notes = _Notes()
+    panel_open, panel_wait = _resolve_panel(args)
     if not getattr(args, "json", False):
         notes.header(args.board, "(不编译、不烧录，只验串口)")
-        _note_panel_wait(args, _resolve_panel_wait(args))
+        _note_panel(args, panel_open, panel_wait)
 
     runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
                             workspace=Path(args.workspace or "."),
@@ -593,8 +599,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
                              expected=getattr(args, "expected", "") or "",
                              only=("verify",),
                              progress_callback=notes.stage_done,
-                             panel_open=getattr(args, "open_panel", "auto"),
-                             panel_wait=_resolve_panel_wait(args))
+                             panel_open=panel_open,
+                             panel_wait=panel_wait)
 
     if getattr(args, "json", False):
         return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
@@ -839,12 +845,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
              "不要断言启动横幅：S5 在烧录完成后才打开串口，一次性打印早已发完。",
     )
     p_run.add_argument(
-        "--open-panel", choices=["auto", "panel", "none"], default="auto",
-        help="串口面板谁来开：auto=仅交互式终端自动打开（默认）/ panel=强制打开 / none=只打印地址",
-    )
-    p_run.add_argument(
-        "--panel-wait", type=float, default=None, metavar="SEC",
-        help="S5 采完样本后等面板多久（秒）。不写=无限等（人工点 Stop / 关窗）；0=立即结束（CI 用）",
+        "--panel", nargs="?", const=_PANEL_INFINITE, default=None, type=float,
+        metavar="SEC",
+        help="开启串口面板（**默认关闭**：不开窗、不等待、采完即返回）。"
+             "不带值=常驻等人点 Stop；带秒数=留 SEC 秒后自动结束。"
+             "只在需要人实时看波形时用，Agent / CI 调用不要加。",
     )
 
     # ff build
@@ -883,11 +888,9 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_verify.add_argument("--expected",
                           help="断言（正则），必须能命中**周期性**输出，如 'HB tick=\\d+'")
     p_verify.add_argument(
-        "--open-panel", choices=["auto", "panel", "none"], default="auto",
-        help="串口面板谁来开（auto=仅交互式终端自动打开）")
-    p_verify.add_argument(
-        "--panel-wait", type=float, default=None, metavar="SEC",
-        help="采完样本后等面板多久（秒）。不写=无限等；0=立即结束")
+        "--panel", nargs="?", const=_PANEL_INFINITE, default=None, type=float,
+        metavar="SEC",
+        help="开启串口面板（默认关闭）。不带值=常驻等人点 Stop；带秒数=留 SEC 秒")
 
     # ff status
     p_status = subparsers.add_parser(
@@ -1310,12 +1313,13 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
         ns.board = cargs.get("board")
         ns.app = cargs.get("app")
         ns.expected = cargs.get("expected", "")
-        # 面板参数必须能透传：run_full 的 join(timeout=panel_wait) 在 panel_wait
-        # 为 None 时会永久阻塞（等人点 Stop / 关窗）。agent / CI 调用方传
-        # 0 = 采样结束即返回；不传仍保持历史语义（无限等面板）。
-        _pw = cargs.get("panel_wait")
-        ns.panel_wait = float(_pw) if _pw is not None else None
-        ns.open_panel = cargs.get("open_panel") or "auto"
+        # 面板默认关闭：帧里没给 panel / panel_wait 就是「不开面板、不等」。
+        # 调用方要留面板时传 {"panel": 120}（或 -1 = 常驻）。
+        # 兼容旧字段 panel_wait / open_panel：open_panel="none" 一律视为关闭。
+        _want = cargs.get("panel", cargs.get("panel_wait"))
+        ns.panel = None if _want is None else float(_want)
+        if cargs.get("open_panel") == "none":
+            ns.panel = None
     elif cmd == "build":
         ns.board = cargs.get("board")
         ns.app = cargs.get("app")
@@ -1329,9 +1333,10 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
     elif cmd == "verify":
         ns.board = cargs.get("board")
         ns.expected = cargs.get("expected", "")
-        _pw = cargs.get("panel_wait")
-        ns.panel_wait = float(_pw) if _pw is not None else None
-        ns.open_panel = cargs.get("open_panel") or "auto"
+        _want = cargs.get("panel", cargs.get("panel_wait"))
+        ns.panel = None if _want is None else float(_want)
+        if cargs.get("open_panel") == "none":
+            ns.panel = None
     elif cmd == "status":
         pass
     return ns

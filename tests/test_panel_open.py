@@ -1,9 +1,13 @@
-"""面板呈现策略：谁来开窗、等多久。
+"""面板呈现策略：谁来开窗、等多久。**默认是关闭的。**
 
-分工（2026-10-21 定）：
-- ff 负责**提供地址并打印**，永远不假设自己有 GUI；
-- 用哪个容器呈现（系统浏览器 / IDE 内嵌 / 不看）归调用方；
-- auto 只在"确实有人在终端里看着"时才开窗，判据全是现成事实，不猜。
+分工（2026-10-28 定，取代 2026-10-21 的「auto 默认开」）：
+- 默认**不涉及面板**：不起 HTTP 服务、不开窗、不等待、不打地址；
+- 要面板就显式 `--panel`（常驻，人点 Stop）或 `--panel 120`（留 120 秒）；
+- 真开了面板时，ff 只负责**提供地址并打印**，用什么容器呈现归调用方。
+
+为什么默认关了：ff 的主要调用方是 Agent / CI / MCP，没有「人在面板前」这回事。
+默认开面板时，五个阶段 44 秒跑完还会挂 400 秒等一个不会来的 Stop ——
+外部看到的现象是「命令卡死」，而且和「cppcheck 慢」长得一模一样。
 """
 
 from __future__ import annotations
@@ -77,20 +81,28 @@ def test_open_failure_does_not_raise(monkeypatch):
     PipelineRunner._maybe_open_panel(URL, "panel", None)   # 不抛就算过
 
 
-def test_cli_defaults():
-    """默认：auto + 无限等（人工点 Stop / 关窗）。"""
-    from firmforge.adapters.cli import setup_argument_parser
+def test_cli_default_has_no_panel():
+    """默认：`args.panel is None` → 面板功能完全关闭。
 
-    args = setup_argument_parser().parse_args(
+    注意断言的是「关」而不是「auto + 无限等」——旧默认正是后者，
+    它让 `ff run` 在管道里永远不返回。
+    """
+    from firmforge.adapters import cli
+
+    args = cli.setup_argument_parser().parse_args(
         ["run", "arduino_mega", "--app", "x"])
-    assert args.open_panel == "auto"
-    assert args.panel_wait is None
+    assert args.panel is None
+    assert cli._resolve_panel(args) == ("none", 0.0)
 
 
-def test_cli_accepts_automation_values():
-    from firmforge.adapters.cli import setup_argument_parser
+def test_cli_panel_flag_forms():
+    """`--panel` 不带值 = 常驻；`--panel 120` = 留 120 秒。"""
+    from firmforge.adapters import cli
 
-    args = setup_argument_parser().parse_args(
-        ["run", "arduino_mega", "--app", "x", "--open-panel", "none", "--panel-wait", "0"])
-    assert args.open_panel == "none"
-    assert args.panel_wait == 0.0
+    parser = cli.setup_argument_parser()
+    resident = parser.parse_args(["run", "arduino_mega", "--app", "x", "--panel"])
+    assert resident.panel == cli._PANEL_INFINITE
+    assert cli._resolve_panel(resident) == ("auto", None)
+
+    timed = parser.parse_args(["run", "arduino_mega", "--app", "x", "--panel", "120"])
+    assert cli._resolve_panel(timed) == ("auto", 120.0)
