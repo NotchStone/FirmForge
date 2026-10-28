@@ -44,7 +44,7 @@ def patched(monkeypatch, tmp_path: Path):
     """把板卡解析与提供者工厂都换成可控桩。"""
     state = {"platform": "stm32", "flasher": None, "requested": []}
 
-    def fake_resolve_board(self, board_id):  # noqa: ANN001
+    def fake_resolve_board(self, board_id, boards_dir=None):  # noqa: ANN001
         return BOARD_CFG[state["platform"]]
 
     def fake_get_flash_provider(platform: str, config: dict):  # noqa: ANN001
@@ -63,8 +63,11 @@ def patched(monkeypatch, tmp_path: Path):
     return state, hex_path
 
 
-def _args(board: str, firmware: str) -> argparse.Namespace:
-    return argparse.Namespace(board=board, firmware=firmware, boards_dir=None, json=False)
+def _args(board: str, firmware: str, workspace: Path) -> argparse.Namespace:
+    """workspace 必须用 tmp_path：`ff flash` 现在会写 .ff-run/state.json，
+    用默认的 "." 会把测试状态写进真实工作区。"""
+    return argparse.Namespace(board=board, firmware=firmware, app=None,
+                              boards_dir=None, workspace=str(workspace), json=False)
 
 
 def test_stm32_routes_to_stm32_provider(patched):
@@ -72,8 +75,10 @@ def test_stm32_routes_to_stm32_provider(patched):
     state, hex_path = patched
     state["platform"] = "stm32"
 
-    assert cli.cmd_flash(_args("gc_h743", str(hex_path))) == 0
-    assert state["requested"] == ["stm32"]
+    assert cli.cmd_flash(_args("gc_h743", str(hex_path), hex_path.parent)) == 0
+    # 提供者被构造两次：S1 为了取端口算指纹，S4 为了烧录。
+    # 关键是**两次都在同一平台**，不能一次 stm32 一次 arduino。
+    assert set(state["requested"]) == {"stm32"}
     assert state["flasher"].flashed == [str(hex_path)]
 
 
@@ -82,8 +87,8 @@ def test_arduino_routes_to_arduino_provider(patched):
     state["platform"] = "arduino"
 
     # 没有串口：avrdude 路线必须硬失败，不能被 SWD 分支放过
-    assert cli.cmd_flash(_args("arduino_mega", str(hex_path))) == 1
-    assert state["requested"] == ["arduino"]
+    assert cli.cmd_flash(_args("arduino_mega", str(hex_path), hex_path.parent)) == 1
+    assert set(state["requested"]) == {"arduino"}
     assert state["flasher"].flashed == []
 
 
@@ -106,7 +111,7 @@ def test_flash_error_is_reported_without_traceback(patched, capsys):
 
     try:
         providers_pkg.get_flash_provider = returning_failing
-        code = cli.cmd_flash(_args("gc_h743", str(hex_path)))
+        code = cli.cmd_flash(_args("gc_h743", str(hex_path), hex_path.parent))
     finally:
         providers_pkg.get_flash_provider = original
 
@@ -134,11 +139,11 @@ def test_verified_without_byte_count_has_readable_output(patched, capsys):
 
     try:
         providers_pkg.get_flash_provider = returning
-        code = cli.cmd_flash(_args("gc_h743", str(hex_path)))
+        code = cli.cmd_flash(_args("gc_h743", str(hex_path), hex_path.parent))
     finally:
         providers_pkg.get_flash_provider = original
 
     out = capsys.readouterr().out
     assert code == 0
-    assert "verified by read-back" in out
+    assert "回读校验通过" in out
     assert "-1 bytes" not in out

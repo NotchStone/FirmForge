@@ -239,23 +239,20 @@ def run_cppcheck(source_dir: str, *,
                  enable: str = "all",
                  timeout: float = DEFAULT_TIMEOUT_S,
                  use_cache: bool = True,
+                 jobs: int = 0,
+                 build_dir: str = "",
                  exe: Path | None = None) -> CppcheckReport:
     """对源码目录跑一次 cppcheck。
 
     Args:
-        source_dir: 源码目录。
-        include_dirs: 编译用的头文件搜索路径（**与编译同一份**，否则
-            `missingInclude` 会让 `#if` 分支判定失真）。
-        defines: 编译用的宏（不带 `-D` 前缀）。
-        force_includes: 强制包含的头文件。用途是把**编译器的内建宏**
-            （`__GNUC__` / `__arm__` / `__ARM_ARCH_7EM__` …）喂给 cppcheck：
-            它自己不预定义这些，缺了会走进 CMSIS 的 `#error Unknown compiler`。
-            见 `firmforge.providers.cppcheck_support.predefines_header()`。
-        vendor_roots: 厂家 SDK / 第三方库的根目录。落在这些目录里的诊断
-            **照原样保留**（在 `issues` 里带 `vendor=True`），但不触发阻断。
-        enable: cppcheck `--enable` 取值。
-        timeout: 单次上限（秒）。超时会被如实上报，不会伪装成"没问题"。
-        use_cache: 命中内容哈希缓存就直接返回（派生物，可安全删除）。
+        jobs: 并行度（cppcheck `-j`）。0 = 不传，由 cppcheck 决定（单线程）。
+            实测 8 个 TU / CMSIS+HAL：121.7 s → 72.2 s，诊断逐条一致。
+        build_dir: `--cppcheck-build-dir` 的落点，让 cppcheck 复用**未变
+            翻译单元**的分析结果。实测（8 TU）：冷 65 s、源码未改 12 s、
+            改一个文件 11 s，而进程级内容哈希缓存只在「一个字节都没变」时
+            命中，改一行就全废（100 s）。两者互补，不能互相替代。
+            ⚠ 目录**必须预先存在**：不存在时 cppcheck 直接 rc=1 且输出为空
+            （实测），那会被读成"0 条诊断" —— 这是最坏的一种失败形态。
         exe: 指定 cppcheck 可执行文件（测试注入用）。
 
     Returns:
@@ -279,9 +276,20 @@ def run_cppcheck(source_dir: str, *,
         report.ok = True          # 没东西可查 ≠ 查失败
         return report
 
+    # 目录不存在时 cppcheck 会给一个空输出 + rc=1，看起来像"没问题"。
+    # 这里先建好；建不出来就退回不带 build-dir（慢但正确）。
+    bdir = ""
+    if build_dir:
+        try:
+            Path(build_dir).mkdir(parents=True, exist_ok=True)
+            bdir = build_dir
+        except OSError as exc:
+            report.notes.append(f"--cppcheck-build-dir 不可用（{exc}）—— "
+                                f"本次退回全量分析，只是慢一些")
+
     cmd = _build_command(cppcheck_exe, files, include_dirs=include_dirs,
                          defines=defines, force_includes=force_includes,
-                         enable=enable)
+                         enable=enable, jobs=jobs, build_dir=bdir)
     report.command = cmd
 
     version = _cppcheck_version(cppcheck_exe)
@@ -299,8 +307,17 @@ def run_cppcheck(source_dir: str, *,
     if note:
         report.notes.append(note)
 
+    def _execute(command: Sequence[str]):
+        """跑一次并把输出解析进新报告，返回 (进程结果, 报告)。"""
+        proc = run_text(command, timeout=timeout, cwd=str(src))
+        rep = CppcheckReport(headers_skipped=headers_skipped)
+        rep.raw = _compose_raw(proc.stdout or "", proc.stderr or "")
+        _parse_into(rep, proc.stdout or "", proc.stderr or "")
+        return proc, rep
+
     try:
-        r = run_text(cmd, timeout=timeout, cwd=str(src))
+        r, report = _execute(cmd)
+        report.notes = [note] if note else []
     except Exception as exc:                      # 含 TimeoutExpired
         report.ok = False
         report.status = ("timeout" if exc.__class__.__name__ == "TimeoutExpired"
@@ -315,8 +332,34 @@ def run_cppcheck(source_dir: str, *,
         logger.warning("Cppcheck %s: %s", report.status, exc)
         return report
 
-    report.raw = _compose_raw(r.stdout or "", r.stderr or "")
-    _parse_into(report, r.stdout or "", r.stderr or "")
+    # build-dir 失效（目录被清、版本升级、并发写坏）时，cppcheck 会直接
+    # 返回非零并且**一句话都不输出**。那种情况在统计上等于"0 条诊断"——
+    # 最危险的失败形态：表面干净，实际什么都没查。
+    # 判据是三条同时成立：用过 build-dir、返回码非零、三类输出全空。
+    if bdir and getattr(r, "returncode", 0) != 0 and not (
+            report.issues or report.meta or report.unparsed):
+        logger.warning("cppcheck 带 build-dir 返回 %s 且无输出 —— 退回全量重跑",
+                       getattr(r, "returncode", "?"))
+        keep = list(report.notes) + [
+            "cppcheck 带 --cppcheck-build-dir 返回非零且无任何输出；"
+            "已自动退回**不带** build-dir 全量重跑，以重跑结果为准"]
+        bdir = ""
+        cmd = _build_command(cppcheck_exe, files, include_dirs=include_dirs,
+                             defines=defines, force_includes=force_includes,
+                             enable=enable, jobs=jobs)
+        report.command = cmd
+        try:
+            r, report = _execute(cmd)
+            report.notes = keep + list(report.notes)
+        except Exception as exc:                  # noqa: BLE001
+            report.ok = False
+            report.status = "crashed"
+            report.skip_reason = f"{type(exc).__name__}: {exc}"
+            report.elapsed_ms = (time.perf_counter() - start) * 1000
+            report.notes = keep
+            return report
+
+    report.command = cmd
     report.vendor_roots = [str(v) for v in vendor_roots]
     _mark_vendor(report)
     report.ok = True
@@ -375,7 +418,9 @@ def _build_command(exe: Path, files: Iterable[str], *,
                    include_dirs: Sequence[str],
                    defines: Sequence[str],
                    force_includes: Sequence[str],
-                   enable: str) -> list[str]:
+                   enable: str,
+                   jobs: int = 0,
+                   build_dir: str = "") -> list[str]:
     cmd = [
         str(exe),
         "--enable=" + enable,
@@ -383,6 +428,10 @@ def _build_command(exe: Path, files: Iterable[str], *,
         "--inline-suppr",
         "--quiet",
     ]
+    if jobs > 0:
+        cmd.extend(["-j", str(jobs)])
+    if build_dir:
+        cmd.append("--cppcheck-build-dir=" + build_dir)
     for sup in DEFAULT_SUPPRESS:
         cmd.append("--suppress=" + sup)
     for inc in force_includes:
@@ -393,6 +442,28 @@ def _build_command(exe: Path, files: Iterable[str], *,
         cmd.extend(["-I", inc])
     cmd.extend(files)
     return cmd
+
+
+#: 只影响「跑多快」，不影响「得出什么结论」的参数。缓存键里要剔掉它们，
+#: 否则换台机器（核数不同）或换 build-dir 落点就让全部缓存失效。
+_SPEED_ONLY_FLAGS = ("-j", "--cppcheck-build-dir")
+
+
+def _logical_cmd(cmd: Sequence[str]) -> list[str]:
+    """去掉纯提速参数后的命令行 —— 缓存键用它，语义参数一个不落。"""
+    out: list[str] = []
+    skip_next = False
+    for arg in cmd:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "-j":
+            skip_next = True
+            continue
+        if arg.startswith("--cppcheck-build-dir"):
+            continue
+        out.append(arg)
+    return out
 
 
 def _collect_sources(src: Path) -> tuple[list[str], int]:
@@ -545,7 +616,10 @@ def _cache_key(cmd: Sequence[str], version: str, src: Path,
     """
     h = hashlib.sha256()
     h.update(version.encode("utf-8"))
-    h.update(json.dumps(list(cmd), ensure_ascii=False).encode("utf-8"))
+    # 只哈希**语义**参数：`-j 8` 与 build-dir 落点改变的是速度，不是结论。
+    # 把它们算进来，换台机器（核数不同）或换个 app 目录就让缓存全废 ——
+    # 而"缓存失效"的代价是 100 秒。
+    h.update(json.dumps(_logical_cmd(cmd), ensure_ascii=False).encode("utf-8"))
     h.update(json.dumps(list(vendor_roots), ensure_ascii=False).encode("utf-8"))
     for path in _cache_inputs(src, include_dirs):
         h.update(str(path).encode("utf-8"))

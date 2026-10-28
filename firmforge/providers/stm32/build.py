@@ -419,7 +419,7 @@ class Stm32BuildProvider(BuildProvider):
             ] + user_objs + [archive_path] + [
                 "-Wl,--start-group", "-lc", "-lm", "-lgcc", "-Wl,--end-group",
             ] + list(self._build_cfg.get("extra_link_flags", []) or [])
-            logger.info("Link: %s", " ".join(link_cmd))
+            logger.debug("Link: %s", " ".join(link_cmd))
             r = run_text(link_cmd)
             stdout_all += r.stdout
             stderr_all += r.stderr
@@ -503,7 +503,7 @@ class Stm32BuildProvider(BuildProvider):
         """编译或复用 SDK 归档。返回 (hal.a 路径或 None, stdout, stderr, rc)。"""
         cached = self._sdk_archive(sdk, common_flags)
         if cached:
-            logger.info("SDK archive cache hit: %s", cached)
+            logger.debug("SDK archive cache hit: %s", cached)
             return cached, "", "", 0
 
         gcc = self._toolchain.gcc

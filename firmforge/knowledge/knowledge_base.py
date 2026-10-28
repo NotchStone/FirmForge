@@ -295,7 +295,7 @@ class KnowledgeBase:
             self._peripheral_names = {
                 key.split(".", 1)[0] for key in new_qualified}
 
-            logger.info("KnowledgeBase loaded %d registers (%d qualified, "
+            logger.debug("KnowledgeBase loaded %d registers (%d qualified, "
                         "%d field names) from %s",
                         len(self._register_index), len(self._qualified_index),
                         len(self._field_index), reg_path)
@@ -323,7 +323,7 @@ class KnowledgeBase:
                 if arduino_pin >= 0:
                     new_pins[arduino_pin] = pin_entry
 
-            logger.info("KnowledgeBase loaded %d pins from %s (board=%s)",
+            logger.debug("KnowledgeBase loaded %d pins from %s (board=%s)",
                          len(pin_data.get("pins", [])), pin_file, board_id)
             loaded_any = True
         # 当前芯片没有 pin 表时同样清空：留着上一个芯片的引脚映射，

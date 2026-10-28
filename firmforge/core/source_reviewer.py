@@ -738,7 +738,7 @@ class SourceReviewer:
                     f"fields {result.fields_resolved}/{result.fields_checked}")
 
         if result.passed:
-            logger.info("Source review: PASS（%s%s）", counters, allowed)
+            logger.debug("Source review: PASS（%s%s）", counters, allowed)
             return
 
         head = "; ".join(

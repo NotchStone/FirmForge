@@ -35,6 +35,63 @@ def _json_out(obj: dict, exit_code: int = 0) -> int:
     return exit_code
 
 
+_STAGE_TAG = {"Detect": "S1", "Review": "S2", "Build": "S3",
+              "Flash": "S4", "Verify": "S5"}
+
+
+class _Notes:
+    """把流水线进度实时打到 stderr。
+
+    为什么是 stderr，不是 stdout —— 两条都是实测出来的：
+
+    ① `--json` 时 stdout 必须是**单个** JSON 对象，任何人类可读行都是污染。
+    ② 用户常用 `ff run ... | Select-Object -Last 12`。PowerShell 会把
+       **stdout** 缓冲到进程退出才一次性吐出，而 stderr 不经过那条管道，
+       能逐行刷出来。之前整条流水线只在结束时打印汇总，于是 cppcheck 冷跑
+       那 100 秒里屏幕上一个字都没有，看起来就是卡死（2026-10-27 实测）。
+       只要写 stdout，这个现象就一点都不会改善。
+    """
+
+    def __init__(self) -> None:
+        self._t0 = time.time()
+        self._stage_t0 = self._t0
+
+    def note(self, stage: str, message: str) -> None:
+        """阶段**内部**的一行（cppcheck 启动、编译完成……）。"""
+        tag = _STAGE_TAG.get(stage, stage)
+        print(f"  [{tag} {time.time() - self._t0:6.1f}s] {message}",
+              file=sys.stderr, flush=True)
+
+    def stage_done(self, name: str, success: bool, details: dict,
+                   error: str | None) -> None:
+        """阶段结束的一行，兼作 `progress_callback`。
+
+        与最终汇总表**故意重复**：滚动区留痕解决"当时发生了什么"，
+        汇总表解决"整体结论是什么"。少任何一个都不行。
+        """
+        tag = _STAGE_TAG.get(name, name)
+        skipped = bool((details or {}).get("skipped"))
+        mark = "SKIP" if skipped else (" OK " if success else "FAIL")
+        extra = ""
+        if skipped:
+            # 跳过的原因可能记在 `reason`（构建/烧录）或 `note`（S5 无串口）。
+            # 少这个回退会打出 "SKIP Verify  None" —— 有回退才说得清为什么跳。
+            why = (details or {}).get("reason") or (details or {}).get("note") or ""
+            extra = f"  {why}" if why else ""
+        elif not success and error:
+            extra = f"  {error.splitlines()[0][:120]}"
+        print(f"  [{tag} {time.time() - self._t0:6.1f}s] {mark} {name}{extra}",
+              file=sys.stderr, flush=True)
+
+    def header(self, board: str, source: str) -> None:
+        print("FirmForge 5-stage pipeline", file=sys.stderr, flush=True)
+        if board:
+            print(f"  Board:  {board}", file=sys.stderr, flush=True)
+        print(f"  Source: {source}", file=sys.stderr, flush=True)
+        print("  （以下是实时进度；最终汇总会再打印一遍到标准输出）",
+              file=sys.stderr, flush=True)
+
+
 def _detect_payload(detector: BoardDetector, result, args) -> dict:
     """Structured detect result (shared by json mode)."""
     board_config = None
@@ -212,6 +269,55 @@ def _stage_extra(stage) -> str:
     return extra
 
 
+def _resolve_panel_wait(args: argparse.Namespace) -> float | None:
+    """`--panel-wait` 不写时，S5 采完样本后该等多久。
+
+    判据与 `--open-panel auto` 同源（stdout 是不是 tty、有没有 CI / SSH）：
+    **有人在终端前看** → 无限等（他点 Stop 结束）；**被脚本 / IDE / Agent 接管**
+    → 采完即返回。
+
+    为什么这个区分是必须的：默认无限等意味着 `ff run` 在管道里**永远不返回**。
+    2026-10-28 实测 —— 五个阶段 44 秒跑完，然后挂在 `join()` 里 400 秒，
+    直到有人手动写 stop 文件。对命令行工具来说这不是"产品特性"，是把 CI 和
+    Agent 调用方一起卡死（外部观察到的现象是"卡住不动"，与"cppcheck 慢"长得一模一样，
+    但根因完全不同）。
+    """
+    explicit = getattr(args, "panel_wait", None)
+    if explicit is not None:
+        return explicit
+    if getattr(args, "json", False):
+        return 0.0                 # 要的是结果帧，不是面板
+    import os
+    if os.environ.get("CI") or os.environ.get("SSH_CONNECTION"):
+        return 0.0
+    try:
+        return None if sys.stdout.isatty() else 0.0
+    except Exception:              # 某些被重定向的 stdout 上 isatty 会抛
+        return 0.0
+
+
+def _note_panel_wait(args: argparse.Namespace, wait: float | None) -> None:
+    """因非交互而放弃常驻面板时**必须说出来**，否则"面板没了"会被当成缺陷。"""
+    if wait is not None or getattr(args, "json", False):
+        return
+    print("  （非交互终端：S5 采完样本即结束，面板不常驻；"
+          "要留面板看实时波形，用 --panel-wait 120）", file=sys.stderr, flush=True)
+
+
+def _elapsed_desc(result) -> str:
+    """耗时描述：流水线自身耗时，等面板的时间单独标注。
+
+    两者混在一起时，一条 44 秒的流水线会显示成 444687 ms，而那个数字是
+    「人什么时候点 Stop」，不是工具的性能指标 —— 放在同一个括号里就是在
+    制造错误印象。
+    """
+    text = f"{result.total_elapsed_ms:.0f}ms"
+    wait_ms = getattr(result, "panel_wait_ms", 0.0) or 0.0
+    if wait_ms >= 500:
+        text += f"，另有 {wait_ms / 1000:.1f}s 等面板（不计入流水线耗时）"
+    return text
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """ff run: Review → Build → Flash → Verify pipeline.
 
@@ -231,22 +337,30 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("Error: --app <source_dir> is required")
         return 1
 
+    notes = _Notes()
+    if not getattr(args, "json", False):
+        notes.header(board_id or "(自动识别)", source_dir)
+        _note_panel_wait(args, _resolve_panel_wait(args))
+
     runner = PipelineRunner(
         boards_dir=args.boards_dir or str(_bdir()),
         workspace=workspace,
+        on_note=notes.note,
     )
 
     result = runner.run_full(
         source_dir=source_dir,
         board_id=board_id or None,
         expected=expected,
+        progress_callback=notes.stage_done,
         panel_open=getattr(args, "open_panel", "auto"),
-        panel_wait=getattr(args, "panel_wait", None),
+        panel_wait=_resolve_panel_wait(args),
     )
 
     if getattr(args, "json", False):
         return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
 
+    print()
     print("FirmForge 5-Stage Pipeline")
     if board_id:
         print(f"  Board: {board_id}")
@@ -267,13 +381,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     if result.overall_success:
         if collected:
             print(f"  RESULT: {len(result.stages)} stages done, S5 collected only "
-                  f"(no assertion supplied) ({result.total_elapsed_ms:.0f}ms)")
+                  f"(no assertion supplied) ({_elapsed_desc(result)})")
         else:
-            print(f"  RESULT: ALL STAGES PASSED ({result.total_elapsed_ms:.0f}ms)")
+            print(f"  RESULT: ALL STAGES PASSED ({_elapsed_desc(result)})")
         return 0
     else:
         failed = [s for s in result.stages if not s.success]
-        print(f"  RESULT: {len(failed)} stage(s) failed ({result.total_elapsed_ms:.0f}ms)")
+        print(f"  RESULT: {len(failed)} stage(s) failed ({_elapsed_desc(result)})")
         for s in failed:
             detail = s.error or "unknown error"
             if s.name == "Build" and s.details.get("compile_rounds", 0) > 1:
@@ -389,12 +503,19 @@ def cmd_build(args: argparse.Namespace) -> int:
         print("Error: --app <source_dir> is required")
         return 1
 
-    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()), workspace=workspace)
-    result = runner.build(source_dir=source_dir, board_id=args.board or None)
+    notes = _Notes()
+    if not getattr(args, "json", False):
+        notes.header(args.board or "(自动识别)", source_dir)
+
+    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
+                            workspace=workspace, on_note=notes.note)
+    result = runner.build(source_dir=source_dir, board_id=args.board or None,
+                          progress_callback=notes.stage_done)
 
     if getattr(args, "json", False):
         return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
 
+    print()
     for s in result.stages:
         icon = _stage_badge(s)
         extra = _stage_extra(s)
@@ -410,101 +531,261 @@ def cmd_build(args: argparse.Namespace) -> int:
         return 1
 
 
-def cmd_flash(args: argparse.Namespace) -> int:
-    """ff flash: flash-only utility."""
-    board_id = args.board
-    firmware = args.firmware
+def cmd_review(args: argparse.Namespace) -> int:
+    """ff review：只跑 S2（静态分析 + 寄存器审查 + 置信度）。
 
-    if not board_id:
+    存在的理由很具体：改完代码想确认"审查这关过不过"，不该被
+    Build / Flash 拖进去；反过来改了知识库或豁免表想复验审查，也不该动板子。
+    """
+    from firmforge.core.pipeline_runner import PipelineRunner
+
+    source_dir = args.app
+    if not source_dir:
+        if getattr(args, "json", False):
+            return _json_out({"error": "--app <source_dir> is required"}, 1)
+        print("Error: --app <source_dir> is required")
+        return 1
+
+    notes = _Notes()
+    if not getattr(args, "json", False):
+        notes.header(args.board or "(自动识别)", source_dir)
+
+    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
+                            workspace=Path(args.workspace or "."),
+                            on_note=notes.note)
+    result = runner.run_full(source_dir=source_dir, board_id=args.board or None,
+                             only=("review",),
+                             progress_callback=notes.stage_done)
+
+    if getattr(args, "json", False):
+        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+
+    print()
+    _print_stage_list(result)
+    print(f"  RESULT: {'REVIEW PASSED' if result.overall_success else 'REVIEW FAILED'}"
+          f" ({_elapsed_desc(result)})")
+    return 0 if result.overall_success else 1
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    """ff verify：只跑 S5（打开串口、采样本、匹配断言）。不编译、不烧录。
+
+    板子上已经是想验的那份固件时用这个 —— 否则每次验串口都要重跑一遍
+    cppcheck（冷跑约 100 秒）加编译，纯属浪费。
+    """
+    from firmforge.core.pipeline_runner import PipelineRunner
+
+    if not args.board:
         if getattr(args, "json", False):
             return _json_out({"error": "board is required"}, 1)
-        print("Usage: ff flash <board> --firmware <path>")
+        print("Usage: ff verify <board> [--expected '<正则>']")
         return 1
 
+    notes = _Notes()
+    if not getattr(args, "json", False):
+        notes.header(args.board, "(不编译、不烧录，只验串口)")
+        _note_panel_wait(args, _resolve_panel_wait(args))
+
+    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
+                            workspace=Path(args.workspace or "."),
+                            on_note=notes.note)
+    result = runner.run_full(board_id=args.board,
+                             expected=getattr(args, "expected", "") or "",
+                             only=("verify",),
+                             progress_callback=notes.stage_done,
+                             panel_open=getattr(args, "open_panel", "auto"),
+                             panel_wait=_resolve_panel_wait(args))
+
+    if getattr(args, "json", False):
+        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+
+    print()
+    _print_stage_list(result)
+    s5 = next((s for s in result.stages if s.name == "Verify"), None)
+    verdict = getattr(s5, "verdict", "") or ""
+    print(f"  RESULT: verify {verdict or ('PASSED' if result.overall_success else 'FAILED')}"
+          f" ({_elapsed_desc(result)})")
+    return 0 if result.overall_success else 1
+
+
+def cmd_flash(args: argparse.Namespace) -> int:
+    """ff flash：只跑 S4（烧录）。不跑 Review、不跑 Build。
+
+    两处修正（2026-10-27）：
+
+    ① **走 PipelineRunner，与 ff run 共用 `.ff-run/state.json`**。旧实现自己
+       new detector + provider，完全不碰 state —— 于是 `ff flash` 烧完之后
+       `ff run` 仍认为「没烧过」，会再烧一遍，而两次之间没有任何人被告知。
+    ② **hex 不再靠 `Path(".").rglob("firmware.hex")` 在当前目录瞎找**。
+       构建缓存在 `cache/build/<板卡>/<项目>/` 下跨项目共享，在工作目录里
+       rglob 既可能找不到，也可能找到**别的项目**的固件。现在按
+       `--firmware` → state 记录 → 构建缓存（唯一才用，多份报错列候选）。
+    """
+    from firmforge.core.pipeline_runner import PipelineRunner
+
+    if not args.board:
+        if getattr(args, "json", False):
+            return _json_out({"error": "board is required"}, 1)
+        print("Usage: ff flash <board> [--app <应用名>] [--firmware <path>]")
+        return 1
+
+    notes = _Notes()
+    if not getattr(args, "json", False):
+        notes.header(args.board, args.app or "(固件由 state/缓存解析)")
+
+    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
+                            workspace=Path(args.workspace or "."),
+                            on_note=notes.note)
+    result = runner.run_full(board_id=args.board,
+                             only=("flash",),
+                             firmware=args.firmware or "",
+                             app_name=args.app or "",
+                             progress_callback=notes.stage_done)
+
+    s4 = next((s for s in result.stages if s.name == "Flash"), None)
+    if getattr(args, "json", False):
+        return _json_out({
+            "success": bool(result.overall_success),
+            "board": args.board,
+            "firmware": (s4.details.get("firmware_path", "") if s4 else ""),
+            "bytes_written": (s4.details.get("bytes_written", 0) if s4 else 0),
+            "elapsed_ms": round(result.total_elapsed_ms),
+            "error": (s4.error if s4 and not s4.success else ""),
+            "candidates": (s4.details.get("candidates", []) if s4 else []),
+        }, 0 if result.overall_success else 1)
+
+    print()
+    if s4 is None:
+        print("  Error: 没有执行烧录阶段")
+        return 1
+    if s4.success:
+        size = s4.details.get("bytes_written", 0)
+        how = (f"{size} bytes" if isinstance(size, int) and size >= 0
+               else "回读校验通过")
+        print(f"  [PASS] Stage 4 Flash ({s4.elapsed_ms:.0f}ms)  {how}")
+        return 0
+
+    print(f"  [FAIL] Stage 4 Flash ({s4.elapsed_ms:.0f}ms)")
+    print(f"         {s4.error or 'unknown'}")
+    for c in s4.details.get("candidates", []):
+        print(f"         --app {c['app']:20s} {c['size']} B  {c['mtime']}")
+    return 1
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """ff status：把 `.ff-run/state.json` 讲成人话。
+
+    回答的是「为什么这次跳过了 / 为什么又重跑了」—— 这两个问题以前只能
+    自己去读 state.json 并猜指纹语义。流水线的增量跳过是四指纹驱动的
+    （源码 / hex / 端口 / 板卡），不提这个，跳过就会被当成 bug。
+    """
+    from firmforge.core.pipeline_runner import PipelineRunner
+    from firmforge.core.pipeline_state import PipelineState
+
+    workspace = Path(args.workspace or ".")
+    state = PipelineState(workspace)
+    data = state.data
+
+    if getattr(args, "json", False):
+        return _json_out({"workspace": str(workspace), "state": data})
+
+    print(f"运行状态：{paths_runtime(workspace)}")
+    if not data:
+        print("  （空 —— 还没有跑过；下一次 ff run 会完整执行五个阶段）")
+        return 0
+
+    fps = data.get("fingerprints", {}) or {}
+    print()
+    print("四指纹（任一变化都会让对应阶段重跑）")
+    for key, label in (("board_id", "板卡"), ("source", "源码"),
+                       ("hex", "固件"), ("port", "端口")):
+        val = fps.get(key, "")
+        print(f"  {label:4s} {_short(val) if val else '(未记录)'}")
+
+    print()
+    print("阶段")
+    for name in ("detect", "review", "build", "flash", "test"):
+        entry = (data.get("stages", {}) or {}).get(name, {}) or {}
+        status = entry.get("status", "pending")
+        extra = ""
+        if name == "build" and entry.get("hex"):
+            extra = f"  {_artifact_desc(entry['hex'])}"
+        if entry.get("error"):
+            extra = f"  {str(entry['error']).splitlines()[0][:100]}"
+        print(f"  {name:8s} {status}{extra}")
+
+    last = data.get("last_error") or {}
+    if last:
+        # 阶段现在是 done 而 last_error 还在，是因为 mark_done 只清**该阶段**
+        # 的 error 字段（mark_failed 另外往 last_error 里留了一份）。直接打
+        # 「上次失败：build」会与上面的 build done 自相矛盾，所以要说清它是
+        # 更早一次失败的记录。
+        stage_now = state.stage_status(str(last.get("stage", "")))
+        suffix = ("（该阶段现在已是 done —— 这条是更早一次失败的记录）"
+                  if stage_now == "done" else "")
+        print()
+        print(f"上次失败：{last.get('stage', '?')} —— "
+              f"{str(last.get('message', '')).splitlines()[0][:140]}{suffix}")
+
+    print()
+    print("下次 ff run 的跳过条件（指纹一致才跳，任一变化就重跑）：")
+    if not fps:
+        print("  指纹为空 —— 五个阶段全部执行")
+    else:
+        # 不重算指纹（没有源码路径），所以只给条件，不假装预测结果。
+        if state.stage_status("build") == "done" and fps.get("hex"):
+            print("  S3 Build    源码 + 板卡指纹不变 → 跳过，复用上次 hex")
+        if state.stage_status("flash") == "done":
+            print("  S4 Flash    源码/固件/端口/板卡全不变 → 跳过；"
+                  "给了 --expected 一律真烧")
+        if state.stage_status("test") == "done":
+            print("  S5 Verify   同上 → 跳过；给了 --expected 一律重验")
+        if not any(state.stage_status(s) == "done"
+                   for s in ("build", "flash", "test")):
+            print("  没有可跳过的阶段 —— 会完整重跑")
+    print()
+    print("注意：S2 Review 不在跳过之列（cppcheck 自己的内容哈希缓存负责加速），"
+          "源码一变它就是冷跑。只想烧录请用 ff flash。")
+    return 0
+
+
+def _short(text: str, n: int = 40) -> str:
+    """指纹里存的是 SHA256 或长路径，全打出来没人看得下去。"""
+    t = str(text)
+    if len(t) <= n:
+        return t
+    if "/" in t or "\\" in t:                     # 路径：保留文件名 + 尾部
+        return "…" + Path(t).name
+    return t[:n] + "…"
+
+
+def _artifact_desc(path: str) -> str:
+    p = Path(path)
     try:
-        from firmforge.core.board_detector import BoardDetector
-        from firmforge.providers import get_flash_provider
+        st = p.stat()
+        return (f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(st.st_mtime))}"
+                f"，{st.st_size} B")
+    except OSError:
+        return "(文件不存在)"
 
-        detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
-        config = detector.resolve_board(board_id)
 
-        if not config:
-            if getattr(args, "json", False):
-                return _json_out({"error": f"board '{board_id}' not found"}, 1)
-            print(f"Error: board '{board_id}' not found")
-            return 1
+def paths_runtime(workspace: Path) -> str:
+    """`.ff-run/` 的绝对路径。相对路径在这里没有用 —— 读的人要能直接打开它。"""
+    from firmforge.infrastructure import paths as _p
+    return str(_p.runtime_dir(Path(workspace).resolve()))
 
-        # 按平台路由，与 pipeline 同一入口：AVR 走 avrdude，STM32 走 OpenOCD + SWD。
-        # 此前这里硬编码 ArduinoFlashProvider，STM32 板卡会撞在 avrdude 的 MCU_MAP 上，
-        # 报出 "Unknown MCU chip 'STM32H743ZIT6'"，把「路由错了」伪装成「芯片不认识」。
-        platform = config.get("platform", "arduino")
-        flasher = get_flash_provider(platform, config)
 
-        # 串口只服务「经串口烧录」的路线（avrdude）与 S5 回读。
-        # SWD 路线不依赖串口，拿不到口只影响回读，不该阻断烧录。
-        port = flasher.detect_port()
-        if not port and platform == "arduino":
-            if getattr(args, "json", False):
-                return _json_out({"error": "No COM port detected. Connect Arduino and retry."}, 1)
-            print("Error: No COM port detected. Connect Arduino and retry.")
-            return 1
-
-        # Auto-detect firmware if not specified
-        if not firmware:
-            candidates = list(Path(".").rglob("firmware.hex"))
-            if not candidates:
-                if getattr(args, "json", False):
-                    return _json_out({"error": "No firmware.hex found. Use --firmware <path>"}, 1)
-                print("Error: No firmware.hex found. Use --firmware <path>")
-                return 1
-            firmware = str(candidates[0])
-            if not getattr(args, "json", False):
-                print(f"Auto-detected firmware: {firmware}")
-
-        if not getattr(args, "json", False):
-            print(f"Platform: {platform} | Port: {port or '(none — SWD 不依赖串口)'}")
-
-        result = flasher.flash(firmware)
-
-        if getattr(args, "json", False):
-            return _json_out({
-                "success": result.success,
-                "board": board_id,
-                "port": port,
-                "firmware": firmware,
-                "bytes_written": result.bytes_written if hasattr(result, "bytes_written") else 0,
-                "elapsed_ms": result.elapsed_ms if hasattr(result, "elapsed_ms") else 0,
-                "error": result.stderr[-500:] if not result.success and hasattr(result, "stderr") else "",
-            }, 0 if result.success else 1)
-
-        if result.success:
-            # bytes_written = -1 表示「写成功是回读校验确认的，字节数未知」，
-            # 不能把 -1 直接打给人看。
-            if getattr(result, "bytes_written", 0) >= 0:
-                print(f"Flash SUCCESS ({result.bytes_written} bytes, {result.elapsed_ms:.0f}ms)")
-            else:
-                print(f"Flash SUCCESS (verified by read-back, {result.elapsed_ms:.0f}ms)")
-            return 0
-        else:
-            print(f"Flash FAILED: {result.stderr[-200:]}")
-            return 1
-
-    except ImportError as e:
-        if getattr(args, "json", False):
-            return _json_out({"error": f"flash provider not available: {e}"}, 1)
-        print(f"flash provider not available: {e}")
-        return 1
-    except Exception as e:
-        # FlashError 是可预期失败（工具链缺件、OpenOCD 连不上、校验失败），
-        # 给一行人话而不是 traceback；其余异常照旧抛出去。
-        from firmforge.providers.base import ProviderError
-
-        if not isinstance(e, ProviderError):
-            raise
-        if getattr(args, "json", False):
-            return _json_out({"error": str(e)}, 1)
-        print(f"Error: {e}")
-        return 1
+def _print_stage_list(result) -> None:
+    """阶段清单的通用渲染（build / review / flash / verify 共用）。"""
+    for s in result.stages:
+        icon = _stage_badge(s)
+        extra = _stage_extra(s)
+        print(f"  [{icon}] Stage {s.stage} {s.name} ({s.elapsed_ms:.0f}ms){extra}")
+        if s.error and not s.details.get("skipped"):
+            print(f"         Error: {s.error[:150]}")
+        note = s.details.get("note")
+        if note and note not in extra:
+            print(f"         Note: {note}")
 
 
 def setup_argument_parser() -> argparse.ArgumentParser:
@@ -516,6 +797,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", action="version",
         version=f"FirmForge {__version__}",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="显示 debug 级日志（逐文件审查结果、完整链接命令行等）。"
+             "默认只留阶段进度与可操作告警 —— 逐文件的 INFO 会淹掉进度行",
     )
     parser.add_argument(
         "--json", action="store_true",
@@ -570,10 +856,43 @@ def setup_argument_parser() -> argparse.ArgumentParser:
                               "Runs all of them in ONE process — saves the per-example "
                               "Python startup (~1.9 s each on Windows).")
 
+    # ff review
+    p_review = subparsers.add_parser(
+        "review", help="Stage 2 only: static analysis + register review + confidence",
+    )
+    p_review.add_argument("board", nargs="?", help="Board ID")
+    p_review.add_argument("--app", help="Source code directory (REQUIRED)")
+
     # ff flash
-    p_flash = subparsers.add_parser("flash", help="Flash firmware to board")
+    p_flash = subparsers.add_parser(
+        "flash", help="Stage 4 only: flash a built firmware (does not review/build)",
+    )
     p_flash.add_argument("board", nargs="?", help="Board ID")
-    p_flash.add_argument("--firmware", "-f", help="Path to firmware.hex")
+    p_flash.add_argument("--firmware", "-f",
+                         help="Path to firmware.hex（缺省按 state → 构建缓存解析）")
+    p_flash.add_argument("--app", metavar="NAME",
+                         help="应用名（构建缓存 cache/build/<board>/<NAME>/）。"
+                              "缓存里有多份时必须指定")
+
+    # ff verify
+    p_verify = subparsers.add_parser(
+        "verify", help="Stage 5 only: open the serial port and check the assertion "
+                       "(does not build or flash)",
+    )
+    p_verify.add_argument("board", nargs="?", help="Board ID")
+    p_verify.add_argument("--expected",
+                          help="断言（正则），必须能命中**周期性**输出，如 'HB tick=\\d+'")
+    p_verify.add_argument(
+        "--open-panel", choices=["auto", "panel", "none"], default="auto",
+        help="串口面板谁来开（auto=仅交互式终端自动打开）")
+    p_verify.add_argument(
+        "--panel-wait", type=float, default=None, metavar="SEC",
+        help="采完样本后等面板多久（秒）。不写=无限等；0=立即结束")
+
+    # ff status
+    p_status = subparsers.add_parser(
+        "status", help="Show what the next ff run will skip and why (.ff-run/state.json)",
+    )
 
     # ff setup
     p_setup = subparsers.add_parser(
@@ -629,10 +948,16 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     # 写成 `ff run --json`（人/Agent 的第一直觉）会被 argparse 判为未知参数，
     # 而错误落在 stderr、stdout 一片空白 —— 看起来像"命令没输出"，极易误判。
     # 这里给每个子命令也挂一份（`SUPPRESS` 默认值，不覆盖根上的取值）。
-    for _sp in (p_init, p_run, p_build, p_flash, p_setup, p_ctx, p_ins):
+    for _sp in (p_init, p_run, p_build, p_flash, p_review, p_verify, p_status,
+                p_setup, p_ctx, p_ins):
         _sp.add_argument(
             "--json", action="store_true", default=argparse.SUPPRESS,
             help="输出机器可读 JSON（等价于全局 --json，可写在子命令之后）")
+        # 同 --json：写在子命令之后也要认。`ff build x --app y -v` 是
+        # 人的直觉写法，只挂在根上会被判未知参数（旧 --json 就踩过）。
+        _sp.add_argument(
+            "-v", "--verbose", action="store_true", default=argparse.SUPPRESS,
+            help="显示 debug 级日志")
 
     return parser
 
@@ -997,6 +1322,18 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
     elif cmd == "flash":
         ns.board = cargs.get("board")
         ns.firmware = cargs.get("firmware")
+        ns.app = cargs.get("app")
+    elif cmd == "review":
+        ns.board = cargs.get("board")
+        ns.app = cargs.get("app")
+    elif cmd == "verify":
+        ns.board = cargs.get("board")
+        ns.expected = cargs.get("expected", "")
+        _pw = cargs.get("panel_wait")
+        ns.panel_wait = float(_pw) if _pw is not None else None
+        ns.open_panel = cargs.get("open_panel") or "auto"
+    elif cmd == "status":
+        pass
     return ns
 
 
@@ -1011,7 +1348,10 @@ def _json_mode_loop() -> int:
         "context": cmd_context,
         "build": cmd_build,
         "run": cmd_run,
+        "review": cmd_review,
         "flash": cmd_flash,
+        "verify": cmd_verify,
+        "status": cmd_status,
         "inspect": cmd_inspect,
     }
 
@@ -1063,13 +1403,16 @@ def main(argv: list[str] | None = None) -> int:
     调用方只能去 import 内部 API 才能取结果 —— 那等于把结构化接口废掉。
     现在任何未捕获异常都会落成一个 `{"error": ...}` 帧。
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s [%(name)s] %(message)s",
-    )
-
     parser = setup_argument_parser()
     args = parser.parse_args(argv)
+
+    # 日志级别要在 parse 之后才能定（-v 是命令行参数）。级别分界：
+    #   INFO  = 阶段进度与需要人动手的告警
+    #   DEBUG = 逐文件审查结果、完整链接命令行 —— 量太大，默认会淹掉进度行
+    logging.basicConfig(
+        level=logging.DEBUG if getattr(args, "verbose", False) else logging.INFO,
+        format="%(levelname)s [%(name)s] %(message)s",
+    )
 
     if args.json_mode:
         return _json_mode_loop()
@@ -1099,8 +1442,14 @@ def _dispatch(args, parser) -> int:
         return cmd_run(args)
     elif args.command == "build":
         return cmd_build(args)
+    elif args.command == "review":
+        return cmd_review(args)
     elif args.command == "flash":
         return cmd_flash(args)
+    elif args.command == "verify":
+        return cmd_verify(args)
+    elif args.command == "status":
+        return cmd_status(args)
     elif args.command == "setup":
         from firmforge.providers.arduino.setup import setup_all
         return setup_all()

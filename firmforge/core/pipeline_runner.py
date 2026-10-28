@@ -14,7 +14,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from firmforge.core.experience_ledger import ExperienceLedger
 from firmforge.core.board_detector import BoardDetector
@@ -157,7 +157,12 @@ class PipelineResult:
     stages: list[PipelineStage] = field(default_factory=list)
     overall_success: bool = False
     board: str = ""
+    #: 流水线**自身**的耗时（S1–S5），不含 S5 之后等面板的时间。
     total_elapsed_ms: float = 0.0
+    #: S5 采完之后等面板关掉的时间。单独记：把它并进 total 会让一条真实
+    #: 44 秒的流水线报成 444687 ms（2026-10-28 实测），那个数字随后会被
+    #: 引用来做性能判断，而它衡量的是「人什么时候点 Stop」。
+    panel_wait_ms: float = 0.0
 
 
 class PipelineRunner:
@@ -172,10 +177,16 @@ class PipelineRunner:
         self,
         boards_dir: str | Path | None = None,
         workspace: str | Path = ".",
+        on_note: Callable[[str, str], None] | None = None,
     ) -> None:
         from firmforge.core.resources import boards_dir as _default_boards
         self._boards_dir = Path(boards_dir) if boards_dir else _default_boards()
         self._workspace = Path(workspace)
+        # 阶段**内部**的进度行。`progress_callback` 只在阶段结束后触发，
+        # 于是"cppcheck 要跑 100 秒"这件事在完成之前完全不可见 —— 对外表现
+        # 就是卡死（2026-10-27 用户实测：静默 110 秒才轮到探针）。
+        # core 只负责发出 `(阶段名, 一行人话)`，渲染归调用方，不在这里 print。
+        self._on_note = on_note
         self._ledger = ExperienceLedger(paths.runtime_dir(workspace) / "ledger.jsonl")
         self._detector = BoardDetector(boards_dir=self._boards_dir)
         self._source_reviewer: SourceReviewer | None = None
@@ -185,6 +196,15 @@ class PipelineRunner:
         # 不同 —— 缓存键里不带它就会把上一个 app 的豁免套到下一个上。
         self._sr_allow_origin: str = ""
         self._confidence_scorer: ConfidenceScorer | None = None
+
+    def _note(self, stage: str, message: str) -> None:
+        """发一行阶段内进度。回调异常绝不打断流水线。"""
+        if self._on_note is None:
+            return
+        try:
+            self._on_note(stage, message)
+        except Exception:                     # noqa: BLE001 — 打印失败不该坏事
+            pass
 
     def _skipped_stage(self, stage_num: int, name: str, reason: str = "") -> PipelineStage:
         stage = PipelineStage(stage=stage_num, name=name)
@@ -218,10 +238,13 @@ class PipelineRunner:
             "detected": bool(result.board_id),
         }
 
-    def build(self, source_dir: str, board_id: str | None = None) -> PipelineResult:
+    def build(self, source_dir: str, board_id: str | None = None,
+              progress_callback: Callable[[str, bool, dict, str | None], None] | None = None,
+              ) -> PipelineResult:
         """Run Detect + Review + Build only (no Flash/Test)."""
         return self.run_full(source_dir=source_dir, board_id=board_id,
-                            stop_after="build")
+                             stop_after="build",
+                             progress_callback=progress_callback)
 
     def flash(self, board_id: str | None = None,
               firmware_path: str = "") -> PipelineResult:
@@ -249,14 +272,15 @@ class PipelineRunner:
                source_dir: str,
                board_id: str | None = None,
                expected: str = "") -> PipelineResult:
-        """Run the full 5-stage verification pipeline.
+        """跑完整五阶段。
 
-        Args:
-            source_dir: Directory containing source code (main.cpp).
-            board_id: Board ID. Auto-detected if None.
-            expected: Optional serial output pattern for Test stage.
+        ⚠ 名字有歧义：它跑的是**全流程**，不是只跑 S5。要只跑 S5（串口断言），
+        用 ``run_full(only=("verify",))`` 或 CLI 的 ``ff verify``。
+        2026-10-27 新增 ``ff verify`` 时才发现这个名字会误导：调用方以为
+        「验证一下」= 只跑 S5，实际会连 cppcheck 一起跑 100 秒。
         """
-        return self.run_full(source_dir=source_dir, board_id=board_id, expected=expected)
+        return self.run_full(source_dir=source_dir, board_id=board_id,
+                             expected=expected)
 
     def run_full(
         self,
@@ -264,6 +288,9 @@ class PipelineRunner:
         board_id: str | None = None,
         expected: str = "",
         stop_after: str = "",
+        only: Sequence[str] = (),
+        firmware: str = "",
+        app_name: str = "",
         progress_callback: Callable[[str, bool, dict, str | None], None] | None = None,
         panel_open: str = "auto",
         panel_wait: float | None = None,
@@ -271,11 +298,18 @@ class PipelineRunner:
         """Execute the 5-Stage Pipeline.
 
         Detect (auto) → Review → Build → Flash → Test
-        Set stop_after="build" to stop after Build stage.
 
-        progress_callback(stage_name, success, details, error):
-            Called after each stage completes for real-time progress reporting.
+        Args:
+            only: 只跑哪几个阶段（``"review"`` / ``"build"`` / ``"flash"`` /
+                ``"verify"``）。空 = 全跑。S1 永远跑 —— 它只解析板卡配置，
+                不是"执行动作"，少了它连走 SWD 还是 avrdude 都不知道。
+            firmware: 只跑 flash 时直接指定 hex。空则按 state → 构建缓存解析。
+            app_name: 只跑 flash 时用哪个应用名去构建缓存里找（`--app app`）。
         """
+        want: set[str] = set(only) if only else {
+            "review", "build", "flash", "verify"}
+        if stop_after == "build":                 # 旧入口（ff build）的等价写法
+            want = {"review", "build"}
         result = PipelineResult()
         start = time.time()
         state = PipelineState(self._workspace)
@@ -304,68 +338,90 @@ class PipelineRunner:
             pass
         state.mark_done("detect", board_id=board_id)
 
-        if not source_dir:
+        # 只有 Review/Build 需要源码目录。`ff flash` / `ff verify` 单独跑时
+        # 没有 --app 也要能工作（否则"单独烧一份现成 hex"这条路直接被堵死）。
+        if not source_dir and (want & {"review", "build"}):
             result.total_elapsed_ms = (time.time() - start) * 1000
             return result
 
         # -- Stage 2: Review (Code Review + Confidence Scoring) --
-        s2 = self._stage_review(board_id, source_dir, s1.details.get("config", {}))
-        result.stages.append(s2)
-        self._notify_progress(progress_callback, s2)
-        if not s2.success:
-            state.mark_failed("review", s2.error or "Review failed")
-            state.save()
-            result.total_elapsed_ms = (time.time() - start) * 1000
-            return result
+        if "review" in want:
+            s2 = self._stage_review(board_id, source_dir or "",
+                                    s1.details.get("config", {}))
+            result.stages.append(s2)
+            self._notify_progress(progress_callback, s2)
+            if not s2.success:
+                state.mark_failed("review", s2.error or "Review failed")
+                state.save()
+                result.total_elapsed_ms = (time.time() - start) * 1000
+                return result
 
-        state.mark_done("review")
+            state.mark_done("review")
 
         # Compute source fingerprint
-        build_source = source_dir
+        build_source = source_dir or ""
         fps = compute_fingerprints(
             board_id or "", detected_port, build_source, None,
-        )
+        ) if build_source else {}
 
         # -- Stage 3: Build --
-        if state.should_skip_build(fps):
-            s3 = self._skipped_stage(3, "Build", "source unchanged, hex exists")
+        if "build" in want:
+            if state.should_skip_build(fps):
+                fw_path = state.data.get("stages", {}).get("build", {}).get("hex", "")
+                s3 = self._skipped_stage(3, "Build", "source unchanged, hex exists")
+                s3.details.update(_artifact_info(fw_path))
+                result.stages.append(s3)
+                self._notify_progress(progress_callback, s3)
+                if not fw_path:
+                    s3.details["note"] = ("state 里没有记录上次的 hex 路径 —— "
+                                          "无法确认复用的是什么（删 .ff-run 重跑）")
+            else:
+                s3 = self._stage_build(board_id, build_source)
+                result.stages.append(s3)
+                self._notify_progress(progress_callback, s3)
+                if not s3.success:
+                    rounds = state.increment_compile_rounds()
+                    s3.details["compile_rounds"] = rounds
+                    state.mark_failed("build", s3.error or "Build failed")
+                    state.save()
+                    result.total_elapsed_ms = (time.time() - start) * 1000
+                    return result
+                state.reset_compile_rounds()
+                fw_path = s3.details.get("firmware_path", "")
+                state.mark_done("build", hex=fw_path)
+                s3.details.update(_artifact_info(fw_path))
         else:
-            s3 = self._stage_build(board_id, build_source)
-        result.stages.append(s3)
-        self._notify_progress(progress_callback, s3)
-        if not s3.success:
-            rounds = state.increment_compile_rounds()
-            s3.details["compile_rounds"] = rounds
-            state.mark_failed("build", s3.error or "Build failed")
-            state.save()
-            result.total_elapsed_ms = (time.time() - start) * 1000
-            return result
+            # 不编译。**只有真要烧的时候才需要定位产物** —— `ff verify` 只连
+            # 串口，不该因为「缓存里有两份 hex」就失败（第一次跑就撞上了）。
+            fw_path = ""
+            if "flash" in want:
+                fw_path, fw_candidates, fw_why = self._resolve_firmware(
+                    board_id or "", app_name or build_source, firmware, state)
+                if not fw_path:
+                    stage = PipelineStage(stage=4, name="Flash")
+                    stage.success = False
+                    stage.error = fw_why
+                    stage.details = {"candidates": fw_candidates}
+                    result.stages.append(stage)
+                    self._notify_progress(progress_callback, stage)
+                    result.total_elapsed_ms = (time.time() - start) * 1000
+                    return result
+                self._note("Flash", f"待烧产物：{fw_path}"
+                                    + (f"（{fw_why}）" if fw_why else ""))
 
-        state.reset_compile_rounds()
-
-        if s3.details.get("skipped"):
-            fw_path = state.data.get("stages", {}).get("build", {}).get("hex", "")
-            # 复用的是哪一份产物，必须跟 [skipped] 一起打出来。
-            s3.details.update(_artifact_info(fw_path))
-            if not fw_path:
-                s3.details["note"] = ("state 里没有记录上次的 hex 路径 —— "
-                                      "无法确认复用的是什么（用 --no-cache 或删 .ff-run 重跑）")
-        else:
-            fw_path = s3.details.get("firmware_path", "")
-            state.mark_done("build", hex=fw_path)
-            s3.details.update(_artifact_info(fw_path))
-
-        fps = compute_fingerprints(
-            board_id or "", detected_port, build_source, fw_path,
-        )
+        if fps:
+            fps = compute_fingerprints(
+                board_id or "", detected_port, build_source, fw_path,
+            )
         # 指纹必须在 S4/S5 的跳过判定**之后**才能落盘。
         # 以前在这里就 update_fingerprints(fps)，而 should_skip_flash/should_skip_test
         # 读的 stored 正是这个刚写入的 dict（同一对象）——自己跟自己比较恒为 True，
         # 于是只要历史上烧录成功过一次，之后源码/固件怎么改都不会再烧，板子上
         # 永远跑旧固件（S5 自然等不到新固件的输出）。
 
-        if stop_after == "build":
-            state.update_fingerprints(fps)
+        if not (want & {"flash", "verify"}):
+            if fps:
+                state.update_fingerprints(fps)
             state.save()
             result.overall_success = all(s.success for s in result.stages)
             result.total_elapsed_ms = (time.time() - start) * 1000
@@ -383,23 +439,28 @@ class PipelineRunner:
         # 报波特率/TX 故障」。实测踩过一次（M-01 首轮，S4 显示 [skipped] 而
         # S5 空串口），代价是去查了硬件链路。
         flash_done_before = state.data.get("stages", {}).get("flash", {}).get("status") == "done"
-        if not expected and flash_done_before and state.should_skip_flash(fps):
+        if "flash" not in want:
+            # `ff verify` 单独跑：明确不烧，但要让人知道板上是什么
+            flash_done_before = True
+        elif not expected and flash_done_before and fps and state.should_skip_flash(fps):
             s4 = self._skipped_stage(4, "Flash", "fingerprints match")
             # 跳过烧录 = 板上跑的是**上次**烧进去的那份。必须说出来：
             # 否则「S3 换了新 hex、S4 显示 skipped」会被读成「新固件已生效」。
             s4.details["note"] = (f"未烧录，板上仍是上次烧的固件；"
                                   f"本次产物 {fw_path or '?'} 没有进芯片")
+            result.stages.append(s4)
+            self._notify_progress(progress_callback, s4)
         else:
             s4 = self._stage_flash(board_id, fw_path)
-        result.stages.append(s4)
-        self._notify_progress(progress_callback, s4)
-        if not s4.success:
-            state.mark_failed("flash", s4.error or "Flash failed")
-            state.save()
-            result.total_elapsed_ms = (time.time() - start) * 1000
-            return result
+            result.stages.append(s4)
+            self._notify_progress(progress_callback, s4)
+            if not s4.success:
+                state.mark_failed("flash", s4.error or "Flash failed")
+                state.save()
+                result.total_elapsed_ms = (time.time() - start) * 1000
+                return result
 
-        state.mark_done("flash")
+            state.mark_done("flash")
 
         # Build stages summary for panel display (process + result)
         stages_summary_html, process_html = self._build_summary(result.stages)
@@ -408,28 +469,39 @@ class PipelineRunner:
         # 有断言就必须验证（跳过等于没验证）；只有「没给断言 + 上次验证成功过」
         # 才允许走增量跳过。阶段名统一叫 Verify —— 以前跳过时叫 Test、真跑时
         # 叫 Verify，而 mcp_server 里按名字取 verdict/panel_url，跳过那次就取不到。
-        if not expected and flash_done_before and state.should_skip_test(fps):
+        s5: PipelineStage | None = None
+        if "verify" not in want:
+            pass
+        elif not expected and flash_done_before and fps and state.should_skip_test(fps):
             s5 = self._skipped_stage(5, "Verify", "fingerprints match")
         else:
             s5 = self._stage_verify(board_id, expected, stages_summary=stages_summary_html, process_summary=process_html)
-        result.stages.append(s5)
-        self._notify_progress(progress_callback, s5)
-        if s5.success:
-            state.mark_done("test")
-        else:
-            # 没拿到证据就不能记成 done。should_skip_test 读的就是这个状态，
-            # 记成 done 等于把「这次没验证成功」写进缓存：下一次调用直接跳过
-            # S5、显示 [skipped]、overall_success=True —— 失败被粘成了通过。
-            logger.info("S5 Verify: FAIL")
-            verdict = getattr(s5, "verdict", "") or "error"
-            state.mark_failed("test", s5.error or f"verify not passed ({verdict})")
+        if s5 is not None:
+            result.stages.append(s5)
+            self._notify_progress(progress_callback, s5)
+            if s5.success:
+                state.mark_done("test")
+            else:
+                # 没拿到证据就不能记成 done。should_skip_test 读的就是这个状态，
+                # 记成 done 等于把「这次没验证成功」写进缓存：下一次调用直接跳过
+                # S5、显示 [skipped]、overall_success=True —— 失败被粘成了通过。
+                logger.info("S5 Verify: FAIL")
+                verdict = getattr(s5, "verdict", "") or "error"
+                state.mark_failed("test", s5.error or f"verify not passed ({verdict})")
 
         # 指纹在 S4/S5 的跳过判定全部结束之后才落盘（见上方注释）。
-        state.update_fingerprints(fps)
+        if fps:
+            state.update_fingerprints(fps)
         state.save()
 
+        # 流水线的活到这一刻就干完了。后面等面板是**人的时间**，不是工具的时间，
+        # 必须与总耗时分开记（否则一条 44 s 的流水线会报成 444687 ms）。
+        work_ms = (time.time() - start) * 1000
+
         # Wait for collector thread to exit: Stop 按钮 / 关窗 / 超时
-        if hasattr(self, '_collector_alive') and self._collector_alive.is_alive():
+        # （`ff flash` / `ff review` 没有 S5，采集线程也不存在）
+        if s5 is not None and hasattr(self, '_collector_alive') \
+                and self._collector_alive.is_alive():
             # 面板地址必须打出来。ff 自己不负责开浏览器（全历史无 webbrowser/startfile），
             # 以前是 MCP 客户端拿 panel_url 去开窗；走 CLI 这条路时没人接手，
             # 如果不打印地址，S5 就等于没有面板。
@@ -483,7 +555,8 @@ class PipelineRunner:
                         pass
 
         result.overall_success = all(s.success for s in result.stages)
-        result.total_elapsed_ms = (time.time() - start) * 1000
+        result.total_elapsed_ms = work_ms
+        result.panel_wait_ms = max(0.0, (time.time() - start) * 1000 - work_ms)
         return result
 
     @staticmethod
@@ -694,7 +767,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         stage.success = True
         stage.details = {"board_id": board_id, "config": config}
         stage.elapsed_ms = (time.time() - t0) * 1000
-        logger.info("S1 Detect: %s", board_id)
+        logger.debug("S1 Detect: %s", board_id)
         return stage
 
     # ===================================================================
@@ -719,12 +792,29 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         cppcheck_errors = len(cp.blocking)
 
         # Phase 2: Register review (hallucinated register detection)
+        self._note("Review", "寄存器审查：对照知识库解析外设/寄存器/位域引用…")
         c_result = self._review_check(board_id, source_dir, board_config)
         review_ok = not c_result or c_result.passed
+        if c_result:
+            judged = max(0, c_result.registers_checked - c_result.kb_gaps)
+            self._note("Review",
+                       f"寄存器审查 {c_result.registers_resolved}/{judged}"
+                       f" · 字段 {c_result.fields_resolved}/{c_result.fields_checked}"
+                       + (f" · 知识库缺口 {c_result.kb_gaps}（不判定）"
+                          if c_result.kb_gaps else "")
+                       + (f" · 已豁免 {len(c_result.allowed)}"
+                          if c_result.allowed else "")
+                       + f" → {'PASS' if review_ok else 'FAIL'}")
 
         # Phase 3: Confidence Scoring
         conf_result = self._confidence_check(board_id, source_dir, c_result, board_config)
         conf_ok = not (conf_result and conf_result.needs_review)
+        if conf_result:
+            cats = " · ".join(
+                f"{k} {v.score:.0f}%" for k, v in conf_result.category_scores.items()
+                if v.checked)
+            self._note("Review", f"Confidence {conf_result.overall_score:.0f}%"
+                                 + (f"（{cats}）" if cats else ""))
 
         sub_stages = [
             {"name": "cppcheck", "success": cp.ok and cppcheck_errors == 0,
@@ -809,11 +899,11 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # 没跑成 ≠ 没问题。旧写法这时会安静地报 0 errors。
             logger.warning("S2 Review: 静态分析未完成 —— %s", cp.summary_line())
         else:
-            logger.info("S2 Review: cppcheck %s（%s）",
+            logger.debug("S2 Review: cppcheck %s（%s）",
                         cp.summary_line(),
                         ", ".join(f"{k}×{v}" for k, v in cp.buckets()[:6]) or "无诊断")
             if cp.cached:
-                logger.info("S2 Review: cppcheck 结果来自内容哈希缓存")
+                logger.debug("S2 Review: cppcheck 结果来自内容哈希缓存")
         for issue in cp.blocking[:20]:
             logger.warning("  [cppcheck error] %s  %s: %s",
                            issue.where(), issue.id, issue.message)
@@ -866,7 +956,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                            conf_result.overall_score, conf_result.explanation)
         for key, cat in (conf_result.category_scores.items() if conf_result else []):
             if cat.checked:
-                logger.info("  [confidence] %s", cat)
+                logger.debug("  [confidence] %s", cat)
         for item in (conf_result.review_items[:10] if conf_result else []):
             logger.warning("  [confidence] %s %s = %.0f%%  %s",
                            item.category, item.identifier, item.score, item.note)
@@ -886,7 +976,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         stage.details = details
 
         stage.elapsed_ms = (time.time() - t0) * 1000
-        logger.info("S2 Review: PASS (cppcheck=%d, register=%d)",
+        logger.debug("S2 Review: PASS (cppcheck=%d, register=%d)",
                      len(cp.issues),
                      len(c_result.violations) if c_result else 0)
         return stage
@@ -932,17 +1022,79 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         except Exception as exc:                     # 提供者缺失/构造失败
             context_problems.append(f"取构建上下文失败：{type(exc).__name__}: {exc}")
 
+        tu = self._count_translation_units(source_dir)
+        # 这条是「卡死」感受的分界线：它必须在 cppcheck **启动之前**出现。
+        # 冷跑时 cppcheck 要 100 秒左右（CMSIS/HAL 头巨量展开），期间进程
+        # 一声不吭，从外面完全看不出是在干活还是挂了。
+        jobs, bdir = self._cppcheck_speed(source_dir)
+        self._note("Review", f"cppcheck 启动（{tu} 个翻译单元，"
+                             f"{len(include_dirs)} 个 include 目录，"
+                             f"-j {jobs}，增量目录 {'有' if bdir else '无'}）")
+        t_cpp = time.time()
         try:
             report = run_cppcheck(source_dir, include_dirs=include_dirs,
                                   defines=defines,
                                   force_includes=force_includes,
-                                  vendor_roots=vendor_roots)
+                                  vendor_roots=vendor_roots,
+                                  jobs=jobs, build_dir=bdir)
         except Exception as exc:
             return CppcheckReport(ok=False, status="crashed",
                                   skip_reason=f"{type(exc).__name__}: {exc}")
+        spent = time.time() - t_cpp
+        if report.cached:
+            self._note("Review",
+                       f"cppcheck 命中缓存（{spent * 1000:.0f} ms，源码与 include 头"
+                       f"逐字节未变）：{len(report.issues)} 条诊断 / "
+                       f"error {len(report.blocking)}")
+        else:
+            self._note("Review",
+                       f"cppcheck 完成 {spent:.1f}s："
+                       f"error {len(report.blocking)} / warning {len(report.warnings)}"
+                       + (f" / 厂家库 error {len(report.vendor_errors)}（不阻断）"
+                          if report.vendor_errors else "")
+                       + ("" if report.ok else f"（未跑成：{report.status}）"))
         for problem in context_problems:
             report.notes.append(f"构建上下文不完整：{problem}")
         return report
+
+    @staticmethod
+    def _cppcheck_speed(source_dir: str) -> tuple[int, str]:
+        """cppcheck 的并行度与增量目录。
+
+        实测（8 个 TU，STM32H743 + CMSIS/HAL，2026-10-27）：
+
+            整目录单进程                121.7 s
+            -j 8                         72.2 s
+            -j 8 + build-dir（首次）     65.4 s
+            -j 8 + build-dir（未改）     12.3 s
+            -j 8 + build-dir（改 1 文件）10.9 s
+
+        进程级内容哈希缓存（`_cache_key`）只在「一个字节都没变」时命中，
+        改一行就全废；`--cppcheck-build-dir` 是按翻译单元复用的，两者互补。
+        并行度上限取 8：cppcheck 每个进程都要把 CMSIS 头展开一遍，核数再多
+        只是把内存吃满，实测 8 已经到底。
+        """
+        jobs = max(1, min(8, os.cpu_count() or 4))
+        bdir = ""
+        if source_dir:
+            try:
+                import hashlib
+                tag = hashlib.sha256(
+                    str(Path(source_dir).resolve()).encode("utf-8")).hexdigest()[:12]
+                bdir = str(paths.cache_dir() / "cppcheck" / "build" / tag)
+            except Exception:                     # noqa: BLE001 — 加速失败不能坏事
+                bdir = ""
+        return jobs, bdir
+
+    @staticmethod
+    def _count_translation_units(source_dir: str) -> int:
+        """数 `.c/.cpp/.ino` 数量。只用于进度提示，数错了不影响任何判定。"""
+        try:
+            root = Path(source_dir)
+            return sum(1 for ext in ("*.c", "*.cpp", "*.ino")
+                       for f in root.rglob(ext) if f.is_file())
+        except OSError:
+            return 0
 
 
     # ===================================================================
@@ -1005,7 +1157,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             self._sr_platform = platform
             self._sr_allow_origin = allowlist.origin
             truth = self._source_reviewer.device_truth
-            logger.info("SourceReviewer init for chip=%s platform=%s 器件头=%s",
+            logger.debug("SourceReviewer init for chip=%s platform=%s 器件头=%s",
                         chip, platform or "?",
                         "有" if truth is not None and truth.available else "无")
             summary = summarize(allowlist)
@@ -1133,6 +1285,72 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # Stage 3: Build
     # ===================================================================
 
+    def _resolve_firmware(self, board_id: str, app_hint: str,
+                          explicit: str, state: "PipelineState",
+                          ) -> tuple[str, list[dict[str, Any]], str]:
+        """定位「要烧哪一份固件」。返回 ``(路径, 候选列表, 说明)``。
+
+        顺序：显式指定 → state 记录 → 构建缓存里**唯一**那一份。
+
+        构建缓存下有多份时**报错并列候选，绝不挑「最新」**。2026-10-27 的
+        事故正是「取最新」：`ff inspect` 拿 hello_blink 的 ELF 去解析 app 的
+        PC，输出了一条 `main.c:555` —— 看起来完全合理，比直接报错危险得多。
+        烧录比解析更狠：猜错就是把别人的固件烧进板子。
+        """
+        if explicit:
+            p = Path(explicit)
+            if p.is_file():
+                return str(p), [], "显式指定 --firmware"
+            return "", [], f"指定的固件不存在：{explicit}"
+
+        cache = paths.build_cache_dir() / (board_id or "unknown")
+        found = sorted(cache.glob("*/firmware.hex")) if cache.is_dir() else []
+
+        def _candidates() -> list[dict[str, Any]]:
+            out = []
+            for f in found:
+                try:
+                    st = f.stat()
+                except OSError:
+                    continue
+                out.append({
+                    "app": f.parent.name,
+                    "path": str(f),
+                    "size": st.st_size,
+                    "mtime": time.strftime("%Y-%m-%d %H:%M:%S",
+                                           time.localtime(st.st_mtime)),
+                })
+            return out
+
+        # `--app` 在 state 之前：用户点名要某个应用，就不该被上一次构建
+        # 留下的记录覆盖。顺序反了的话 `ff flash X --app other` 会安静地
+        # 烧上一份（state 里那份）—— 与 `ff inspect` 那次「取最新 ELF」
+        # 是同一类错误：给出的答案看起来完全合理。
+        if app_hint:
+            one = cache / Path(app_hint).name / "firmware.hex"
+            if one.is_file():
+                return str(one), [], "构建缓存（按 --app 定位）"
+            names = "、".join(c["app"] for c in _candidates()) or "（空）"
+            return "", _candidates(), (
+                f"--app {Path(app_hint).name} 在构建缓存里没有产物（{cache}）。"
+                f"现有：{names}。先跑 ff build --app {app_hint}，"
+                f"或用 --firmware <路径> 指定")
+
+        recorded = (state.data.get("stages", {}).get("build", {}) or {}).get("hex", "")
+        if recorded and Path(recorded).is_file():
+            return recorded, [], "state 记录的上次构建产物"
+
+        if len(found) == 1:
+            return str(found[0]), [], "构建缓存（仅此一份）"
+        if not found:
+            return "", [], (f"找不到可烧的固件：{cache} 下没有 firmware.hex。"
+                            f"先跑 ff build，或用 --firmware <path> 指定")
+
+        cands = _candidates()
+        names = "、".join(c["app"] for c in cands)
+        return "", cands, (f"构建缓存里有 {len(cands)} 份 firmware.hex，无法判断要烧哪一份"
+                           f"（{names}）。用 --app <应用名> 或 --firmware <路径> 指定")
+
     def _stage_build(self, board_id: str | None, source_dir: str | None) -> PipelineStage:
         stage = PipelineStage(stage=3, name="Build")
         t0 = time.time()
@@ -1159,7 +1377,15 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             app_name = Path(source_dir).name
             output_dir = str(paths.build_cache_dir()
                              / (board_id or "unknown") / app_name)
+            self._note("Build", f"编译启动：{app_name} → {output_dir}")
+            t_build = time.time()
             build_result = builder.build(source_dir, output_dir=output_dir)
+            if build_result.success:
+                self._note("Build", f"编译完成 {time.time() - t_build:.1f}s"
+                                    f"（{build_result.firmware_path or '无产物路径'}）")
+            else:
+                self._note("Build", f"编译失败 {time.time() - t_build:.1f}s"
+                                    f"（{len(build_result.errors)} 条 error）")
 
             stage.success = build_result.success
             stage.details = {
@@ -1177,7 +1403,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             stage.error = f"BuildProvider not available: {e}"
 
         stage.elapsed_ms = (time.time() - t0) * 1000
-        logger.info("S3 Build: %s", "PASS" if stage.success else "FAIL")
+        logger.debug("S3 Build: %s", "PASS" if stage.success else "FAIL")
         return stage
 
     # ===================================================================
@@ -1205,6 +1431,20 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 return stage
 
             flasher = get_flash_provider(config.get("platform", "arduino"), config)
+            # avrdude 路线必须有串口 —— 这条前提检查原先只在 CLI 的
+            # `cmd_flash` 里有，改走流水线后要搬过来，否则「没插板子」
+            # 会一路传到 avrdude 的报错文本，变成一条看不懂的失败。
+            # SWD 路线不适用：探针走 USB HID，本来就没有串口。
+            if config.get("platform", "arduino") == "arduino" \
+                    and not flasher.detect_port():
+                stage.success = False
+                stage.error = ("No COM port detected —— arduino 走 avrdude，"
+                               "必须有串口。检查数据线与 CH340 驱动后重试")
+                stage.elapsed_ms = (time.time() - t0) * 1000
+                return stage
+            size = Path(firmware_path).stat().st_size
+            self._note("Flash", f"烧录启动（{Path(firmware_path).name}，{size} B，"
+                                f"{config.get('flash', {}).get('transport', 'swd') if isinstance(config.get('flash'), dict) else 'swd'}）")
             flash_result = flasher.flash(firmware_path)
 
             stage.success = flash_result.success
@@ -1219,9 +1459,19 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         except ImportError as e:
             stage.success = False
             stage.error = f"FlashProvider not available: {e}"
+        except Exception as e:                     # noqa: BLE001
+            # 可预期的烧录失败（工具链缺件、探针没插、校验不过）必须落成
+            # 一行 stage.error，不能把 traceback 抛给调用方 —— `ff flash`
+            # 以前在 CLI 里专门 catch 过 ProviderError，改走流水线后这条
+            # 保护要跟着搬过来，否则「探针没插」会变成一屏栈。
+            from firmforge.providers.base import ProviderError
+            if not isinstance(e, ProviderError):
+                raise
+            stage.success = False
+            stage.error = str(e)
 
         stage.elapsed_ms = (time.time() - t0) * 1000
-        logger.info("S4 Flash: %s", "PASS" if stage.success else "FAIL")
+        logger.debug("S4 Flash: %s", "PASS" if stage.success else "FAIL")
         return stage
 
     # ===================================================================
@@ -1272,6 +1522,8 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 return stage
 
             html_path = str(paths.runtime_dir(root) / "serial_live.html")
+            self._note("Verify", f"打开串口 {port} 采样本"
+                                 f"（{'断言 ' + expected[:40] if expected else '无断言，只采集'}）")
             stop_path = html_path + ".stop"
             pause_path = html_path + ".pause"
             # 面板落点可能还没建（全新工作区）：采集线程直接往里写文件，

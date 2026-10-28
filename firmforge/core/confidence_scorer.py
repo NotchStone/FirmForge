@@ -223,10 +223,10 @@ class ConfidenceScorer:
 
         report.needs_review = bool(lows) or report.overall_score < self._threshold
 
-        logger.info("Confidence: %.0f%% (%s)", report.overall_score,
+        logger.debug("Confidence: %.0f%% (%s)", report.overall_score,
                     "NEEDS_REVIEW" if report.needs_review else "OK")
         if report.explanation:
-            logger.info("Confidence 分项原因: %s", report.explanation)
+            logger.debug("Confidence 分项原因: %s", report.explanation)
 
         return report
 

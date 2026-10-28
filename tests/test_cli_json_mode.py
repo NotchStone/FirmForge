@@ -96,7 +96,74 @@ class TestJsonModeFrames:
 
 
 class TestFlashJsonPurity:
-    """T2 regression: json output must stay pure JSON (no human-text pollution)."""
+    """`--json` 的 stdout 必须是单个 JSON 对象。
+
+    旧实现会在 stdout 打 `Auto-detected firmware: ...`（靠 rglob 猜的），
+    所以专门有一条测试盯着它。2026-10-27 改走流水线之后，那行探测彻底
+    不存在了 —— 固件按 `--firmware` → state → 构建缓存解析，多份报错。
+    但**约束没变**：stdout 只能是 JSON，所有进度都走 stderr。
+    """
+
+    @staticmethod
+    def _patch(monkeypatch):
+        from firmforge.providers import get_flash_provider
+
+        class FakeFlasher:
+            def detect_port(self):
+                return "COM9"
+
+            def flash(self, firmware):
+                return SimpleNamespace(success=True, bytes_written=120,
+                                       elapsed_ms=8, stderr="")
+
+        monkeypatch.setattr(get_flash_provider, "__call__",
+                            lambda self, *a, **kw: FakeFlasher(), raising=False)
+        return FakeFlasher
+
+    def _run(self, monkeypatch, tmp_path, json_mode: bool):
+        from firmforge.adapters import cli
+        import firmforge.providers as providers_pkg
+
+        hexf = tmp_path / "firmware.hex"
+        hexf.write_text(":00000001FF\n", encoding="utf-8")
+
+        class FakeFlasher:
+            def detect_port(self):
+                return "COM9"
+
+            def flash(self, firmware):
+                return SimpleNamespace(success=True, bytes_written=120,
+                                       elapsed_ms=8, stderr="")
+
+        monkeypatch.setattr(providers_pkg, "get_flash_provider",
+                            lambda platform, cfg: FakeFlasher())
+
+        args = argparse.Namespace(
+            command="flash", board="arduino_328p", firmware=str(hexf),
+            app=None, json=json_mode, boards_dir=None,
+            workspace=str(tmp_path),
+        )
+        if not json_mode:
+            # 人类模式不重定向：让 capsys 能同时看到 stdout 与 stderr
+            return cli.cmd_flash(args), ""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli.cmd_flash(args)
+        return rc, buf.getvalue()
+
+    def test_flash_json_stdout_is_pure_json(self, monkeypatch, tmp_path):
+        rc, out = self._run(monkeypatch, tmp_path, json_mode=True)
+        assert rc == 0
+        payload = json.loads(out)          # 不能有半行人话混进来
+        assert payload["success"] is True
+        assert payload["bytes_written"] == 120
+
+    def test_flash_human_mode_prints_result_to_stdout(self, monkeypatch, tmp_path, capsys):
+        rc, _ = self._run(monkeypatch, tmp_path, json_mode=False)
+        out, err = capsys.readouterr()
+        assert rc == 0
+        assert "[PASS] Stage 4 Flash" in out
+        assert "[S4" in err, "进度行必须在 stderr，才能被管道之外的终端看到"
 
     def test_flash_no_board_pure_json(self):
         r = subprocess.run(
@@ -106,56 +173,3 @@ class TestFlashJsonPurity:
         assert r.returncode == 1
         payload = json.loads(r.stdout)  # must parse as pure JSON
         assert "error" in payload
-
-    def test_flash_auto_detect_print_suppressed_in_json(self, monkeypatch, tmp_path):
-        """The unconditional 'Auto-detected firmware' print must not leak into --json."""
-        from firmforge.adapters import cli
-        import firmforge.providers.arduino.flash as flash_mod
-
-        class FakeFlasher:
-            def detect_port(self):
-                return "COM9"
-
-            def flash(self, firmware):
-                return SimpleNamespace(success=True, bytes_written=120, elapsed_ms=8, stderr="")
-
-        monkeypatch.setattr(flash_mod, "ArduinoFlashProvider", lambda cfg: FakeFlasher())
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / "firmware.hex").write_text(":00000001FF\n", encoding="utf-8")
-
-        args = argparse.Namespace(
-            command="flash", board="arduino_328p", firmware=None,
-            json=True, boards_dir=None, workspace=".",
-        )
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            rc = cli.cmd_flash(args)
-        assert rc == 0
-        payload = json.loads(buf.getvalue())  # no 'Auto-detected firmware:' line → pure JSON
-        assert payload["success"] is True
-
-    def test_flash_auto_detect_print_kept_in_human_mode(self, monkeypatch, tmp_path):
-        """Human mode must still print the auto-detect line (non-regression)."""
-        from firmforge.adapters import cli
-        import firmforge.providers.arduino.flash as flash_mod
-
-        class FakeFlasher:
-            def detect_port(self):
-                return "COM9"
-
-            def flash(self, firmware):
-                return SimpleNamespace(success=True, bytes_written=120, elapsed_ms=8, stderr="")
-
-        monkeypatch.setattr(flash_mod, "ArduinoFlashProvider", lambda cfg: FakeFlasher())
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / "firmware.hex").write_text(":00000001FF\n", encoding="utf-8")
-
-        args = argparse.Namespace(
-            command="flash", board="arduino_328p", firmware=None,
-            json=False, boards_dir=None, workspace=".",
-        )
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            rc = cli.cmd_flash(args)
-        assert rc == 0
-        assert "Auto-detected firmware:" in buf.getvalue()
