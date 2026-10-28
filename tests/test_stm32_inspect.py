@@ -443,3 +443,33 @@ def test_offline_mode_echoes_which_elf_was_used(monkeypatch, tmp_path):
     assert p["target"]["elf"].endswith("firmware.elf")
     assert p["target"]["elf_size"] > 0
     assert p["target"]["elf_mtime"]
+
+
+# ---------------------------------------------------------------------------
+# 寄存器名比对：库里两种命名口径
+# ---------------------------------------------------------------------------
+
+def test_reg_name_matches_prefixed_names():
+    """FDCAN 的寄存器在库里带外设前缀（SVD 口径），手册写法是裸名。
+
+    只比裸名会让 `--periph FDCAN1.CCCR` 报「知识库里查不到」，而库里明明
+    有 64 条、CCCR 就在其中。
+    """
+    hit = {"name": "FDCAN_CCCR"}
+    assert ins._reg_name_matches(hit, "FDCAN1", "CCCR")
+    assert ins._reg_name_matches(hit, "FDCAN2", "cccr")
+    assert ins._reg_name_matches({"name": "FDCAN_PSR"}, "FDCAN1", "PSR")
+
+
+def test_reg_name_matches_is_not_suffix_shortcut():
+    """前缀必须按外设基名整词剥，不能用 endswith —— 查 CCR 会命中 FDCAN_CCCR。"""
+    hit = {"name": "FDCAN_CCCR"}
+    assert not ins._reg_name_matches(hit, "FDCAN1", "CCR")
+    assert not ins._reg_name_matches(hit, "FDCAN1", "CR")
+    assert not ins._reg_name_matches(hit, "FDCAN1", "PSR")
+
+
+def test_reg_name_matches_plain_names():
+    """GPIOA 这类库里就是裸名，不能被前缀逻辑改坏。"""
+    assert ins._reg_name_matches({"name": "MODER"}, "GPIOA", "MODER")
+    assert not ins._reg_name_matches({"name": "MODER"}, "GPIOA", "OTYPER")

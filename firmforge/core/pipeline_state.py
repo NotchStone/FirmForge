@@ -118,12 +118,38 @@ class PipelineState:
         entry.pop("error", None)
         entry.update(details)  # merge, don't overwrite previous data
 
+        # 顶层 last_error 同理，但只擦**本阶段自己的**那条：它存在的意义是
+        # 「解释上一次错在哪」，留着一条已经解决的错误等于主动误导 ——
+        # ff_status 的定位就是给 agent 看「下一步会跳过什么、上次错在哪」，
+        # 读到旧错误会去排查一个不存在的故障。2026-10-28 实测：断言修正后
+        # 连续两轮 ff run 全绿，ff_status 仍返回「test 未匹配 HEARTBEAT」。
+        #
+        # 只擦同名阶段是有意的：S3 编译成功不代表上次 S5 采不到串口的问题
+        # 解决了，替别人擦账等于把没解决的问题标成已解决。
+        last = self._data.get("last_error")
+        if isinstance(last, dict) and last.get("stage") == stage_name:
+            self._data.pop("last_error", None)
+
     def mark_failed(self, stage_name: str, error: str) -> None:
         self._data.setdefault("last_error", {})["stage"] = stage_name
         self._data["last_error"]["message"] = error
         entry = self._data.setdefault("stages", {}).setdefault(stage_name, {})
         entry["status"] = "failed"
         entry["error"] = error
+
+    def build_artifact_path(self) -> str:
+        """上次构建产物的**路径**（不是内容哈希），没有记录就返回空串。
+
+        ``stages.build.hex`` 这个名字起得有歧义：它存的是 ``firmware.hex``
+        的路径，而 ``fingerprints.hex`` 存的是该文件的**内容哈希**。两者同名
+        不同物，读错了会得到一个「看起来像路径的 16 进制串」，``is_file()``
+        永远 False（2026-10-28 踩过）。
+
+        除了 ``should_skip_build``，``ff verify`` 也需要它：那条路不编译不烧，
+        手上没有 fw_path，但指纹里的 hex 仍应指向**上次那份固件**，不能拿空串
+        去算 —— 那会把 fingerprints.hex 抹成 ""，S4/S5 的跳过判据全部失效。
+        """
+        return str((self._data.get("stages", {}).get("build", {}) or {}).get("hex") or "")
 
     def should_skip_build(self, fingerprints: dict[str, Any]) -> bool:
         """跳过 S3 需要**同时**满足：指纹没变 + 上次那份 hex 还在磁盘上。
@@ -149,7 +175,7 @@ class PipelineState:
         """
         stored = self._data.get("fingerprints", {})
         build = self._data.get("stages", {}).get("build", {}) or {}
-        built_path = str(build.get("hex") or "")
+        built_path = self.build_artifact_path()
         built_board = str(build.get("board_id") or "")
         want_board = str(fingerprints.get("board_id") or "")
         return (fingerprint_match(stored, fingerprints, ["board_id", "source"]) and

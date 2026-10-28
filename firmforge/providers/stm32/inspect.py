@@ -599,6 +599,27 @@ def _load_kb(board_config: dict[str, Any], warnings: list[str]):
         return None
 
 
+def _reg_name_matches(hit: dict[str, Any], periph: str, reg: str) -> bool:
+    """知识库里的寄存器名有两种口径，比对时都要认。
+
+    - 裸名：``GPIOA.MODER`` —— 库里 name = ``MODER``
+    - 带外设前缀：``FDCAN1.FDCAN_CCCR`` —— 库里 name = ``FDCAN_CCCR``
+      （SVD 里 FDCAN1/FDCAN2 共用同一份寄存器定义，名字自带 ``FDCAN_`` 前缀）
+
+    只比裸名会让 ``--periph FDCAN1.CCCR`` 报「知识库里查不到」，而库里
+    明明有 64 条、CCCR 就在其中 —— 用户按数据手册写 CCCR 完全正确，是
+    比对的方式错了（2026-10-28 实测）。
+
+    前缀必须按**外设基名**算（``FDCAN1`` → ``FDCAN``），不能用
+    ``endswith("_" + reg)``：那样查 ``CCR`` 会命中 ``FDCAN_CCCR``。
+    """
+    name = str(hit.get("name", "")).upper()
+    base = re.sub(r"\d+$", "", periph).upper()
+    if base and name.startswith(base + "_"):
+        name = name[len(base) + 1:]
+    return name == reg.upper()
+
+
 def _peripheral_plan(kb, names: list[str], warnings: list[str]) -> list[dict[str, Any]]:
     if not names:
         return []
@@ -627,10 +648,17 @@ def _peripheral_plan(kb, names: list[str], warnings: list[str]) -> list[dict[str
                     periph, hits = alt, alt_hits
         regs = [h for h in hits if h.get("address")]
         if reg:
-            regs = [h for h in regs if str(h.get("name", "")).upper() == reg.upper()]
+            regs = [h for h in regs if _reg_name_matches(h, periph, reg)]
         if not regs:
-            warnings.append(f"--periph {spec} 在知识库里查不到（外设名按数据手册写，"
-                            f"如 LPTIM1 / IWDG1 / USART1）")
+            # 报错要能自己解释清楚。只写「查不到」会让人以为是工具没收录，
+            # 实际最常见的是两种写法差异（外设实例号 / 寄存器名前缀）。
+            hint = ""
+            if reg and hits:
+                sample = ", ".join(str(h.get("name")) for h in hits[:6])
+                hint = f"；{periph} 下的寄存器名形如：{sample}"
+            elif not hits:
+                hint = "（外设名按数据手册写，如 LPTIM1 / IWDG1 / USART1）"
+            warnings.append(f"--periph {spec} 在知识库里查不到{hint}")
             continue
         if len(regs) > MAX_REGS_PER_PERIPHERAL:
             warnings.append(f"{periph} 有 {len(regs)} 个寄存器，只读前 "

@@ -225,14 +225,20 @@ def test_status_reports_fingerprints_and_stages(tmp_path, capsys):
 
 
 def test_status_explains_stale_last_error(tmp_path, capsys):
-    """阶段现在是 done 而 last_error 还在 —— 必须说清是更早一次的记录。"""
+    """阶段是 done 而 last_error 还在 —— 必须说清是更早一次的记录。
+
+    这种组合**新代码不会再产生**：``mark_done`` 会顺手擦掉本阶段的
+    ``last_error``（否则一轮成功后 ff_status 还报旧错误，等于主动误导）。
+    但旧 state 文件里可能留着这种记录，读到时不能把 done 和 last_error
+    摆在一起不加解释 —— 所以这里直接注入，而不是走 mark_failed 那条路。
+    """
     from firmforge.core.pipeline_state import PipelineState
 
     st = PipelineState(tmp_path)
-    st.mark_failed("build", "something broke")
     st.mark_done("build", hex=str(tmp_path / "firmware.hex"))
     st.update_fingerprints({"board_id": "gc_h743", "source": "a",
                             "hex": "b", "port": ""})
+    st.data["last_error"] = {"stage": "build", "message": "something broke"}
     st.save()
 
     cli.cmd_status(_ns(workspace=str(tmp_path)))

@@ -433,6 +433,16 @@ class PipelineRunner:
                                     + (f"（{fw_why}）" if fw_why else ""))
 
         if fps:
+            # 本次没有产出或定位固件时（`ff verify` 只连串口，不编译不烧），
+            # 产物路径从 state 里取，**不要拿空串去算指纹**。
+            #
+            # 空串会算出 fingerprints.hex = ""，而 S4/S5 的跳过判据都要求它
+            # 非空（`bool(stored.get("hex"))`）——于是下一次 ff run 必然重烧、
+            # 重采，可 ff_status 还在说「源码/固件不变 → 跳过」。2026-10-28
+            # 实测：一轮 ff build 写下 64b871d1…，之后跑了几次 ff verify 就变成
+            # ""，用户每次 ff run 白等一次烧录 + 一次采样窗。
+            if not fw_path:
+                fw_path = state.build_artifact_path()
             fps = compute_fingerprints(
                 board_id or "", detected_port, build_source, fw_path,
             )

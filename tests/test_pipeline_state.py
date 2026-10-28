@@ -106,3 +106,45 @@ class TestPipelineState:
         assert Path(tmp_path, ".ff-run", "state.json").exists()
         PipelineState.clear(Path(tmp_path))
         assert not Path(tmp_path, ".ff-run", "state.json").exists()
+
+
+class TestLastErrorAndArtifactPath:
+    """两个「状态主动误导」的回归：旧错误不清、产物路径读成内容哈希。"""
+
+    def test_mark_done_clears_own_last_error(self, tmp_path):
+        state = PipelineState(Path(tmp_path))
+        state.mark_failed("test", "输出未匹配 --expected 'HB OK'")
+        assert state.data["last_error"]["stage"] == "test"
+
+        state.mark_done("test")
+        assert "last_error" not in state.data, \
+            "本阶段成功了还留着它自己的旧错误，ff_status 会一直报一个已解决的问题"
+
+    def test_mark_done_keeps_other_stage_last_error(self, tmp_path):
+        state = PipelineState(Path(tmp_path))
+        state.mark_failed("test", "串口零字节")
+
+        state.mark_done("build")
+        assert state.data["last_error"]["stage"] == "test", \
+            "S3 编译成功不代表上次 S5 采不到串口的问题解决了 —— 替别人擦账等于把没解决标成已解决"
+
+    def test_mark_done_clears_stage_entry_error(self, tmp_path):
+        state = PipelineState(Path(tmp_path))
+        state.mark_failed("flash", "checksum mismatch")
+        state.mark_done("flash", bytes_written=14932)
+        entry = state.data["stages"]["flash"]
+        assert entry["status"] == "done"
+        assert "error" not in entry
+        assert entry["bytes_written"] == 14932
+
+    def test_build_artifact_path_returns_path_not_hash(self, tmp_path):
+        state = PipelineState(Path(tmp_path))
+        assert state.build_artifact_path() == ""
+
+        artifact = str(tmp_path / "firmware.hex")
+        state.mark_done("build", hex=artifact, board_id="gc_h743")
+        state.update_fingerprints({"hex": "64b871d1a4e08f9c"})
+
+        assert state.build_artifact_path() == artifact, \
+            ("stages.build.hex 存的是产物路径，fingerprints.hex 存的是内容哈希。"
+             "拿后者当路径会让 is_file() 恒为 False，指纹也会被算成空")
