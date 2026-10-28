@@ -76,8 +76,8 @@ def stub_stages(monkeypatch):
 
 def _ns(**kw) -> argparse.Namespace:
     # panel=None = 没加 `--panel`（默认关闭）。所有阶段命令的单测都走这条默认路径。
-    base = dict(board="gc_h743", app=None, apps="", firmware=None, expected="",
-                boards_dir=None, workspace=None, json=False, panel=None)
+    base = dict(board="gc_h743", app=None, apps="", firmware=None, build=None,
+                expected="", boards_dir=None, workspace=None, json=False, panel=None)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -182,7 +182,7 @@ def test_app_name_selects_among_many(stub_stages, tmp_path, monkeypatch):
         d.mkdir(parents=True)
         (d / "firmware.hex").write_text(":00000001FF\n", encoding="utf-8")
 
-    assert cli.cmd_flash(_ns(app="hello_blink", workspace=str(tmp_path))) == 0
+    assert cli.cmd_flash(_ns(build="hello_blink", workspace=str(tmp_path))) == 0
     assert "flash" in stub_stages
 
 
@@ -272,7 +272,7 @@ def test_app_hint_beats_stale_state_record(stub_stages, tmp_path, monkeypatch):
     monkeypatch.setattr(PipelineRunner, "_stage_flash",
                         lambda self, b, fw: (flashed.append(fw), _ok(4, "Flash"))[1])
 
-    assert cli.cmd_flash(_ns(app="app", workspace=str(tmp_path))) == 0
+    assert cli.cmd_flash(_ns(build="app", workspace=str(tmp_path))) == 0
     assert flashed and "app" in flashed[0] and "hello_blink" not in flashed[0], \
         f"烧的是 {flashed}，用户明确要的是 app"
 
@@ -292,7 +292,7 @@ def test_app_hint_without_artifact_does_not_fall_back(stub_stages, tmp_path,
     st.mark_done("build", hex=str(stale))
     st.save()
 
-    code = cli.cmd_flash(_ns(app="nope", workspace=str(tmp_path)))
+    code = cli.cmd_flash(_ns(build="nope", workspace=str(tmp_path)))
     out = capsys.readouterr().out
     assert code == 1
     assert "flash" not in stub_stages, "找不到指定应用时不能改烧别的"

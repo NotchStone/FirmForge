@@ -1,9 +1,21 @@
 """MCP Server Adapter — FirmForge MCU code verification toolchain.
 
-Exposes 5 MCP tools for AI Coding Agents:
+Exposes one MCP tool per CLI subcommand that an Agent can meaningfully drive
+（`ff_setup` 除外 —— 装工具链是人在装机时做的一次性动作）:
+
   - ff_detect:  Scan connected MCU boards
   - ff_context: Return board-specific register/pin/baud reference
-  - ff_run:    Review → Build → Flash → Verify (full hardware pipeline)
+  - ff_build:   Review + Build only (no hardware)
+  - ff_review:  S2 only — static analysis + register review
+  - ff_run:     Detect → Review → Build → Flash → Verify (full hardware pipeline)
+  - ff_flash:   S4 only — flash a pre-built firmware
+  - ff_verify:  S5 only — open serial port and check the assertion
+  - ff_status:  Explain what the next run will skip, from .ff-run/state.json
+  - ff_inspect: Read-only SWD observation (reset cause / PC / variables / peripherals)
+  - ff_monitor: Live serial panel (the only tool that starts one)
+
+工具函数定义在模块级、由 MCP_TOOL_FUNCS 统一注册：schema 只从签名生成一份，
+命令面的覆盖关系可以被测试直接断言（`tests/test_mcp_surface.py`）。
 
 Usage (as MCP server):
     python -m firmforge.adapters.mcp_server
@@ -27,148 +39,6 @@ logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
 mcp = FastMCP("FirmForge", json_response=True) if MCP_AVAILABLE else None
 
-TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
-    "ff_detect": {
-        "name": "ff_detect",
-        "description": (
-            "Scan USB ports and identify connected MCU boards. "
-            "Returns board ID, MCU chip, clock speed, flash size, "
-            "and COM port. Call this to discover what hardware is available."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    "ff_context": {
-        "name": "ff_context",
-        "description": (
-            "Return board-specific hardware reference: registers, pins, baud rates. "
-            "Call this BEFORE writing MCU code to get valid register names "
-            "and avoid hallucinated identifiers."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "board": {
-                    "type": "string",
-                    "description": "Board ID (e.g. arduino_328p). Auto-detected if omitted.",
-                },
-                "topic": {
-                    "type": "string",
-                    "description": "Optional: filter by peripheral (gpio, uart, spi, i2c, adc, timer, pwm)",
-                },
-            },
-        },
-    },
-    "ff_build": {
-        "name": "ff_build",
-        "description": (
-            "Compile MCU source code without flashing. "
-            "Runs Source Review (register/pin reference check) → Build. "
-            "Use to check if code compiles correctly."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "board": {"type": "string", "description": "Board ID. Auto-detected if omitted."},
-                "app": {"type": "string", "description": "Path to source code directory. REQUIRED."},
-                "workspace": {
-                    "type": "string",
-                    "description": "Project directory holding .ff-run/ (state + panel). Default: FIRMFORGE_WORKSPACE env, else process cwd.",
-                },
-            },
-            "required": ["app"],
-        },
-    },
-    "ff_run": {
-        "name": "ff_run",
-        "description": (
-            "Verify, compile, flash and test MCU code on real hardware. "
-            "Includes Source Review (register/pin reference check), confidence scoring, "
-            "avr-gcc compilation, avrdude flashing, and serial output verification. "
-            "Call this AFTER writing code to close the hardware loop."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "board": {
-                    "type": "string",
-                    "description": "Board ID (e.g. arduino_328p). Auto-detected if omitted.",
-                },
-                "app": {
-                    "type": "string",
-                    "description": "Path to source code directory containing main.cpp. REQUIRED.",
-                },
-                "expected": {
-                    "type": "string",
-                    "description": "Optional: regex that must match PERIODIC serial output (e.g. 'HEARTBEAT tick=\\d+'). Do not assert on a one-shot boot banner — S5 opens the port only after flashing, so the banner is already gone.",
-                },
-                "workspace": {
-                    "type": "string",
-                    "description": "Project directory holding .ff-run/ (state + panel). Default: FIRMFORGE_WORKSPACE env, else process cwd.",
-                },
-            },
-            "required": ["app"],
-        },
-    },
-    "ff_flash": {
-        "name": "ff_flash",
-        "description": (
-            "Flash a pre-compiled firmware.hex to a board. "
-            "Use this to re-flash without recompiling."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "board": {
-                    "type": "string",
-                    "description": "Board ID (e.g. arduino_328p)",
-                },
-                "firmware": {
-                    "type": "string",
-                    "description": "Path to firmware.hex file",
-                },
-                "workspace": {
-                    "type": "string",
-                    "description": "Project directory holding .ff-run/. Default: FIRMFORGE_WORKSPACE env, else process cwd.",
-                },
-            },
-            "required": ["board"],
-        },
-    },
-    "ff_monitor": {
-        "name": "ff_monitor",
-        "description": (
-            "Start/stop real-time serial output monitoring. "
-            "Opens a browser panel automatically showing serial data from the MCU board. "
-            "Use action='stop' to close the monitor."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "port": {
-                    "type": "string",
-                    "description": "COM port name (e.g. 'COM4'). Required for start.",
-                },
-                "baud": {
-                    "type": "integer",
-                    "description": "Baud rate (default 9600)",
-                },
-                "action": {
-                    "type": "string",
-                    "description": "'start' to begin monitoring, 'stop' to close",
-                },
-                "workspace": {
-                    "type": "string",
-                    "description": "Project directory holding .ff-run/ (panel files). Default: FIRMFORGE_WORKSPACE env, else process cwd.",
-                },
-            },
-        },
-    },
-}
-
-
 def _add_project_root_to_path() -> Path:
     root = str(Path(__file__).resolve().parent.parent.parent)
     if root not in sys.path:
@@ -178,13 +48,13 @@ def _add_project_root_to_path() -> Path:
 
 # -- Tool implementations --
 
-def _do_detect() -> dict[str, Any]:
+def _do_detect(intent: str = "") -> dict[str, Any]:
     """Execute ff_detect."""
     try:
         root = _add_project_root_to_path()
         from firmforge.core.board_detector import BoardDetector
         detector = BoardDetector()
-        result = detector.detect()
+        result = detector.detect(user_text=intent)
         boards = result.boards if result.boards else []
         candidates = result.candidates if result.candidates else []
         return {
@@ -320,6 +190,61 @@ def _do_context(board: str = "", topic: str = "") -> dict[str, Any]:
         return {"error": str(e), "board": board or "unknown"}
 
 
+def _stages_payload(result) -> list[dict[str, Any]]:
+    """PipelineStage 列表 → 对外 JSON。run / build / review 共用这一份。
+
+    以前 build 与 run 各写一遍序列化，于是 Review 段的 cppcheck / warnings /
+    confidence 只在 run 里出现 —— 单跑 `ff review` 拿不到该看的东西，
+    而两份代码谁也不会因为另一份漏字段而报警。
+    """
+    out: list[dict[str, Any]] = []
+    for s in result.stages:
+        info: dict[str, Any] = {
+            "stage": s.stage, "name": s.name, "success": s.success,
+            "elapsed_ms": round(s.elapsed_ms, 0),
+        }
+        if s.error:
+            info["error"] = s.error[:200]
+        if s.details.get("sub_stages"):
+            info["sub_stages"] = s.details["sub_stages"]
+        if s.name == "Review":
+            info["cppcheck"] = s.details.get("cppcheck", [])
+            info["warnings"] = s.details.get("warnings", [])
+            if s.details.get("review_counts"):
+                info["review_counts"] = s.details["review_counts"]
+            if s.details.get("confidence"):
+                info["confidence"] = s.details["confidence"]
+        if s.name == "Build" and s.details.get("compile_rounds", 0) > 0:
+            info["compile_rounds"] = s.details["compile_rounds"]
+        if s.name == "Verify":
+            # verdict 是 S5 的结局：verified / mismatch / collected / empty /
+            # unavailable。只有 verified 算通过；collected 表示采到了数据但
+            # 调用方没给断言，需要 Agent 自己判断。
+            info["verdict"] = getattr(s, "verdict", "") or ""
+            info["sample_lines"] = s.details.get("sample_lines", [])
+            info["matched_baud"] = s.details.get("matched_baud", 0)
+            info["serial_output"] = s.details.get("serial_output", "")[:200]
+            if "pattern_match" in s.details:
+                info["pattern_match"] = s.details["pattern_match"]
+                info["expected"] = s.details.get("expected", "")
+                info["actual"] = s.details.get("actual", "")[:200]
+            if "panel_url" in s.details:
+                info["panel_url"] = s.details["panel_url"]
+                info["panel_file"] = s.details["panel_file"]
+        out.append(info)
+    return out
+
+
+def _result_payload(result) -> dict[str, Any]:
+    """一次流水线运行的通用结果帧。"""
+    return {
+        "overall_success": result.overall_success,
+        "board": result.board,
+        "total_elapsed_ms": round(result.total_elapsed_ms, 0),
+        "stages": _stages_payload(result),
+    }
+
+
 def _do_build(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
     """Execute ff_build — Review + Build only."""
     _add_project_root_to_path()
@@ -332,26 +257,7 @@ def _do_build(board: str = "", app: str = "", workspace: str = "") -> dict[str, 
     except Exception as e:
         return {"overall_success": False, "error": str(e), "stages": []}
 
-    stages = []
-    for s in result.stages:
-        stage_info = {
-            "stage": s.stage, "name": s.name, "success": s.success,
-            "elapsed_ms": round(s.elapsed_ms, 0),
-        }
-        if s.error:
-            stage_info["error"] = s.error[:200]
-        if s.name == "Build" and s.details.get("compile_rounds", 0) > 0:
-            stage_info["compile_rounds"] = s.details["compile_rounds"]
-        if s.details.get("sub_stages"):
-            stage_info["sub_stages"] = s.details["sub_stages"]
-        stages.append(stage_info)
-
-    return {
-        "overall_success": result.overall_success,
-        "board": result.board,
-        "total_elapsed_ms": round(result.total_elapsed_ms, 0),
-        "stages": stages,
-    }
+    return _result_payload(result)
 
 
 def _do_run(board: str = "", app: str = "", expected: str = "",
@@ -398,146 +304,422 @@ def _do_run(board: str = "", app: str = "", expected: str = "",
         return {"overall_success": False, "error": str(e), "stages": [],
                 "progress": progress_events}
 
-    stages = []
+    payload = _result_payload(result)
+    payload["progress"] = progress_events
+
+    # 完整串口输出单独给一份（stage 里的 serial_output 截到 200 字），
+    # Agent 要按行分析就得拿全文。
     serial_full = ""
     for s in result.stages:
-        stage_info = {
-            "stage": s.stage,
-            "name": s.name,
-            "success": s.success,
-            "elapsed_ms": round(s.elapsed_ms, 0),
-        }
-        if s.error:
-            stage_info["error"] = s.error[:200]
-        if s.details.get("sub_stages"):
-            stage_info["sub_stages"] = s.details["sub_stages"]
-        if s.name == "Review":
-            stage_info["cppcheck"] = s.details.get("cppcheck", [])
-            stage_info["warnings"] = s.details.get("warnings", [])
-        if s.name == "Build" and s.details.get("compile_rounds", 0) > 0:
-            stage_info["compile_rounds"] = s.details["compile_rounds"]
         if s.name == "Verify":
-            # verdict 是 S5 的六种结局：verified / mismatch / collected / empty /
-            # port_busy / unavailable。只有 verified 才算「验证通过」；collected 表示
-            # 「采到了数据但调用方没给断言」，需要 Agent 自己判断；port_busy 表示
-            # 端口没打开（采集线程或别的进程占着），固件根本没被检验。
-            stage_info["verdict"] = getattr(s, "verdict", "") or ""
-            stage_info["sample_lines"] = s.details.get("sample_lines", [])
-            stage_info["matched_baud"] = s.details.get("matched_baud", 0)
             serial_full = s.details.get("serial_output", "")
-            stage_info["serial_output"] = serial_full[:200]
-            if "pattern_match" in s.details:
-                stage_info["pattern_match"] = s.details["pattern_match"]
-                stage_info["expected"] = s.details.get("expected", "")
-                stage_info["actual"] = s.details.get("actual", "")[:200]
             if "panel_url" in s.details:
-                stage_info["panel_url"] = s.details["panel_url"]
-                stage_info["panel_file"] = s.details["panel_file"]
-        stages.append(stage_info)
-
-    # Extract panel_url from Verify stage for convenience
-    panel_info = {}
-    for s in result.stages:
-        if s.name == "Verify" and "panel_url" in s.details:
-            panel_info["panel_url"] = s.details["panel_url"]
-            panel_info["panel_file"] = s.details["panel_file"]
+                payload["panel_url"] = s.details["panel_url"]
+                payload["panel_file"] = s.details["panel_file"]
             break
-
-    return {
-        "overall_success": result.overall_success,
-        "board": result.board,
-        "total_elapsed_ms": round(result.total_elapsed_ms, 0),
-        "stages": stages,
-        "progress": progress_events,
-        "serial_lines": serial_full.splitlines() if serial_full.strip() else [],
-        **panel_info,
-    }
+    payload["serial_lines"] = serial_full.splitlines() if serial_full.strip() else []
+    return payload
 
 
-def _do_flash(board: str = "", firmware: str = "", workspace: str = "") -> dict[str, Any]:
-    """Execute ff_flash — flash pre-compiled hex via PipelineRunner."""
+def _do_flash(board: str = "", firmware: str = "", workspace: str = "",
+              build: str = "") -> dict[str, Any]:
+    """Execute ff_flash — 走 run_full(only=("flash",))，与 `ff flash` 同一入口。
+
+    以前这里调 `PipelineRunner.flash()`，那条路**不读写 `.ff-run/state.json`**：
+    MCP 烧完之后 `ff run` 仍认为没烧过，会再烧一遍，而两次之间没人被告知。
+    CLI 侧修过一次，MCP 侧当时漏了 —— 所以现在两边都走 run_full。
+    """
     _add_project_root_to_path()
     from firmforge.core.pipeline_runner import PipelineRunner
     from firmforge.infrastructure import paths
 
     try:
         runner = PipelineRunner(workspace=str(paths.resolve_workspace(workspace)))
-        result = runner.flash(board_id=board or None, firmware_path=firmware)
-        return {
-            "success": result.overall_success,
-            "board": result.board,
-            "firmware": firmware,
-            "stderr": next((s.error for s in result.stages if s.error), "")[:200],
-            "stages": [
-                {"stage": s.stage, "name": s.name, "success": s.success,
-                 "elapsed_ms": round(s.elapsed_ms, 0)}
-                for s in result.stages
-            ],
-        }
+        result = runner.run_full(board_id=board or None, only=("flash",),
+                                 firmware=firmware or "", app_name=build or "")
     except Exception as e:
         return {"success": False, "error": str(e), "firmware": firmware}
 
+    s4 = next((s for s in result.stages if s.name == "Flash"), None)
+    return {
+        "success": bool(result.overall_success),
+        "board": result.board,
+        "firmware": (s4.details.get("firmware_path", "") if s4 else ""),
+        "bytes_written": (s4.details.get("bytes_written", 0) if s4 else 0),
+        "elapsed_ms": round(result.total_elapsed_ms),
+        "error": (s4.error if s4 and not s4.success else ""),
+        "candidates": (s4.details.get("candidates", []) if s4 else []),
+        "stages": _stages_payload(result),
+    }
 
-# -- MCP Tool registration --
+
+def _do_review(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
+    """Execute ff_review — 只跑 S2（静态分析 + 寄存器审查 + 置信度）。"""
+    _add_project_root_to_path()
+    from firmforge.core.pipeline_runner import PipelineRunner
+    from firmforge.infrastructure import paths
+
+    if not app:
+        return {"overall_success": False, "error": "app is required", "stages": []}
+
+    runner = PipelineRunner(workspace=str(paths.resolve_workspace(workspace)))
+    try:
+        result = runner.run_full(source_dir=app, board_id=board or None,
+                                 only=("review",))
+    except Exception as e:
+        return {"overall_success": False, "error": str(e), "stages": []}
+    return _result_payload(result)
+
+
+def _do_verify(board: str = "", expected: str = "",
+               workspace: str = "") -> dict[str, Any]:
+    """Execute ff_verify — 只跑 S5（开串口采样本 / 检查断言）。
+
+    MCP 调用不碰面板：没有人在屏幕前点 Stop，起了也不会有人看。
+    """
+    _add_project_root_to_path()
+    from firmforge.core.pipeline_runner import PipelineRunner
+    from firmforge.infrastructure import paths
+
+    runner = PipelineRunner(workspace=str(paths.resolve_workspace(workspace)))
+    try:
+        result = runner.run_full(board_id=board or None, expected=expected or "",
+                                 only=("verify",), panel_open="none", panel_wait=0)
+    except Exception as e:
+        return {"overall_success": False, "error": str(e), "stages": []}
+
+    payload = _result_payload(result)
+    s5 = next((s for s in result.stages if s.name == "Verify"), None)
+    payload["verdict"] = (getattr(s5, "verdict", "") if s5 else "") or ""
+    payload["serial_lines"] = (s5.details.get("sample_lines", []) if s5 else [])
+    return payload
+
+
+def _do_status(workspace: str = "") -> dict[str, Any]:
+    """Execute ff_status — 读 `.ff-run/state.json`，回答「下次会跳过什么、为什么」。"""
+    _add_project_root_to_path()
+    from firmforge.core.pipeline_state import PipelineState
+    from firmforge.infrastructure import paths
+
+    # 传了 workspace 就用它（CLI 总是传 "." 或 --workspace）；
+    # 没传才去读 FIRMFORGE_WORKSPACE / cwd —— 与 _do_run 的解析规则一致，
+    # 否则 MCP 的 run 与 status 会指向两个不同的 .ff-run/。
+    root = (Path(workspace).resolve() if workspace
+            else paths.resolve_workspace(""))
+    state = PipelineState(root)
+    data = state.data or {}
+    fps = data.get("fingerprints", {}) or {}
+    return {
+        "workspace": str(root),
+        "runtime_dir": str(paths.runtime_dir(root)),
+        "fingerprints": fps,
+        "stages": {name: state.stage_status(name)
+                   for name in ("detect", "review", "build", "flash", "test")},
+        "last_error": data.get("last_error"),
+        "skip_rules": {
+            "build": "源码 + 板卡指纹不变 → 跳过，复用上次 hex",
+            "flash": "源码/固件/端口/板卡全不变 → 跳过；给了 expected 一律真烧",
+            "verify": "同上 → 跳过；给了 expected 一律重验",
+            "review": "不跳过（cppcheck 自己按内容哈希缓存）",
+        },
+        "raw": data,
+    }
+
+
+def _stm32_board_ids(boards_dir: str = "") -> list[str]:
+    """板卡目录里所有 platform == stm32 的 board_id。"""
+    import yaml
+    from firmforge.core.resources import boards_dir as default_boards_dir
+
+    root = Path(boards_dir) if boards_dir else Path(default_boards_dir())
+    out: list[str] = []
+    for path in sorted(root.glob("*/board.yaml")):
+        try:
+            cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:                     # noqa: BLE001 — 坏 yaml 不阻塞扫描
+            continue
+        if cfg.get("platform") == "stm32":
+            out.append(cfg.get("board_id") or path.parent.name)
+    return out
+
+
+def _do_inspect(board: str = "", build: str = "", elf: str = "", pc: int | None = None,
+                sym: list[str] | None = None, sym_glob: list[str] | None = None,
+                periph: list[str] | None = None, no_where: bool = False,
+                no_resume: bool = False, watchdog_run: bool = False,
+                clear_reset_flags: bool = False, symbol_notes: str = "",
+                timeout: float = 90.0, boards_dir: str = "") -> dict[str, Any]:
+    """Execute ff_inspect — 只读观测（复位原因 / PC / 变量 / 外设寄存器，STM32+SWD）。
+
+    这里只把参数变成一次观测请求并返回 payload；渲染归 CLI，字段名归 MCP。
+    前置条件不成立（板卡不明 / 平台不对 / 参数互相矛盾）一律返回 error，
+    **不产出半份观测** —— 半份数据的危害是它看起来像完整答案。
+    """
+    _add_project_root_to_path()
+    from firmforge.core.board_detector import BoardDetector
+    from firmforge.providers.stm32.inspect import InspectRequest
+    from firmforge.providers.stm32.inspect import inspect as run_inspect
+
+    board_id = board
+    if not board_id:
+        # 缺省只在「唯一一台 STM32」时才自动选；多台一律要求显式，不猜。
+        stm32 = _stm32_board_ids(boards_dir)
+        if len(stm32) != 1:
+            return {"error": (f"需要显式指定板卡（候选："
+                              f"{', '.join(stm32) or '无 STM32 板卡'}）")}
+        board_id = stm32[0]
+
+    detector = BoardDetector(boards_dir=boards_dir or None)
+    config = detector.resolve_board(board_id)
+    if not config:
+        return {"error": f"board '{board_id}' not found"}
+
+    platform = config.get("platform", "arduino")
+    if platform != "stm32":
+        return {"error": (f"inspect 目前只实现 STM32（SWD 探针 + halt 读内存）。"
+                          f"板卡 {board_id} 的平台是 {platform}。")}
+
+    if pc is not None:
+        # --pc 是**离线**路径：只做 addr2line，不连探针。和读内存的选项一起用
+        # 会产生矛盾的数据包（一边说"没连板子"，一边给出变量值）。不静默忽略。
+        clash = [flag for flag, val in (("--symbol", sym), ("--symbol-glob", sym_glob),
+                                        ("--peripheral", periph)) if val]
+        if clash:
+            return {"error": (f"pc 是离线模式（只解析源码位置，不连探针），"
+                              f"不能与 {' / '.join(clash)} 同用。"
+                              f"要同时读板上变量，去掉 pc 跑在线模式；"
+                              f"只想查这一行，去掉那几个参数。")}
+
+    req = InspectRequest(
+        elf=elf or None,
+        app=build or None,
+        pc=pc,
+        symbols=list(sym or []),
+        sym_globs=list(sym_glob or []),
+        peripherals=list(periph or []),
+        where=not no_where,
+        resume=not no_resume,
+        freeze_watchdog=not watchdog_run,
+        clear_reset_flags=clear_reset_flags,
+        symbol_notes=symbol_notes or None,
+        timeout=float(timeout or 90.0),
+    )
+    return run_inspect(config, req)
+
+
+# -- MCP tools --
+#
+# 工具函数定义在模块级、**不带装饰器**，最后统一注册。理由有三：
+#   ① 没有装 mcp 库的环境（CI / 单测）也能 import 并反射签名 —— 否则「MCP 面
+#      漏了哪条命令」只能靠人肉比对；
+#   ② schema 只从签名生成一份，不再有手写的第二份（旧的 TOOL_SCHEMAS 全仓无人
+#      引用，142 行死代码，其中 ff_context 的 topic 值域还是错的）；
+#   ③ 函数名 = 工具名 = `ff_<子命令>`，与 CLI 一一对应，能被测试断言。
+
+def _hex_addr(text: str) -> int:
+    """地址按十六进制解析（与 CLI 的 --pc 同一规则）。
+
+    不收十进制：`"800"` 在不同人脑子里分别是 800 和 0x800，地址没有十进制写法。
+    """
+    t = str(text).strip().replace("_", "")
+    if t[:2].lower() == "0x":
+        t = t[2:]
+    return int(t, 16)
+
+
+def ff_detect(intent: str = "") -> dict[str, Any]:
+    """Scan USB ports to discover connected MCU development boards.
+
+    Returns board ID, chip, and COM port. Call this FIRST to learn what hardware
+    is actually attached.
+
+    Args:
+        intent: Optional short description of what the user wants to build. Used to
+            disambiguate board candidates; omit if unsure.
+    """
+    return _do_detect(intent)
+
+
+def ff_context(board: str = "", topic: str = "") -> dict[str, Any]:
+    """Return board-specific registers, pin map, and baud rate presets.
+
+    Call BEFORE writing MCU code. All register names MUST come from this reference
+    to pass the hardware Source Review (register reference check).
+
+    Args:
+        board: Board ID (e.g. arduino_328p). Auto-detected if omitted.
+        topic: "" or "all" (default) for the full reference; one of
+            "registers" | "pins" | "baud"; or a concrete peripheral name
+            ("USART1") / peripheral.register ("USART1.CR1") for an exact lookup.
+            Names like "gpio"/"uart" are NOT topics — use the instance name.
+    """
+    return _do_context(board, topic)
+
+
+def ff_build(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
+    """Compile MCU source code only (no hardware required). Runs Review + Build.
+
+    Use for CI/pre-commit checks. Use ff_run when hardware is connected.
+
+    Args:
+        board: Board ID. Auto-detected if omitted.
+        app: Source code directory. REQUIRED.
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_build(board, app, workspace)
+
+
+def ff_review(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
+    """Run ONLY the static review stage (S2): cppcheck + register/field reference
+    check + confidence scoring. Does not compile, flash, or touch hardware.
+
+    Use when you changed code and want fast feedback on hallucinated register
+    names / pin values without paying for a full build+flash cycle.
+
+    Args:
+        board: Board ID. Auto-detected if omitted.
+        app: Source code directory. REQUIRED.
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_review(board, app, workspace)
+
+
+def ff_run(board: str = "", app: str = "", expected: str = "",
+           workspace: str = "") -> dict[str, Any]:
+    """Compile, flash and run MCU code on real hardware.
+
+    Full pipeline: Detect → Review → Build → Flash → Verify.
+    Call AFTER writing code. Always returns when the pipeline finishes: no serial
+    panel is opened and nothing waits for a human. The full serial capture is
+    written to .ff-run/serial_live.html; call ff_monitor if a human wants live view.
+
+    Args:
+        board: Board ID. Auto-detected if omitted.
+        app: Source code directory containing main.cpp/main.c. REQUIRED.
+        expected: Optional regex that must match PERIODIC serial output
+            (e.g. "HEARTBEAT tick=\\d+"). Do not assert on a one-shot boot banner —
+            S5 opens the port only after flashing, so the banner is already gone.
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_run(board, app, expected, workspace)
+
+
+def ff_flash(board: str, firmware: str = "", build: str = "",
+             workspace: str = "") -> dict[str, Any]:
+    """Flash a pre-compiled firmware to a board. Skips Review and Build.
+
+    Shares the same .ff-run/state.json as ff_run, so a later ff_run will NOT
+    re-flash needlessly.
+
+    Args:
+        board: Board ID. REQUIRED.
+        firmware: Explicit path to firmware.hex. Takes priority over build.
+        build: App name under the build cache (cache/build/<board>/<NAME>/).
+            Required only when the cache holds several firmware images.
+            NOTE: this is a build artifact name, NOT a source directory — for the
+            source directory use ff_run/ff_build/ff_review's `app`.
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_flash(board=board, firmware=firmware, build=build,
+                     workspace=workspace)
+
+
+def ff_verify(board: str = "", expected: str = "", workspace: str = "") -> dict[str, Any]:
+    """Run ONLY the serial verification stage (S5): open the port, collect samples,
+    and check the assertion. Does not compile or flash.
+
+    Use when the board already runs the firmware you want to check.
+
+    Args:
+        board: Board ID. Auto-detected if omitted.
+        expected: Optional regex that must match periodic output. Without it the
+            verdict is "collected" (data captured, no assertion) — NOT a pass.
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_verify(board, expected, workspace)
+
+
+def ff_status(workspace: str = "") -> dict[str, Any]:
+    """Explain what the next ff_run will skip and why, from .ff-run/state.json.
+
+    Returns the four fingerprints (source / hex / port / board), each stage's status,
+    the last error, and the skip rules. Use this when a run seems to have skipped
+    a step you expected it to perform.
+
+    Args:
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_status(workspace)
+
+
+def ff_inspect(board: str = "", build: str = "", elf: str = "", pc: str = "",
+               sym: list[str] | None = None, sym_glob: list[str] | None = None,
+               periph: list[str] | None = None, no_where: bool = False,
+               no_resume: bool = False, watchdog_run: bool = False,
+               clear_reset_flags: bool = False, symbol_notes: str = "",
+               timeout: float = 90.0) -> dict[str, Any]:
+    """Read-only observation of a RUNNING STM32 target over SWD: reset cause, where
+    the CPU is, live variable values, and decoded peripheral registers.
+
+    STM32 only. Requires a debug probe. For a crash site, take the PC from the
+    serial output and pass it as `pc` (offline mode, no probe needed).
+
+    Args:
+        board: Board ID. Defaults to the only STM32 board defined.
+        build: App name under the build cache (cache/build/<board>/<NAME>/) whose ELF
+            should be used for symbols. NOT a source directory.
+        elf: Explicit ELF path. Alternative to `build`.
+        pc: Program counter to resolve, hex string ("0x08001D78"). Offline: does not
+            connect to the probe and cannot be combined with sym/sym_glob/periph.
+        sym: Variable/array names to read (repeatable).
+        sym_glob: Glob patterns for variables (repeatable), e.g. "g_rsv_*".
+        periph: Peripherals to dump and decode (repeatable): "LPTIM1" for all
+            registers, "LPTIM1.CR" for one.
+        no_where: Do not resolve source line for the current PC.
+        no_resume: Leave the target halted after observing (default: resume).
+        watchdog_run: Let the watchdog keep running while halted (default: frozen —
+            otherwise the target may reset mid-observation and the data breaks off).
+        clear_reset_flags: Clear RCC_RSR reset flags after reading (otherwise the
+            next read returns the same sticky bits).
+        symbol_notes: YAML mapping symbol -> {value: meaning} to annotate values.
+        timeout: OpenOCD session timeout in seconds (default 90).
+    """
+    pc_value = _hex_addr(pc) if str(pc).strip() else None
+    return _do_inspect(board=board, build=build, elf=elf, pc=pc_value,
+                       sym=sym, sym_glob=sym_glob, periph=periph,
+                       no_where=no_where, no_resume=no_resume,
+                       watchdog_run=watchdog_run,
+                       clear_reset_flags=clear_reset_flags,
+                       symbol_notes=symbol_notes, timeout=timeout)
+
+
+def ff_monitor(port: str = "", baud: int = 9600, action: str = "start",
+               workspace: str = "") -> dict[str, Any]:
+    """Open/close the live serial panel — the ONLY MCP tool that starts a panel.
+
+    ff_run never opens one, so use this when a human explicitly wants to watch
+    the serial stream. Returns `panel_url` (use it as-is: the port may not be 9878
+    if that one was taken) and `panel_file`.
+
+    Args:
+        port: COM port (e.g. "COM4"). Auto-detected when omitted.
+        baud: Baud rate (default 9600).
+        action: "start" to serve the panel, "stop" to close it.
+        workspace: Project directory holding .ff-run/. Default: cwd.
+    """
+    return _do_monitor(port, baud, action, workspace=workspace)
+
+
+#: 工具注册顺序 = 建议的调用顺序（先看硬件，再查参考，再改代码，再验证）。
+MCP_TOOL_FUNCS = (
+    ff_detect, ff_context, ff_build, ff_review,
+    ff_run, ff_flash, ff_verify, ff_status, ff_inspect, ff_monitor,
+)
+
 
 if MCP_AVAILABLE and mcp is not None:
-
-    @mcp.tool()
-    def ff_detect() -> dict[str, Any]:
-        """Scan USB ports to discover connected MCU development boards. Returns board ID, chip, and COM port."""
-        _add_project_root_to_path()
-        return _do_detect()
-
-    @mcp.tool()
-    def ff_context(board: str = "", topic: str = "") -> dict[str, Any]:
-        """Return board-specific registers, pin map, and baud rate presets.
-        Call BEFORE writing MCU code. All register names MUST come from this reference
-        to pass the hardware Source Review (register reference check)."""
-        _add_project_root_to_path()
-        return _do_context(board, topic)
-
-    @mcp.tool()
-    def ff_build(board: str = "", app: str = "", workspace: str = "") -> dict[str, Any]:
-        """Compile MCU source code only (no hardware required). Runs Review + Build. Use for CI/pre-commit checks. Use ff_run when hardware is connected."""
-        _add_project_root_to_path()
-        return _do_build(board, app, workspace)
-
-    @mcp.tool()
-    def ff_run(board: str = "", app: str = "", expected: str = "",
-               workspace: str = "") -> dict[str, Any]:
-        """Compile, flash and run MCU code on real hardware.
-        Full pipeline: Detect → Review → Build → Flash → Verify.
-        Call AFTER writing code. Returns sample serial lines for analysis; the full
-        capture is written to .ff-run/serial_live.html (no live HTTP panel — call
-        ff_monitor explicitly if a human needs to watch it).
-        `expected` must match periodic output (heartbeat / status line); a one-shot boot banner cannot be seen,
-        because S5 opens the serial port only after flashing finishes."""
-        _add_project_root_to_path()
-        return _do_run(board, app, expected, workspace)
-
-    @mcp.tool()
-    def ff_flash(board: str, firmware: str = "", workspace: str = "") -> dict[str, Any]:
-        """Flash pre-compiled firmware.hex to a board. Bypasses Review+Build — use only with known-good hex files."""
-        _add_project_root_to_path()
-        return _do_flash(board, firmware, workspace)
-
-    @mcp.tool()
-    def ff_monitor(port: str = "", baud: int = 9600,
-                   action: str = "start", workspace: str = "") -> dict[str, Any]:
-        """Start/stop serial output monitoring in a browser panel.
-
-        Args:
-            port: COM port (e.g. 'COM4'). Required when action='start'.
-            baud: Baud rate (default 9600).
-            action: 'start' to open monitor, 'stop' to close it.
-
-        Returns:
-            dict with 'url' (http://localhost:9876) on start,
-            or 'status': 'stopped' on stop.
-            Agent should call present_files() with the URL to open the panel.
-        """
-        _add_project_root_to_path()
-        return _do_monitor(port, baud, action, workspace=workspace)
+    for _tool in MCP_TOOL_FUNCS:
+        mcp.tool()(_tool)
 
 _monitor_httpd = None  # legacy — kept for backward compat with pipeline_runner
 

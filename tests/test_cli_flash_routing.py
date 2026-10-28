@@ -66,7 +66,7 @@ def patched(monkeypatch, tmp_path: Path):
 def _args(board: str, firmware: str, workspace: Path) -> argparse.Namespace:
     """workspace 必须用 tmp_path：`ff flash` 现在会写 .ff-run/state.json，
     用默认的 "." 会把测试状态写进真实工作区。"""
-    return argparse.Namespace(board=board, firmware=firmware, app=None,
+    return argparse.Namespace(board=board, firmware=firmware, build=None,
                               boards_dir=None, workspace=str(workspace), json=False)
 
 

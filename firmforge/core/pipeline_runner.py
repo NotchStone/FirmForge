@@ -304,7 +304,7 @@ class PipelineRunner:
                 ``"verify"``）。空 = 全跑。S1 永远跑 —— 它只解析板卡配置，
                 不是"执行动作"，少了它连走 SWD 还是 avrdude 都不知道。
             firmware: 只跑 flash 时直接指定 hex。空则按 state → 构建缓存解析。
-            app_name: 只跑 flash 时用哪个应用名去构建缓存里找（`--app app`）。
+            app_name: 只跑 flash 时用哪个应用名去构建缓存里找（`--build app`）。
             panel_wait: S5 采完样本后**等面板多久**。语义与默认值都是故意这么定的：
                 ``0.0``（默认）**且** ``panel_open="none"`` = 完全没有面板
                 （不开窗、不等待、不打印地址）—— ff 的调用方主要是 Agent / CI / MCP，
@@ -1371,18 +1371,18 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 })
             return out
 
-        # `--app` 在 state 之前：用户点名要某个应用，就不该被上一次构建
-        # 留下的记录覆盖。顺序反了的话 `ff flash X --app other` 会安静地
+        # `--build` 在 state 之前：用户点名要某个应用，就不该被上一次构建
+        # 留下的记录覆盖。顺序反了的话 `ff flash X --build other` 会安静地
         # 烧上一份（state 里那份）—— 与 `ff inspect` 那次「取最新 ELF」
         # 是同一类错误：给出的答案看起来完全合理。
         if app_hint:
             one = cache / Path(app_hint).name / "firmware.hex"
             if one.is_file():
-                return str(one), [], "构建缓存（按 --app 定位）"
+                return str(one), [], "构建缓存（按 --build 定位）"
             names = "、".join(c["app"] for c in _candidates()) or "（空）"
             return "", _candidates(), (
-                f"--app {Path(app_hint).name} 在构建缓存里没有产物（{cache}）。"
-                f"现有：{names}。先跑 ff build --app {app_hint}，"
+                f"--build {Path(app_hint).name} 在构建缓存里没有产物（{cache}）。"
+                f"现有：{names}。先跑 ff build --app <源码目录>，"
                 f"或用 --firmware <路径> 指定")
 
         recorded = (state.data.get("stages", {}).get("build", {}) or {}).get("hex", "")
@@ -1398,7 +1398,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         cands = _candidates()
         names = "、".join(c["app"] for c in cands)
         return "", cands, (f"构建缓存里有 {len(cands)} 份 firmware.hex，无法判断要烧哪一份"
-                           f"（{names}）。用 --app <应用名> 或 --firmware <路径> 指定")
+                           f"（{names}）。用 --build <应用名> 或 --firmware <路径> 指定")
 
     def _stage_build(self, board_id: str | None, source_dir: str | None) -> PipelineStage:
         stage = PipelineStage(stage=3, name="Build")

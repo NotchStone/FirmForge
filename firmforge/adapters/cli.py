@@ -632,12 +632,13 @@ def cmd_flash(args: argparse.Namespace) -> int:
     if not args.board:
         if getattr(args, "json", False):
             return _json_out({"error": "board is required"}, 1)
-        print("Usage: ff flash <board> [--app <应用名>] [--firmware <path>]")
+        print("Usage: ff flash <board> [--build <应用名>] [--firmware <path>]")
         return 1
 
+    build = getattr(args, "build", None) or ""
     notes = _Notes()
     if not getattr(args, "json", False):
-        notes.header(args.board, args.app or "(固件由 state/缓存解析)")
+        notes.header(args.board, build or "(固件由 state/缓存解析)")
 
     runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
                             workspace=Path(args.workspace or "."),
@@ -645,7 +646,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
     result = runner.run_full(board_id=args.board,
                              only=("flash",),
                              firmware=args.firmware or "",
-                             app_name=args.app or "",
+                             app_name=build,
                              progress_callback=notes.stage_done)
 
     s4 = next((s for s in result.stages if s.name == "Flash"), None)
@@ -674,7 +675,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
     print(f"  [FAIL] Stage 4 Flash ({s4.elapsed_ms:.0f}ms)")
     print(f"         {s4.error or 'unknown'}")
     for c in s4.details.get("candidates", []):
-        print(f"         --app {c['app']:20s} {c['size']} B  {c['mtime']}")
+        print(f"         --build {c['app']:18s} {c['size']} B  {c['mtime']}")
     return 1
 
 
@@ -831,7 +832,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
 
     # ff detect
     p_init = subparsers.add_parser("detect", help="Scan USB and identify board")
-    p_init.add_argument("intent", nargs="?", help="Optional: user intent description")
+    # 曾经是位置参数 `ff detect "点灯"` —— 与所有其他命令的 `<board>` 位置参数
+    # 长得一样，于是 `ff detect gc_h743` 会被当成"用户意图文本"静默吞掉，
+    # 不报错也不检测这块板。改成选项后，写错就是明确的 unrecognized arguments。
+    p_init.add_argument("--intent", default="",
+                        help="可选的用户意图描述（帮助消歧板卡候选）")
 
     # ff run
     p_run = subparsers.add_parser(
@@ -875,9 +880,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_flash.add_argument("board", nargs="?", help="Board ID")
     p_flash.add_argument("--firmware", "-f",
                          help="Path to firmware.hex（缺省按 state → 构建缓存解析）")
-    p_flash.add_argument("--app", metavar="NAME",
-                         help="应用名（构建缓存 cache/build/<board>/<NAME>/）。"
+    p_flash.add_argument("--build", metavar="NAME", dest="build",
+                         help="构建缓存里的应用名（cache/build/<board>/<NAME>/）。"
                               "缓存里有多份时必须指定")
+    p_flash.add_argument("--app", metavar="NAME", dest="build",
+                         action=_DeprecatedBuildArg, help=argparse.SUPPRESS)
 
     # ff verify
     p_verify = subparsers.add_parser(
@@ -901,6 +908,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_setup = subparsers.add_parser(
         "setup", help="Download & install toolchains (avr-gcc, avrdude) + Arduino Core",
     )
+    # 命令叫 setup 却只装 AVR 那一套（STM32 的 arm-none-eabi 与 OpenOCD 走各自的
+    # 安装器）。不说清楚，STM32 用户会以为跑完 ff setup 就齐了，然后 S3 报"找不到编译器"。
+    p_setup.add_argument(
+        "platform", nargs="?", default="avr", metavar="PLATFORM",
+        help="要安装的平台：avr（默认）。stm32 暂不代装，见 docs/STM32-工具链选型.md")
 
     # ff context
     p_ctx = subparsers.add_parser(
@@ -909,7 +921,10 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     p_ctx.add_argument("board", nargs="?", help="Board ID (auto-detect if omitted)")
     p_ctx.add_argument(
         "--topic", default="",
-        help="registers|pins|baud|all，或外设名（USART1）、外设.寄存器（USART1.CR1）")
+        help="省略=全部（all）。枚举：registers | pins | baud | all；"
+             "也可给外设名（USART1）或 外设.寄存器（USART1.CR1）做精确查询。"
+             "注意 gpio/uart/spi 这类名字**不是**有效主题（它们是外设名的一部分，"
+             "请直接用 USART1 这样的实例名）")
 
     # ff inspect
     p_ins = subparsers.add_parser(
@@ -919,27 +934,39 @@ def setup_argument_parser() -> argparse.ArgumentParser:
     )
     p_ins.add_argument("board", nargs="?",
                        help="Board ID（缺省=唯一一台 STM32 板卡）")
-    p_ins.add_argument("--app", metavar="NAME",
-                       help="应用名（构建缓存 cache/build/<board>/<NAME>/ 下的 ELF）。"
+    p_ins.add_argument("--build", metavar="NAME", dest="build",
+                       help="构建缓存里的应用名（cache/build/<board>/<NAME>/ 下的 ELF）。"
                             "与 --elf 二选一")
+    p_ins.add_argument("--app", metavar="NAME", dest="build",
+                       action=_DeprecatedBuildArg, help=argparse.SUPPRESS)
     p_ins.add_argument("--elf", help="ELF 路径（缺省=构建缓存里唯一的 firmware.elf；"
-                                     "有多份时**必须**指定 --app 或 --elf）")
+                                     "有多份时**必须**指定 --build 或 --elf）")
     p_ins.add_argument("--pc", metavar="0xADDR", type=_parse_pc,
                        help="只解析这个 PC 的源码位置，**不连探针**（离线）。"
                             "故障现场从串口拿到 pc 后用，如 --pc 0x08001D78")
-    p_ins.add_argument("--sym", action="append", metavar="NAME",
-                       help="读一个变量/数组（可重复），如 --sym s_ticks")
-    p_ins.add_argument("--sym-glob", action="append", metavar="PAT",
-                       help="按通配读一组变量（可重复），如 --sym-glob 'g_rsv_*'")
-    p_ins.add_argument("--periph", action="append", metavar="NAME",
+    # --sym / --sym-glob / --periph 是全拼的简写。三个开关里两个用缩写、
+    # 一个用全拼（--symbol-notes）会让人以为 --symbol 存在而 --periph 不存在。
+    # 统一成全拼，缩写作别名保留（短写顺手，不必为了整齐禁用）。
+    p_ins.add_argument("--symbol", "--sym", action="append", metavar="NAME",
+                       dest="sym", help="读一个变量/数组（可重复），如 --symbol s_ticks")
+    p_ins.add_argument("--symbol-glob", "--sym-glob", action="append",
+                       metavar="PAT", dest="sym_glob",
+                       help="按通配读一组变量（可重复），如 --symbol-glob 'g_rsv_*'")
+    p_ins.add_argument("--peripheral", "--periph", action="append", metavar="NAME",
+                       dest="periph",
                        help="读外设寄存器并解码字段（可重复）：LPTIM1 读全部，"
                             "LPTIM1.CR 只读一个")
     p_ins.add_argument("--no-where", action="store_true",
                        help="不解析 PC 对应的源码行")
     p_ins.add_argument("--no-resume", action="store_true",
                        help="观测完保持暂停（默认恢复运行）")
-    p_ins.add_argument("--no-freeze-watchdog", action="store_true",
-                       help="不冻结看门狗（默认冻结——不冻结时暂停期间可能被看门狗复位）")
+    # 原名 `--no-freeze-watchdog` 是双重否定（"不" + "冻结"），读一遍要在脑子里
+    # 转两个弯。改成肯定式：--watchdog-run = 让看门狗继续跑。旧名保留。
+    p_ins.add_argument("--watchdog-run", dest="watchdog_run", action="store_true",
+                       help="暂停期间让看门狗继续跑（默认冻结 —— 不冻结时暂停期间"
+                            "可能被看门狗复位，观测数据会半途断掉）")
+    p_ins.add_argument("--no-freeze-watchdog", dest="watchdog_run",
+                       action="store_true", help=argparse.SUPPRESS)
     p_ins.add_argument("--clear-reset-flags", action="store_true",
                        help="观测后清 RCC_RSR 复位标志（不清则下次读到的还是这批 sticky 位）")
     p_ins.add_argument("--symbol-notes", metavar="YAML",
@@ -1050,6 +1077,22 @@ def cmd_context(args: argparse.Namespace) -> int:
     return 0
 
 
+class _DeprecatedBuildArg(argparse.Action):
+    """`ff flash --app` / `ff inspect --app` 的旧写法：值仍是「构建缓存应用名」。
+
+    `--app` 在 `run` / `build` / `review` 里指的是**源码目录**，在这两条命令里
+    指的是**构建缓存里的应用名**，同名两义正是最容易猜错的地方
+    （`ff flash --app ./src` 会去找一个叫 `./src` 的缓存目录）。
+    统一改名为 `--build`，旧写法继续可用但要说清它到底是什么。
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):  # noqa: ANN001
+        print("提示：这里的 --app 指「构建缓存里的应用名」，已改名为 --build。"
+              "（--app 在 run/build/review 里指源码目录，两者不是一回事）",
+              file=sys.stderr, flush=True)
+        setattr(namespace, self.dest, values)
+
+
 def _parse_pc(text: str) -> int:
     """PC 一律按十六进制解析 —— 地址没有十进制写法。
 
@@ -1067,83 +1110,30 @@ def _parse_pc(text: str) -> int:
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
-    """ff inspect: 只读观测 —— 复位原因 / CPU 位置 / 关键变量 / 外设寄存器。"""
-    from firmforge.providers.stm32.inspect import InspectRequest
-    from firmforge.providers.stm32.inspect import inspect as run_inspect
+    """ff inspect: 只读观测 —— 复位原因 / CPU 位置 / 关键变量 / 外设寄存器。
 
-    board_id = args.board
-    detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
+    参数校验与请求构造都在 `_do_inspect` 里 —— MCP 的 ff_inspect 调的是同一份，
+    否则「CLI 允许 / MCP 拒绝」这种漂移迟早出现（board 自动选择、平台校验、
+    pc 与读内存互斥这三段逻辑本来就有 30 行）。
+    """
+    from firmforge.adapters.mcp_server import _do_inspect
 
-    if not board_id:
-        # 缺省只在"唯一一台 STM32"时才自动选；多台一律要求显式，不猜。
-        stm32 = []
-        for path in sorted(Path(_bdir()).glob("*/board.yaml")):
-            try:
-                import yaml
-                cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            except Exception:                     # noqa: BLE001
-                continue
-            if cfg.get("platform") == "stm32":
-                stm32.append(cfg.get("board_id") or path.parent.name)
-        if len(stm32) != 1:
-            msg = (f"需要显式指定板卡（候选：{', '.join(stm32) or '无 STM32 板卡'}）")
-            if getattr(args, "json", False):
-                return _json_out({"error": msg}, 1)
-            print(f"Error: {msg}")
-            return 1
-        board_id = stm32[0]
-
-    config = detector.resolve_board(board_id)
-    if not config:
-        if getattr(args, "json", False):
-            return _json_out({"error": f"board '{board_id}' not found"}, 1)
-        print(f"Error: board '{board_id}' not found")
-        return 1
-
-    platform = config.get("platform", "arduino")
-    if platform != "stm32":
-        msg = (f"inspect 目前只实现 STM32（SWD 探针 + halt 读内存）。"
-               f"板卡 {board_id} 的平台是 {platform}。")
-        if getattr(args, "json", False):
-            return _json_out({"error": msg}, 1)
-        print(f"Error: {msg}")
-        return 1
-
-    pc = getattr(args, "pc", None)
-    if pc is not None:
-        # --pc 是**离线**路径：只做 addr2line，不连探针。和读内存的选项
-        # 一起用会产生一个矛盾的数据包（一边说"没连板子"，一边给出变量值）。
-        # 不静默忽略 —— 猜用户想干什么正是这类工具最容易犯的错。
-        clash = [flag for flag, val in (
-            ("--sym", getattr(args, "sym", None)),
-            ("--sym-glob", getattr(args, "sym_glob", None)),
-            ("--periph", getattr(args, "periph", None)),
-        ) if val]
-        if clash:
-            msg = (f"--pc 是离线模式（只解析源码位置，不连探针），"
-                   f"不能与 {' / '.join(clash)} 同用。"
-                   f"要同时读板上变量，去掉 --pc 跑在线模式；只想查这一行，去掉那几个参数。")
-            if getattr(args, "json", False):
-                return _json_out({"error": msg}, 1)
-            print(f"Error: {msg}")
-            return 1
-
-    req = InspectRequest(
-        elf=getattr(args, "elf", None),
-        app=getattr(args, "app", None),
-        pc=pc,
-        symbols=list(getattr(args, "sym", None) or []),
-        sym_globs=list(getattr(args, "sym_glob", None) or []),
-        peripherals=list(getattr(args, "periph", None) or []),
-        where=not getattr(args, "no_where", False),
-        resume=not getattr(args, "no_resume", False),
-        freeze_watchdog=not getattr(args, "no_freeze_watchdog", False),
+    payload = _do_inspect(
+        board=args.board or "",
+        build=getattr(args, "build", None) or "",
+        elf=getattr(args, "elf", None) or "",
+        pc=getattr(args, "pc", None),
+        sym=getattr(args, "sym", None),
+        sym_glob=getattr(args, "sym_glob", None),
+        periph=getattr(args, "periph", None),
+        no_where=getattr(args, "no_where", False),
+        no_resume=getattr(args, "no_resume", False),
+        watchdog_run=getattr(args, "watchdog_run", False),
         clear_reset_flags=getattr(args, "clear_reset_flags", False),
-        symbol_notes=getattr(args, "symbol_notes", None),
+        symbol_notes=getattr(args, "symbol_notes", None) or "",
         timeout=float(getattr(args, "timeout", None) or 90.0),
+        boards_dir=args.boards_dir or str(_bdir()),
     )
-
-    payload = run_inspect(config, req)
 
     # 前提不成立（ELF 有歧义 / --elf 不存在）—— 报错退出，**不产出半份观测**。
     # 这类错误以前只落在 warnings 里，于是命令以 0 退回、还打印了一个
@@ -1299,13 +1289,17 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
         ns.topic = cargs.get("topic", "")
     elif cmd == "inspect":
         ns.board = cargs.get("board")
+        # `build` = 构建缓存里的应用名；旧键 `app` 兼容（当时与源码目录同名两义）。
+        ns.build = cargs.get("build", cargs.get("app"))
         ns.elf = cargs.get("elf")
         ns.sym = cargs.get("sym") or []
         ns.sym_glob = cargs.get("sym_glob") or []
         ns.periph = cargs.get("periph") or []
         ns.no_where = bool(cargs.get("no_where", False))
         ns.no_resume = bool(cargs.get("no_resume", False))
-        ns.no_freeze_watchdog = bool(cargs.get("no_freeze_watchdog", False))
+        # 肯定式字段，旧键 no_freeze_watchdog 兼容。
+        ns.watchdog_run = bool(cargs.get("watchdog_run",
+                                         cargs.get("no_freeze_watchdog", False)))
         ns.clear_reset_flags = bool(cargs.get("clear_reset_flags", False))
         ns.symbol_notes = cargs.get("symbol_notes")
         ns.timeout = float(cargs.get("timeout") or 90.0)
@@ -1326,7 +1320,9 @@ def _namespace(cmd: str, cargs: dict) -> argparse.Namespace:
     elif cmd == "flash":
         ns.board = cargs.get("board")
         ns.firmware = cargs.get("firmware")
-        ns.app = cargs.get("app")
+        # `build` = 构建缓存里的应用名（与 CLI 的 --build 同名）。
+        # 旧键 `app` 仍认：那时它和 run/build 的 --app（源码目录）同名两义。
+        ns.build = cargs.get("build", cargs.get("app"))
     elif cmd == "review":
         ns.board = cargs.get("board")
         ns.app = cargs.get("app")
@@ -1456,6 +1452,14 @@ def _dispatch(args, parser) -> int:
     elif args.command == "status":
         return cmd_status(args)
     elif args.command == "setup":
+        platform = (getattr(args, "platform", "") or "avr").strip().lower()
+        if platform != "avr":
+            # 明确说"没装"，不要静默去装 AVR 那一套 —— 用户会以为 stm32 齐了。
+            print(f"Error: ff setup 目前只代装 AVR 工具链（avr-gcc / avrdude / ArduinoCore-avr）。"
+                  f"平台 '{platform}' 需手动安装：")
+            print("  arm-none-eabi-gcc （14.2.Rel1）+ OpenOCD 0.12.0")
+            print("  详见 docs/STM32-工具链选型.md；装好后用 ff inspect / ff flash 验证")
+            return 1
         from firmforge.providers.arduino.setup import setup_all
         return setup_all()
     elif args.command == "context":
