@@ -11,6 +11,7 @@ If COM port changes, Flash+Test invalidated. If board changes, everything.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import logging
@@ -129,6 +130,15 @@ class PipelineState:
         last = self._data.get("last_error")
         if isinstance(last, dict) and last.get("stage") == stage_name:
             self._data.pop("last_error", None)
+
+        # 成功也要留痕。last_error 只能表达「有错」，擦掉之后什么都不表示 ——
+        # 读的人只看到「没有错误」，分不清是刚才那次跑通了，还是这份 state
+        # 从没跑过。2026-10-28 实测的连带问题：agent 无法从 status 判断
+        # 「这个 done 是新代码写的还是旧进程留下的」，只能靠猜。
+        self._data["last_success"] = {
+            "stage": stage_name,
+            "at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
 
     def mark_failed(self, stage_name: str, error: str) -> None:
         self._data.setdefault("last_error", {})["stage"] = stage_name

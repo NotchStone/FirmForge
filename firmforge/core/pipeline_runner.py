@@ -89,6 +89,19 @@ class VerifyDecision:
     pattern_error: str = ""
 
 
+def _as_given(text: str, limit: int = 0) -> str:
+    """把调用方传入的字符串**原样**放进报错里。
+
+    不用 ``repr``：它会把反斜杠翻倍，正则 ``\\d+`` 显示成 ``\\\\d+``（终端里
+    看到两个），而调用方明明只写了一个 —— 报错里出现这种差别，读的人第一反应
+    是「我的正则写错了」，然后去改一个本来正确的东西（2026-10-28 反馈）。
+
+    只转义换行/回车：它们会把一行报错撑断，而且肉眼看不见。
+    """
+    t = text[:limit] if limit else text
+    return "'" + t.replace("\r", "\\r").replace("\n", "\\n") + "'"
+
+
 def _decide_verify(sample_lines: list[str], expected: str,
                    port: str = "", baud: int = 0) -> VerifyDecision:
     """S5 判定。三条硬规则，全部机械可查：
@@ -113,7 +126,7 @@ def _decide_verify(sample_lines: list[str], expected: str,
         try:
             pattern_match = bool(re.search(expected, output))
         except re.error as exc:
-            pattern_error = f"Invalid regex {expected!r}: {exc}"
+            pattern_error = f"Invalid regex {_as_given(expected)}: {exc}"
 
     if pattern_error:
         return VerifyDecision(False, VERDICT_MISMATCH, pattern_error,
@@ -129,7 +142,8 @@ def _decide_verify(sample_lines: list[str], expected: str,
     if pattern_match is False:
         return VerifyDecision(
             False, VERDICT_MISMATCH,
-            f"输出未匹配 --expected {expected!r}；实际首行 {sample_lines[0][:100]!r}。"
+            f"输出未匹配 --expected {_as_given(expected)}；"
+            f"实际首行 {_as_given(sample_lines[0], 100)}。"
             "断言只能针对周期性输出：端口在烧录完成后才打开，"
             "固件上电时打印一次的横幅/初始化日志采不到。",
             False, "")

@@ -470,6 +470,9 @@ def do_status(workspace: str = "") -> dict[str, Any]:
         "stages": {name: state.stage_status(name)
                    for name in ("detect", "review", "build", "flash", "test")},
         "last_error": data.get("last_error"),
+        # 「最近一次真正成功的是谁、什么时候」。last_error 被成功后擦掉，
+        # 单看它只能得出「没记录错误」，看不出这份 state 是否刚跑通过。
+        "last_success": data.get("last_success"),
         "skip_rules": {
             "build": "源码 + 板卡指纹不变 → 跳过，复用上次 hex",
             "flash": "源码/固件/端口/板卡全不变 → 跳过；给了 expected 一律真烧",

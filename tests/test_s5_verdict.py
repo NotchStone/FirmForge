@@ -55,6 +55,24 @@ class TestDecideVerify:
         assert d.verdict == VERDICT_MISMATCH
         assert "Invalid regex" in d.error
 
+    def test_expected_shown_as_given_not_escaped(self):
+        """报错里的断言必须与传入的一模一样 —— 反斜杠不许翻倍。
+
+        用 ``repr`` 拼消息时，传入 ``\\d+`` 会显示成 ``\\\\d+``（终端里看到两个
+        反斜杠），读的人第一反应是「我的正则写错了」，然后去改一个本来正确的
+        东西（2026-10-28 反馈）。``\\r`` / ``\\n`` 仍要转义：它们会把一行报错撑断。
+        """
+        d = _decide_verify(SAMPLES, r"ZZZ_NEVER_MATCH_\d+")
+        assert r"ZZZ_NEVER_MATCH_\d+" in d.error, d.error
+        assert r"ZZZ_NEVER_MATCH_\\d+" not in d.error, \
+            f"反斜杠被翻倍了，看起来像调用方的正则写错：{d.error}"
+
+    def test_sample_line_newlines_stay_on_one_line(self):
+        """实际输出里的换行要转义，否则一条报错被撑成多行。"""
+        d = _decide_verify(["HB OK\r\nsecond"], r"NOPE_\d+")
+        assert "\n" not in d.error and "\r" not in d.error, d.error
+        assert r"HB OK\r\nsecond" in d.error, d.error
+
     def test_empty_output_with_assertion_still_reports_empty(self):
         """没数据时先报 empty，而不是报「断言没命中」——这是两件事。"""
         d = _decide_verify([], r"anything")

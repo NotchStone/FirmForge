@@ -128,6 +128,21 @@ class TestLastErrorAndArtifactPath:
         assert state.data["last_error"]["stage"] == "test", \
             "S3 编译成功不代表上次 S5 采不到串口的问题解决了 —— 替别人擦账等于把没解决标成已解决"
 
+    def test_mark_done_records_last_success(self, tmp_path):
+        """成功要留正面证据，不能只靠「没有 last_error」。
+
+        agent 看 state 时常要判断「这个 done 是刚才跑出来的，还是几天前留下的」，
+        擦掉 last_error 之后什么都不表示。这条同时是这个字段的可读性回归：
+        旧版 mark_done 不写 last_success，读到没有该字段就知道对方跑的是旧代码。
+        """
+        state = PipelineState(Path(tmp_path))
+        state.mark_failed("test", "输出未匹配")
+        state.mark_done("test")
+
+        ok = state.data["last_success"]
+        assert ok["stage"] == "test"
+        assert len(ok["at"]) == 19, f"时间戳要能直接看：{ok['at']}"
+
     def test_mark_done_clears_stage_entry_error(self, tmp_path):
         state = PipelineState(Path(tmp_path))
         state.mark_failed("flash", "checksum mismatch")

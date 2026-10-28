@@ -661,6 +661,10 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"上次失败：{last.get('stage', '?')} —— "
               f"{str(last.get('message', '')).splitlines()[0][:140]}{suffix}")
 
+    ok = data.get("last_success") or {}
+    if ok:
+        print(f"最近成功：{ok.get('stage', '?')} @ {ok.get('at', '?')}")
+
     print()
     print("下次 ff run 的跳过条件（指纹一致才跳，任一变化就重跑）：")
     if not fps:
