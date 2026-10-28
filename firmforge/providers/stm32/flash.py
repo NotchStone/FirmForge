@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 from firmforge.providers.base import FlashProvider, FlashResult
-from firmforge.providers.com_port import com_port_clean_close  # noqa: F401  (接口对齐)
 from firmforge.providers.stm32.debug import base_args
 from firmforge.providers.stm32.toolchain import Stm32Toolchain, resolve_toolchain
 from firmforge.providers.textio import run_text
@@ -74,10 +73,15 @@ class Stm32FlashProvider(FlashProvider):
         空/垃圾数据，而 S5 不阻断，于是错误被静默吸收。
         **宁可返回 None 让 S5 明确说"没有回读"，也不要猜错。**
         """
+        # 日志一律 debug：这里只报"端口是哪个"，不替调用方宣告"要拿它做 S5"。
+        # detect_port() 有两个调用方 —— 算指纹（拿到就行，不该出声）和 S5
+        # 开串口（由 S5 自己 _note「打开串口 COM9 采样本」）。以前两处都写
+        # 「S5 回读串口」，于是 `ff flash` 在 S4 之前凭空冒出一条带 S5 字样的
+        # 日志、`ff verify` 因为两处各调一次而原样打印两遍。
         # 显式声明优先：board.yaml 写了 serial.port 就直接用，绕开"多个 CH340 分不清"。
         explicit = str(self._serial_cfg.get("port", "")).strip()
         if explicit:
-            logger.info("S5 回读串口（board.yaml 指定）: %s", explicit)
+            logger.debug("回读串口（board.yaml 指定）: %s", explicit)
             return explicit
 
         try:
@@ -117,7 +121,7 @@ class Stm32FlashProvider(FlashProvider):
             return None
 
         chosen = matched[0]
-        logger.info("S5 回读串口: %s (%s)", chosen.device, chosen.description)
+        logger.debug("回读串口: %s (%s)", chosen.device, chosen.description)
         return chosen.device
 
     def flash(self, firmware_path: str) -> FlashResult:
@@ -166,7 +170,9 @@ class Stm32FlashProvider(FlashProvider):
         return cmd
 
     def _run_openocd(self, operation: str, firmware_path: str) -> FlashResult:
-        start = time.time()
+        # perf_counter 而非 time.time()：时长测量用单调高精度时钟
+        #（理由见 arduino/flash.py 同款注释 —— Windows 上 time.time() 粒度 15.6ms）。
+        start = time.perf_counter()
         gate = self._preflight(firmware_path)
         if gate:
             return FlashResult(success=False, stderr=gate, elapsed_ms=0.0)
@@ -177,12 +183,12 @@ class Stm32FlashProvider(FlashProvider):
             r = run_text(cmd, timeout=180)
         except subprocess.TimeoutExpired:
             return FlashResult(
-                success=False, elapsed_ms=(time.time() - start) * 1000,
+                success=False, elapsed_ms=(time.perf_counter() - start) * 1000,
                 stderr="OpenOCD 超时（180 s）—— 探针未连接或目标未上电？",
             )
         except OSError as exc:
             return FlashResult(
-                success=False, elapsed_ms=(time.time() - start) * 1000,
+                success=False, elapsed_ms=(time.perf_counter() - start) * 1000,
                 stderr=f"无法启动 OpenOCD: {exc}",
             )
 
@@ -201,7 +207,7 @@ class Stm32FlashProvider(FlashProvider):
             bytes_written=self._bytes_written(out, firmware_path),
             stdout=r.stdout or "",
             stderr=(r.stderr or "") + ("".join(f"\n{f}" for f in failures)),
-            elapsed_ms=(time.time() - start) * 1000,
+            elapsed_ms=(time.perf_counter() - start) * 1000,
         )
 
     @staticmethod

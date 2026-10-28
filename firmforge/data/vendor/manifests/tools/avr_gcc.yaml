@@ -17,3 +17,10 @@ platforms:
 install:
   root: "~/.firmforge/toolchains/avr-gcc/"
   bin: "bin/avr-gcc"
+  binaries: [avr-gcc, avr-g++, avr-objcopy, avr-ar, avr-size]
+  # 探测顺序（probe → probe_glob → PATH），与 STM32 侧的机制一致：
+  probe:
+    - "~/.firmforge/toolchains/avr-gcc/bin"          # ff setup 的 canonical 安装
+    - "~/AppData/Local/mcu-tools/avr-gcc/bin"        # 手动裸装
+  probe_glob:
+    - "~/AppData/Local/Microsoft/WinGet/Packages/ZakKemble.avr-gcc*/bin"  # winget（目录带版本号）

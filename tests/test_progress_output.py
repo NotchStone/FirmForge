@@ -89,7 +89,7 @@ def test_review_note_fires_before_cppcheck_returns():
         order.append("<<cppcheck 真正执行>>")
         return _FakeReport()
 
-    import firmforge.providers.arduino.cppcheck as mod
+    import firmforge.providers.cppcheck as mod
     original = mod.run_cppcheck
     mod.run_cppcheck = fake_run
     try:
@@ -154,7 +154,8 @@ def test_header_goes_to_stderr(capsys):
 
 def test_json_mode_stdout_stays_pure(tmp_path, capsys):
     """`--json` 的调用方（Agent）必须拿到完整 JSON，不能被进度行插队。"""
-    from firmforge.adapters.cli import _Notes, _pipeline_payload
+    from firmforge.adapters.cli import _Notes
+    from firmforge.adapters.commands import result_payload
     from firmforge.core.pipeline_runner import PipelineResult, PipelineStage
 
     n = _Notes()
@@ -164,7 +165,7 @@ def test_json_mode_stdout_stays_pure(tmp_path, capsys):
 
     res = PipelineResult(board="gc_h743", overall_success=True)
     res.stages.append(PipelineStage(stage=1, name="Detect", success=True))
-    print(json.dumps(_pipeline_payload(res), ensure_ascii=False))
+    print(json.dumps(result_payload(res), ensure_ascii=False))
 
     out, err = capsys.readouterr()
     payload = json.loads(out)                 # 必须能整体解析

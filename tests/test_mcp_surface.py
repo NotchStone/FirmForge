@@ -162,3 +162,26 @@ def test_flash_takes_build_not_app():
     assert "--build" in opts
     assert "--app" in opts, "旧写法要留一条带迁移提示的入口，不能直接消失"
     assert "build" in _cli_dests(sub)
+
+
+def test_serial_evidence_falls_back_to_sample_lines():
+    """`ff_run` 与 `ff_verify` 必须给同一份串口证据。
+
+    2026-10-28 实测：`ff_run` 的 `serial_lines` 恒为空，因为它读的
+    `serial_output` 字段 S5 早已不写；同一次调用里 `verdict` 却是 `verified`。
+    Agent 看到「验证通过 + 零行输出」，只能二选一相信 —— 这就是自相矛盾的数据。
+    """
+    from types import SimpleNamespace
+
+    from firmforge.adapters.commands import serial_evidence
+
+    only_samples = SimpleNamespace(details={"sample_lines": ["HB ver=1 tick=1",
+                                                             "HB ver=1 tick=2"]})
+    assert serial_evidence(only_samples) == ["HB ver=1 tick=1", "HB ver=1 tick=2"]
+
+    with_full = SimpleNamespace(details={"sample_lines": ["a"],
+                                         "serial_output": "a\nb\nc"})
+    assert serial_evidence(with_full) == ["a", "b", "c"], "有全文时用全文"
+
+    assert serial_evidence(None) == []
+    assert serial_evidence(SimpleNamespace(details={})) == []

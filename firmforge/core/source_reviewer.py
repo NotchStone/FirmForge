@@ -155,6 +155,20 @@ _REG_PREFIXES = (
 
 
 @dataclass
+class _ScanState:
+    """一次 validate() 扫描的跨行状态（去重集合 + 外设实例名索引）。"""
+
+    # 已查过的 (寄存器, 行号) / (位名, 行号) —— 同名同行只报一次
+    seen_registers: set[tuple[str, int]] = field(default_factory=set)
+    seen_fields: set[tuple[str, int]] = field(default_factory=set)
+    # 未知外设名的提示按 (外设, 寄存器) 全局去重 —— 同一个 `GPIOZ->BSRR`
+    # 在文件里出现 5 次，报 1 条就够。
+    seen_unknown_periph: set[tuple[str, str]] = field(default_factory=set)
+    # 已知外设实例名（USART1 / GPIOA / DMA1）；空集 = 该芯片知识库无外设分组
+    peripherals: set[str] = field(default_factory=set)
+
+
+@dataclass
 class SourceReviewViolation:
     """A single source review violation or warning.
 
@@ -396,17 +410,11 @@ class SourceReviewer:
             self._device_truth is not None and self._device_truth.available)
         lines = source_code.splitlines()
 
-        # Track already-checked items to avoid duplicates
-        seen_registers: set[tuple[str, int]] = set()
-        # 未知外设名的提示，按 (外设, 寄存器) 全局去重 —— 同一个 `GPIOZ->BSRR`
-        # 在文件里出现 5 次，报 1 条就够。
-        seen_unknown_periph: set[tuple[str, str]] = set()
-        seen_fields: set[tuple[str, int]] = set()
-
         # 已知外设实例名（USART1 / GPIOA / DMA1）。空集说明当前芯片的知识库
         # 没有外设分组（AVR 也有分组，但 AVR 代码不写 PERIPH->REG），此时
         # Phase 0 整体跳过，不为没有的东西付扫描成本。
-        peripherals = self._knowledge_base.peripheral_names()
+        state = _ScanState(
+            peripherals=self._knowledge_base.peripheral_names())
 
         for line_num, line in enumerate(lines, start=1):
             stripped = self._strip_strings(line).strip()
@@ -414,256 +422,21 @@ class SourceReviewer:
             # Skip comments, preprocessor, and empty lines
             if not stripped:
                 continue
-            if stripped.startswith("//") or stripped.startswith("#"):
-                continue
-            if stripped.startswith("/*") or stripped.startswith("*"):
+            if stripped.startswith(("//", "#", "/*", "*")):
                 continue
 
-            # --- Phase 0: 外设寄存器访问 PERIPH->REG / PERIPH.REG -----------
-            # STM32 的写法。此前这类引用完全没被识别：`USART1->CR1` 里的裸名
-            # `CR1` 会落到 Phase 2，而裸名在 STM32 上跨 36 个外设重名，
-            # lookup_register("CR1") 返回其中随便一个 —— 审查显示「已解析」，
-            # 实际解析到了别的外设。限定名查不到才是真错。
-            peripheral_regs_on_line: set[str] = set()
-            if peripherals:
-                for match in _PERIPH_ACCESS_RE.finditer(stripped):
-                    periph = match.group(1).upper()
-                    op = match.group(2)
-                    reg = match.group(3).upper()
-
-                    # **首字母必须大写**才是实例名。CMSIS 的实例一律大写开头
-                    # （GPIOA / USART1 / DMA1_Stream0 / SysTick / CoreDebug），
-                    # 而结构体成员与变量都小写：`p->port->BSRR`、`osc.PLL.PLLM`、
-                    # `huart1->Instance`。这条判据比"点号 vs 箭头"更准 ——
-                    # 箭头形式下同样会出现成员指针链（`p->port->BSRR` 就曾被
-                    # 当成外设 PORT，报了一条 `PORT.BSRR` 的假 warning）。
-                    if not match.group(1)[0].isupper():
-                        continue
-
-                    if periph not in peripherals:
-                        self._note_unknown_peripheral(
-                            result, periph, reg, op, stripped, line_num,
-                            seen_unknown_periph)
-                        continue
-                    peripheral_regs_on_line.add(reg)
-
-                    key = (f"{periph}.{reg}", line_num)
-                    if key in seen_registers:
-                        continue
-                    seen_registers.add(key)
-                    result.registers_checked += 1
-
-                    if self._knowledge_base.lookup_register_qualified(periph, reg):
-                        result.registers_resolved += 1
-                    else:
-                        self._record_unresolved(result, periph, reg, stripped,
-                                                 line_num)
-
-            # --- Phase 1: Extract bit-field references FIRST ---
-            # This lets us exclude them from register scanning
-            field_names_on_line: set[str] = set()
-            for match in _FIELD_REF_RE.finditer(stripped):
-                field_name = match.group(1) or match.group(2) or match.group(3)
-                if not field_name:
-                    continue
-                field_name = field_name.upper()
-                field_names_on_line.add(field_name)
-
-                # Skip known safe constants
-                if field_name in _KNOWN_NON_REGISTERS:
-                    continue
-
-                key = (field_name, line_num)
-                if key in seen_fields:
-                    continue
-                seen_fields.add(key)
-
-                result.fields_checked += 1
-
-                # Try to resolve the field
-                if self._resolve_field(field_name):
-                    result.fields_resolved += 1
-                else:
-                    result.warnings.append(SourceReviewViolation(
-                        register=field_name,
-                        line=line_num,
-                        line_text=stripped,
-                        severity="warning",
-                        reason=f"Bit-field '{field_name}' not found in reference "
-                               f"library (may be a macro or constant)",
-                        suggestion=f"Verify that '{field_name}' is defined in the "
-                                   f"Arduino core or AVR headers",
-                    ))
-
-            # --- Phase 1b: STM32 CMSIS 位宏（USART_CR1_TE）-----------------
-            # AVR 的位名被 (1 << X) / _BV(X) 包着，Phase 1 能认出来；STM32
-            # 直接写宏名，外面没有移位。判据分三档：
-            #   命中全名索引 → 真位
-            #   前缀命中     → 该前缀下确有一批真位，说明寄存器选对了、位名写错了
-            #   都不命中     → HAL 常量（GPIO_PIN_7）或别的库的宏，放过
-            if peripherals:
-                for match in _FIELD_MACRO_RE.finditer(stripped):
-                    macro = match.group(1).upper()
-                    if macro in peripheral_regs_on_line:
-                        continue          # Phase 0 已按限定名查过
-                    if macro in _KNOWN_NON_REGISTERS:
-                        continue
-                    if macro in field_names_on_line:
-                        continue          # Phase 1 已按 (1 << X) 形态处理
-
-                    if self._knowledge_base.lookup_field(macro):
-                        key = (macro, line_num)
-                        if key in seen_fields:
-                            continue
-                        seen_fields.add(key)
-                        result.fields_checked += 1
-                        result.fields_resolved += 1
-                        continue
-
-                    prefix = self._knowledge_base.field_prefix_of(macro)
-                    if not prefix:
-                        continue          # HAL 常量，不在寄存器库里是正常的
-
-                    key = (macro, line_num)
-                    if key in seen_fields:
-                        continue
-                    seen_fields.add(key)
-                    result.fields_checked += 1
-                    result.violations.append(SourceReviewViolation(
-                        register=macro,
-                        line=line_num,
-                        line_text=stripped,
-                        severity="error",
-                        reason=(f"Bit-field macro '{macro}' not found; prefix "
-                                f"'{prefix}' has known fields in reference"),
-                        suggestion=(f"'{prefix}' 下有已知位宏 —— 寄存器选对了、"
-                                    f"位名写错了。用 'ff context <board> "
-                                    f"--topic <外设>' 核对位名。"),
-                    ))
-                    result.passed = False
-
-            # --- Phase 2: Find register names in assignment context ---
-            for match in _REGISTER_ASSIGN_RE.finditer(stripped):
-                reg_name = match.group(1)
-
-                # Skip known non-register identifiers
-                if reg_name in _KNOWN_NON_REGISTERS:
-                    continue
-
-                # Skip user-defined names (contain underscore — AVR registers never do)
-                if "_" in reg_name:
-                    continue
-
-                # Skip if this is actually a field name on this line
-                if reg_name.upper() in field_names_on_line:
-                    continue
-
-                # Skip registers already resolved as PERIPH->REG on this line:
-                # 裸名在 STM32 上跨外设重名，再查一遍只会得到假通过
-                if reg_name.upper() in peripheral_regs_on_line:
-                    continue
-
-                # Skip common C keywords/types that might match
-                if reg_name.lower() in ("return", "while", "break", "continue"):
-                    continue
-
-                key = (reg_name, line_num)
-                if key in seen_registers:
-                    continue
-                seen_registers.add(key)
-
-                result.registers_checked += 1
-
-                # Look up in reference library
-                reg_entry = self._knowledge_base.lookup_register(reg_name)
-                if reg_entry:
-                    result.registers_resolved += 1
-                else:
-                    # Check if it starts with a known register prefix
-                    is_likely_register = reg_name.upper().startswith(_REG_PREFIXES)
-
-                    if is_likely_register:
-                        result.violations.append(SourceReviewViolation(
-                            register=reg_name,
-                            line=line_num,
-                            line_text=stripped,
-                            severity="error",
-                            reason=f"Register '{reg_name}' not found in reference "
-                                   f"library (hallucinated register with known prefix)",
-                            suggestion="Verify register name against ATmega2560 "
-                                       "datasheet. Use a known register or add it "
-                                       "to knowledge/reference/avr/registers.json",
-                        ))
-                        result.passed = False
-                    else:
-                        result.warnings.append(SourceReviewViolation(
-                            register=reg_name,
-                            line=line_num,
-                            line_text=stripped,
-                            severity="warning",
-                            reason=f"Identifier '{reg_name}' in assignment context "
-                                   f"not found in reference library",
-                            suggestion="If this is a register, verify its name. "
-                                       "Otherwise this may be a variable name.",
-                        ))
-
-            # --- Phase 3: Broader scan for register-like identifiers ---
-            # This catches register reads (not assignments) like:
-            #   if (UCSR0A & (1 << UDRE0))
-            #   val = PINB;
-            #
-            # Strip string literals first to avoid matching register-like
-            # names that appear inside strings (e.g. "ADC Channel:")
-            scan_line = self._strip_strings(line)
-
-            for match in _ALL_CAPS_IDENT_RE.finditer(scan_line):
-                ident = match.group(1)
-
-                # Skip known safe identifiers
-                if ident in _KNOWN_NON_REGISTERS:
-                    continue
-
-                # Skip user-defined names (contain underscore — AVR registers never do)
-                if "_" in ident:
-                    continue
-
-                # Skip if already checked as assignment register or field
-                if (ident, line_num) in seen_registers:
-                    continue
-                if ident.upper() in field_names_on_line:
-                    continue
-
-                # Skip if not register-like (must start with a known prefix)
-                if not ident.upper().startswith(_REG_PREFIXES):
-                    continue
-
-                # Skip common false positives
-                if ident in ("ISR", "SIGNAL", "DEFINE", "INCLUDE", "PRAGMA",
-                             "F_CPU", "LED_BUILTIN"):
-                    continue
-
-                key = (ident, line_num)
-                if key in seen_registers:
-                    continue
-                seen_registers.add(key)
-
-                result.registers_checked += 1
-
-                reg_entry = self._knowledge_base.lookup_register(ident)
-                if reg_entry:
-                    result.registers_resolved += 1
-                else:
-                    result.violations.append(SourceReviewViolation(
-                        register=ident,
-                        line=line_num,
-                        line_text=stripped,
-                        severity="error",
-                        reason=f"Register '{ident}' not found in reference library "
-                               f"(hallucinated register with known prefix)",
-                        suggestion="Verify register name against ATmega2560 "
-                                   "datasheet.",
-                    ))
-                    result.passed = False
+            # 每个阶段是独立方法，共享 state（跨行去重）与 result。
+            # 阶段间有两份行内集合要传递：限定名寄存器（Phase 0 → 1b/2 的
+            # 去重依据）与位名（Phase 1 → 1b/2/3 的去重依据）。
+            peripheral_regs = self._scan_peripheral_access(
+                result, stripped, line_num, state)
+            field_names = self._scan_bit_fields(result, stripped, line_num, state)
+            self._scan_cmsis_macros(result, stripped, line_num, state,
+                                     peripheral_regs, field_names)
+            self._scan_assignment_registers(result, stripped, line_num, state,
+                                            field_names, peripheral_regs)
+            self._scan_broad_registers(result, stripped, line, line_num, state,
+                                       field_names)
 
         # 文件名必须在**每一条**违规上落地。跨文件聚合后如果只有计数、没有
         # 文件名，读日志的人只能自己 import 本模块逐个文件跑一遍才能定位
@@ -678,6 +451,286 @@ class SourceReviewer:
         self._log_verdict(result)
 
         return result
+
+    # ------------------------------------------------------------------
+    # 逐行扫描阶段（validate 的五个 Phase，共享 _ScanState）
+    # ------------------------------------------------------------------
+
+    def _scan_peripheral_access(self, result: SourceReviewResult,
+                                stripped: str, line_num: int,
+                                state: "_ScanState") -> set[str]:
+        """Phase 0: 外设寄存器访问 PERIPH->REG / PERIPH.REG。
+
+        STM32 的写法。此前这类引用完全没被识别：`USART1->CR1` 里的裸名
+        `CR1` 会落到 Phase 2，而裸名在 STM32 上跨 36 个外设重名，
+        lookup_register("CR1") 返回其中随便一个 —— 审查显示「已解析」，
+        实际解析到了别的外设。限定名查不到才是真错。
+
+        返回本行以限定名出现过的寄存器名集合（Phase 1b/2 的去重依据）。
+        """
+        peripheral_regs_on_line: set[str] = set()
+        if not state.peripherals:
+            return peripheral_regs_on_line
+
+        for match in _PERIPH_ACCESS_RE.finditer(stripped):
+            periph = match.group(1).upper()
+            op = match.group(2)
+            reg = match.group(3).upper()
+
+            # **首字母必须大写**才是实例名。CMSIS 的实例一律大写开头
+            # （GPIOA / USART1 / DMA1_Stream0 / SysTick / CoreDebug），
+            # 而结构体成员与变量都小写：`p->port->BSRR`、`osc.PLL.PLLM`、
+            # `huart1->Instance`。这条判据比"点号 vs 箭头"更准 ——
+            # 箭头形式下同样会出现成员指针链（`p->port->BSRR` 就曾被
+            # 当成外设 PORT，报了一条 `PORT.BSRR` 的假 warning）。
+            if not match.group(1)[0].isupper():
+                continue
+
+            if periph not in state.peripherals:
+                self._note_unknown_peripheral(
+                    result, periph, reg, op, stripped, line_num,
+                    state.seen_unknown_periph)
+                continue
+            peripheral_regs_on_line.add(reg)
+
+            key = (f"{periph}.{reg}", line_num)
+            if key in state.seen_registers:
+                continue
+            state.seen_registers.add(key)
+            result.registers_checked += 1
+
+            if self._knowledge_base.lookup_register_qualified(periph, reg):
+                result.registers_resolved += 1
+            else:
+                self._record_unresolved(result, periph, reg, stripped,
+                                        line_num)
+        return peripheral_regs_on_line
+
+    def _scan_bit_fields(self, result: SourceReviewResult,
+                         stripped: str, line_num: int,
+                         state: "_ScanState") -> set[str]:
+        """Phase 1: 位域引用 (1 << X) / _BV(X)。
+
+        先于寄存器扫描提取，是为了把位名从后续寄存器扫描中排除。
+        返回本行出现的位名集合（Phase 1b/2/3 的去重依据）。
+        """
+        field_names_on_line: set[str] = set()
+        for match in _FIELD_REF_RE.finditer(stripped):
+            field_name = match.group(1) or match.group(2) or match.group(3)
+            if not field_name:
+                continue
+            field_name = field_name.upper()
+            field_names_on_line.add(field_name)
+
+            # Skip known safe constants
+            if field_name in _KNOWN_NON_REGISTERS:
+                continue
+
+            key = (field_name, line_num)
+            if key in state.seen_fields:
+                continue
+            state.seen_fields.add(key)
+
+            result.fields_checked += 1
+
+            # Try to resolve the field
+            if self._resolve_field(field_name):
+                result.fields_resolved += 1
+            else:
+                result.warnings.append(SourceReviewViolation(
+                    register=field_name,
+                    line=line_num,
+                    line_text=stripped,
+                    severity="warning",
+                    reason=f"Bit-field '{field_name}' not found in reference "
+                           f"library (may be a macro or constant)",
+                    suggestion=f"Verify that '{field_name}' is defined in the "
+                               f"Arduino core or AVR headers",
+                ))
+        return field_names_on_line
+
+    def _scan_cmsis_macros(self, result: SourceReviewResult,
+                           stripped: str, line_num: int,
+                           state: "_ScanState", peripheral_regs: set[str],
+                           field_names: set[str]) -> None:
+        """Phase 1b: STM32 CMSIS 位宏（USART_CR1_TE）。
+
+        AVR 的位名被 (1 << X) / _BV(X) 包着，Phase 1 能认出来；STM32
+        直接写宏名，外面没有移位。判据分三档：
+          命中全名索引 → 真位
+          前缀命中     → 该前缀下确有一批真位，说明寄存器选对了、位名写错了
+          都不命中     → HAL 常量（GPIO_PIN_7）或别的库的宏，放过
+        """
+        if not state.peripherals:
+            return
+
+        for match in _FIELD_MACRO_RE.finditer(stripped):
+            macro = match.group(1).upper()
+            if macro in peripheral_regs:
+                continue          # Phase 0 已按限定名查过
+            if macro in _KNOWN_NON_REGISTERS:
+                continue
+            if macro in field_names:
+                continue          # Phase 1 已按 (1 << X) 形态处理
+
+            if self._knowledge_base.lookup_field(macro):
+                key = (macro, line_num)
+                if key in state.seen_fields:
+                    continue
+                state.seen_fields.add(key)
+                result.fields_checked += 1
+                result.fields_resolved += 1
+                continue
+
+            prefix = self._knowledge_base.field_prefix_of(macro)
+            if not prefix:
+                continue          # HAL 常量，不在寄存器库里是正常的
+
+            key = (macro, line_num)
+            if key in state.seen_fields:
+                continue
+            state.seen_fields.add(key)
+            result.fields_checked += 1
+            result.violations.append(SourceReviewViolation(
+                register=macro,
+                line=line_num,
+                line_text=stripped,
+                severity="error",
+                reason=(f"Bit-field macro '{macro}' not found; prefix "
+                        f"'{prefix}' has known fields in reference"),
+                suggestion=(f"'{prefix}' 下有已知位宏 —— 寄存器选对了、"
+                            f"位名写错了。用 'ff context <board> "
+                            f"--topic <外设>' 核对位名。"),
+            ))
+            result.passed = False
+
+    def _scan_assignment_registers(self, result: SourceReviewResult,
+                                   stripped: str, line_num: int,
+                                   state: "_ScanState", field_names: set[str],
+                                   peripheral_regs: set[str]) -> None:
+        """Phase 2: 赋值语境下的寄存器名（PORTB = ...）。"""
+        for match in _REGISTER_ASSIGN_RE.finditer(stripped):
+            reg_name = match.group(1)
+
+            # Skip known non-register identifiers
+            if reg_name in _KNOWN_NON_REGISTERS:
+                continue
+
+            # Skip user-defined names (contain underscore — AVR registers never do)
+            if "_" in reg_name:
+                continue
+
+            # Skip if this is actually a field name on this line
+            if reg_name.upper() in field_names:
+                continue
+
+            # Skip registers already resolved as PERIPH->REG on this line:
+            # 裸名在 STM32 上跨外设重名，再查一遍只会得到假通过
+            if reg_name.upper() in peripheral_regs:
+                continue
+
+            # Skip common C keywords/types that might match
+            if reg_name.lower() in ("return", "while", "break", "continue"):
+                continue
+
+            key = (reg_name, line_num)
+            if key in state.seen_registers:
+                continue
+            state.seen_registers.add(key)
+
+            result.registers_checked += 1
+
+            # Look up in reference library
+            reg_entry = self._knowledge_base.lookup_register(reg_name)
+            if reg_entry:
+                result.registers_resolved += 1
+            else:
+                # Check if it starts with a known register prefix
+                is_likely_register = reg_name.upper().startswith(_REG_PREFIXES)
+
+                if is_likely_register:
+                    result.violations.append(SourceReviewViolation(
+                        register=reg_name,
+                        line=line_num,
+                        line_text=stripped,
+                        severity="error",
+                        reason=f"Register '{reg_name}' not found in reference "
+                               f"library (hallucinated register with known prefix)",
+                        suggestion="Verify register name against ATmega2560 "
+                                   "datasheet. Use a known register or add it "
+                                   "to knowledge/reference/avr/registers.json",
+                    ))
+                    result.passed = False
+                else:
+                    result.warnings.append(SourceReviewViolation(
+                        register=reg_name,
+                        line=line_num,
+                        line_text=stripped,
+                        severity="warning",
+                        reason=f"Identifier '{reg_name}' in assignment context "
+                               f"not found in reference library",
+                        suggestion="If this is a register, verify its name. "
+                                   "Otherwise this may be a variable name.",
+                    ))
+
+    def _scan_broad_registers(self, result: SourceReviewResult,
+                              stripped: str, line: str, line_num: int,
+                              state: "_ScanState", field_names: set[str]) -> None:
+        """Phase 3: 更宽的全大写标识符扫描（寄存器读取，非赋值）。
+
+        如 if (UCSR0A & (1 << UDRE0)) / val = PINB。
+        先剥字符串字面量，避免匹配到字符串里的寄存器样名字。
+        """
+        scan_line = self._strip_strings(line)
+
+        for match in _ALL_CAPS_IDENT_RE.finditer(scan_line):
+            ident = match.group(1)
+
+            # Skip known safe identifiers
+            if ident in _KNOWN_NON_REGISTERS:
+                continue
+
+            # Skip user-defined names (contain underscore — AVR registers never do)
+            if "_" in ident:
+                continue
+
+            # Skip if already checked as assignment register or field
+            if (ident, line_num) in state.seen_registers:
+                continue
+            if ident.upper() in field_names:
+                continue
+
+            # Skip if not register-like (must start with a known prefix)
+            if not ident.upper().startswith(_REG_PREFIXES):
+                continue
+
+            # Skip common false positives
+            if ident in ("ISR", "SIGNAL", "DEFINE", "INCLUDE", "PRAGMA",
+                         "F_CPU", "LED_BUILTIN"):
+                continue
+
+            key = (ident, line_num)
+            if key in state.seen_registers:
+                continue
+            state.seen_registers.add(key)
+
+            result.registers_checked += 1
+
+            reg_entry = self._knowledge_base.lookup_register(ident)
+            if reg_entry:
+                result.registers_resolved += 1
+            else:
+                result.violations.append(SourceReviewViolation(
+                    register=ident,
+                    line=line_num,
+                    line_text=stripped,
+                    severity="error",
+                    reason=f"Register '{ident}' not found in reference library "
+                           f"(hallucinated register with known prefix)",
+                    suggestion="Verify register name against ATmega2560 "
+                               "datasheet.",
+                ))
+                result.passed = False
 
     # ------------------------------------------------------------------
     # 豁免与日志

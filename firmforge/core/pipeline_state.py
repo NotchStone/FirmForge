@@ -126,10 +126,36 @@ class PipelineState:
         entry["error"] = error
 
     def should_skip_build(self, fingerprints: dict[str, Any]) -> bool:
+        """跳过 S3 需要**同时**满足：指纹没变 + 上次那份 hex 还在磁盘上。
+
+        只比指纹是不够的：``cache/build/<board>/<app>/`` 是派生物，允许整块删掉
+        （分区标准里就是这么定义的）。删完之后 state.json 仍记着指纹一致，
+        于是 S3 显示 ``[skipped] source unchanged, hex exists`` 并报 BUILD PASSED，
+        而产物根本不存在 —— 2026-10-28 实测踩到：汇总行紧跟着打印
+        ``!! 产物不存在``，两句话自相矛盾，退出码还是 0。
+
+        产物不在了就**重编**，这是唯一诚实的动作：跳过等于对外宣布「有可烧的
+        固件」，而下一步 ``ff flash`` 会因此失败或者烧到别的东西上。
+
+        注意取路径的位置：``fingerprints.hex`` 是**固件内容的哈希**，
+        产物路径在 ``stages.build.hex`` —— 两者同名不同物，读错了会得到
+        一个「看起来像路径的 16 进制串」，``is_file()`` 永远 False。
+
+        还要**核对产出它的板卡**：state 一个工作区只有一份，产物却是按板卡
+        分目录放的。同一个工作区编过 A 板再跑 B 板，只查「文件存在」会让 B 板
+        复用 A 板的 hex —— 2026-10-28 实测：STM32 的 ff run 跳过 S3 后拿 AVR 的
+        5340 B hex 去烧，OpenOCD 报 checksum mismatch 才没写进 Flash。
+        旧 state 没有这个字段，一律按「不匹配」处理（重编一次，代价可接受）。
+        """
         stored = self._data.get("fingerprints", {})
+        build = self._data.get("stages", {}).get("build", {}) or {}
+        built_path = str(build.get("hex") or "")
+        built_board = str(build.get("board_id") or "")
+        want_board = str(fingerprints.get("board_id") or "")
         return (fingerprint_match(stored, fingerprints, ["board_id", "source"]) and
                 bool(fingerprints.get("source")) and
-                bool(stored.get("hex")))  # hex is build OUTPUT — check stored, not current
+                bool(built_path) and built_board != "" and built_board == want_board and
+                Path(built_path).is_file())
 
     def should_skip_flash(self, fingerprints: dict[str, Any]) -> bool:
         stored = self._data.get("fingerprints", {})

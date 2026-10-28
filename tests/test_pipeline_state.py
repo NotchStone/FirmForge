@@ -12,13 +12,62 @@ class TestPipelineState:
 
     def test_should_skip_build_board_match(self, tmp_path):
         state = PipelineState(Path(tmp_path))
-        state.mark_done("build", hex="/some/firmware.hex")
+        hexfile = tmp_path / "firmware.hex"
+        hexfile.write_text(":00000001FF\n", encoding="utf-8")
+        state.mark_done("build", hex=str(hexfile), board_id="arduino_uno")
         fps = {"board_id": "arduino_uno", "port": "COM5", "source": "abc", "hex": "def"}
         state.update_fingerprints(fps)
         state.save()
 
         state2 = PipelineState(Path(tmp_path))
         assert state2.should_skip_build({"board_id": "arduino_uno", "source": "abc"})
+
+    def test_build_artifact_from_other_board_is_not_reused(self, tmp_path):
+        """别的板卡编出来的 hex **不许**当成本板的构建产物。
+
+        state 是「一个工作区一份」，产物却按 `cache/build/<board>/<app>/` 分开放。
+        2026-10-28 实测：同一工作区里先 `ff build arduino_328p`，再 `ff run gc_h743`，
+        S3 显示 ``[skipped] source unchanged, hex exists`` 并去烧 **AVR 的 5340 B hex**；
+        那次是 OpenOCD 报 checksum mismatch 才没写进 Flash。校验和不是护栏，是运气。
+        """
+        state = PipelineState(Path(tmp_path))
+        avr_hex = tmp_path / "cache" / "build" / "arduino_328p" / "Blink" / "firmware.hex"
+        avr_hex.parent.mkdir(parents=True, exist_ok=True)
+        avr_hex.write_text(":00000001FF\n", encoding="utf-8")
+        # 产物来自 AVR，但指纹里的板卡已经被后来的运行写成 gc_h743 —— 正是实测现场
+        state.mark_done("build", hex=str(avr_hex), board_id="arduino_328p")
+        state.update_fingerprints({"board_id": "gc_h743", "source": "abc",
+                                   "port": "COM9", "hex": "7ac74c58e8a4c243"})
+        state.save()
+
+        state2 = PipelineState(Path(tmp_path))
+        assert not state2.should_skip_build({"board_id": "gc_h743", "source": "abc"}), \
+            "把 AVR 的产物当成本板产物复用了 —— 下一步就是拿它去烧 STM32"
+
+    def test_build_artifact_missing_forces_rebuild(self, tmp_path):
+        """hex 被删掉之后**不许**再跳 S3 —— 指纹没变也一样。
+
+        2026-10-28 实测：清掉 `cache/build/gc_h743/hello_blink/` 后重跑，
+        S3 以「source unchanged, hex exists」为由跳过并报 BUILD PASSED，
+        紧接着汇总行打印「!! 产物不存在」。缓存目录是派生物、本来就允许整块删，
+        所以这条路径必须能自愈：产物不在就重编，而不是宣布有固件。
+        """
+        state = PipelineState(Path(tmp_path))
+        hexfile = tmp_path / "cache" / "firmware.hex"
+        hexfile.parent.mkdir(parents=True, exist_ok=True)
+        hexfile.write_text(":00000001FF\n", encoding="utf-8")
+        state.mark_done("build", hex=str(hexfile), board_id="gc_h743")
+        state.update_fingerprints({"board_id": "gc_h743", "source": "abc",
+                                   "port": "COM9", "hex": "def"})
+        state.save()
+
+        fps = {"board_id": "gc_h743", "source": "abc"}
+        assert PipelineState(Path(tmp_path)).should_skip_build(fps)
+
+        hexfile.unlink()                      # 等价于清构建缓存
+        state3 = PipelineState(Path(tmp_path))
+        assert not state3.should_skip_build(fps), \
+            "产物已不存在却仍然跳过 —— 会对外宣布一份不存在的固件"
 
     def test_board_change_invalidates_build(self, tmp_path):
         state = PipelineState(Path(tmp_path))

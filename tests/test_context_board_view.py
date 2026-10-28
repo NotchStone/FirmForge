@@ -125,8 +125,8 @@ def test_board_pin_list_avr_vs_stm32():
 
 @pytest.fixture(scope="module")
 def ctx():
-    from firmforge.adapters.mcp_server import _do_context
-    return _do_context
+    from firmforge.adapters.commands import do_context
+    return do_context
 
 
 def test_context_stm32_specs(ctx):

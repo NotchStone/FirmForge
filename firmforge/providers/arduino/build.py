@@ -25,6 +25,8 @@ from firmforge.providers.base import (
 from firmforge.providers.gcc_diagnostics import parse_gcc_diagnostics
 from firmforge.providers.arduino.toolchain import resolve_toolchain
 from firmforge.providers.textio import run_text
+from firmforge.providers.sdk_cache import build_archive, read_lock, write_lock
+from firmforge.providers.arduino.chip_profiles import profile_for
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +104,9 @@ class ArduinoBuildProvider(BuildProvider):
         firmware_hex = out / "firmware.hex"
         makefile = src / "Makefile"
 
-        start = time.time()
+        # perf_counter 而非 time.time()：时长测量用单调高精度时钟
+        #（理由见 arduino/flash.py 同款注释 —— Windows 上 time.time() 粒度 15.6ms）。
+        start = time.perf_counter()
         result = BuildResult(success=False)
 
         try:
@@ -134,7 +138,7 @@ class ArduinoBuildProvider(BuildProvider):
                     [str(s) for s in sources], str(firmware_elf), str(firmware_hex)
                 )
 
-            result.elapsed_ms = (time.time() - start) * 1000
+            result.elapsed_ms = (time.perf_counter() - start) * 1000
             result.success = rc == 0
 
             if result.success and firmware_hex.exists():
@@ -171,54 +175,19 @@ class ArduinoBuildProvider(BuildProvider):
 
     # -- Internal --
 
-    # Chip → avr-gcc -mmcu value
-    _MCU_MAP: dict[str, str] = {
-        "ATmega2560": "atmega2560",
-        "ATmega328P": "atmega328p",
-        "ATmega328":  "atmega328p",
-        "ATmega168P": "atmega168p",
-        "ATmega168":  "atmega168p",
-        "ATmega88P":  "atmega88p",
-        "ATmega48P":  "atmega48p",
-        "ATmega32U4": "atmega32u4",
-    }
-
-    # Chip → Arduino Core variant directory
-    _VARIANT_MAP: dict[str, str] = {
-        "atmega2560": "mega",
-        "atmega328p": "standard",   # UNO, Nano, Mini, Pro all use 'standard'
-        "atmega328":  "standard",
-        "atmega168p": "standard",
-        "atmega168":  "standard",
-        "atmega88p":  "standard",
-        "atmega32u4": "leonardo",
-    }
-
-    # Chip → Arduino preprocessor define
-    _BOARD_DEFINE_MAP: dict[str, tuple[str, ...]] = {
-        "atmega2560": ("-DARDUINO_AVR_MEGA2560",),
-        "atmega328p": ("-DARDUINO_AVR_UNO",),
-        "atmega328":  ("-DARDUINO_AVR_UNO",),
-        "atmega168p": ("-DARDUINO_AVR_UNO",),
-        "atmega168":  ("-DARDUINO_AVR_UNO",),
-        "atmega32u4": ("-DARDUINO_AVR_LEONARDO",),
-    }
-
     def _resolve_mcu(self) -> str:
         chip = self._board_config.get("mcu", {}).get("chip", "")
-        if chip in self._MCU_MAP:
-            return self._MCU_MAP[chip]
-        return chip.lower()
+        return profile_for(chip).mmcu
 
     def _resolve_variant(self) -> str:
         """Map chip to Arduino Core variant directory."""
-        mcu = self._mcu  # already resolved
-        return self._VARIANT_MAP.get(mcu, "standard")
+        chip = self._board_config.get("mcu", {}).get("chip", "")
+        return profile_for(chip).variant
 
     def _get_board_defines(self) -> list[str]:
         """Return board-specific Arduino preprocessor defines."""
-        mcu = self._mcu
-        return list(self._BOARD_DEFINE_MAP.get(mcu, ("-DARDUINO_AVR_UNO",)))
+        chip = self._board_config.get("mcu", {}).get("chip", "")
+        return [profile_for(chip).board_define]
 
     @staticmethod
     def _parse_f_cpu(board_config: dict) -> int:
@@ -692,14 +661,8 @@ class ArduinoBuildProvider(BuildProvider):
         build_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Lock: {source_name: sha256} for all cached objects
-        import json as _json
-        manifest_path = build_cache_dir / "lock.json"
-        legacy_path = build_cache_dir / "manifest.json"
-        if not manifest_path.is_file() and legacy_path.is_file():
-            manifest_path = legacy_path          # 旧缓存兼容，写入时改回 lock
-        manifest: dict[str, str] = {}
-        if manifest_path.exists():
-            manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        # （lock/manifest 命名约定与读写见 providers/sdk_cache.py）
+        manifest: dict[str, str] = read_lock(build_cache_dir) or {}
 
         def _source_hash(src: str) -> str:
             with open(src, "rb") as f:
@@ -754,19 +717,12 @@ class ArduinoBuildProvider(BuildProvider):
             # Rebuild core.a if any core source changed (or first time)
             core_a = build_cache_dir / "core.a"
             if core_rebuilt or not core_a.exists():
-                # Remove old .a first (avr-ar rcs appends otherwise)
-                if core_a.exists():
-                    core_a.unlink()
-                ar_cmd = [os.path.join(gcc_dir, "avr-ar"), "rcs",
-                          str(core_a)] + core_objs
-                subprocess.run(ar_cmd, capture_output=True, check=True)
-                # 一律写 lock.json；若此前读的是旧 manifest.json，顺手清掉，
-                # 避免同一目录里两个声明文件并存、各说一套
-                lock_path = build_cache_dir / "lock.json"
-                lock_path.write_text(
-                    _json.dumps(new_manifest, indent=2), encoding="utf-8")
-                if manifest_path != lock_path and manifest_path.is_file():
-                    manifest_path.unlink()
+                ar_stdout, ar_stderr, ar_rc = build_archive(
+                    core_a, core_objs,
+                    ar_tool=os.path.join(gcc_dir, "avr-ar"))
+                if ar_rc != 0:
+                    return all_stdout, all_stderr + "\n" + (ar_stderr or ""), ar_rc
+                write_lock(build_cache_dir, new_manifest)
 
             # Step 2: link user code → user .o files only (no core in temp)
             user_obj_files: list[str] = []

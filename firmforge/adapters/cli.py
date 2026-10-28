@@ -92,38 +92,14 @@ class _Notes:
               file=sys.stderr, flush=True)
 
 
-def _detect_payload(detector: BoardDetector, result, args) -> dict:
-    """Structured detect result (shared by json mode)."""
-    board_config = None
-    if result.board_id:
-        board_config = detector.resolve_board(result.board_id) or None
-    return {
-        "board_id": result.board_id,
-        "boards": result.boards,
-        "detected": bool(result.board_id),
-        "candidates": [
-            {
-                "board_id": c.board_id,
-                "confidence": c.confidence,
-                "source": c.source,
-                "details": c.details,
-            }
-            for c in result.candidates
-        ],
-        # 探测失败的说明（探针在位但目标无响应 / DEV_ID 不符）。
-        # 与 candidates 分开：这些不是候选，是"哪些结论不能下"。
-        "notes": getattr(result, "notes", []) or [],
-        "board_config": board_config,
-    }
-
-
 def cmd_detect(args: argparse.Namespace) -> int:
     """ff detect: USB scan + board identification."""
     detector = BoardDetector(boards_dir=args.boards_dir or Path(_bdir()))
     result = detector.detect(user_text=args.intent or "")
 
     if getattr(args, "json", False):
-        return _json_out(_detect_payload(detector, result, args))
+        from firmforge.adapters.commands import detect_payload
+        return _json_out(detect_payload(detector, result))
 
     print("FirmForge init: scanning for connected boards...")
 
@@ -198,27 +174,6 @@ def cmd_detect(args: argparse.Namespace) -> int:
 
     print("\nPlease specify board manually: ff verify <board> --app <source_dir>")
     return 1
-
-
-def _pipeline_payload(result) -> dict:
-    """Serialize PipelineResult to a plain dict (json mode)."""
-    return {
-        "overall_success": result.overall_success,
-        "board": result.board,
-        "total_elapsed_ms": result.total_elapsed_ms,
-        "stages": [
-            {
-                "stage": s.stage,
-                "name": s.name,
-                "success": s.success,
-                "verdict": s.verdict,
-                "elapsed_ms": s.elapsed_ms,
-                "details": s.details,
-                "error": s.error,
-            }
-            for s in result.stages
-        ],
-    }
 
 
 def _stage_badge(stage) -> str:
@@ -327,10 +282,6 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     Usage: ff run <board> --app <source_dir>
     """
-    from firmforge.core.pipeline_runner import PipelineRunner
-
-
-    workspace = Path(args.workspace or ".")
     board_id = args.board
     source_dir = args.app
     expected = getattr(args, "expected", "")
@@ -347,23 +298,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         notes.header(board_id or "(自动识别)", source_dir)
         _note_panel(args, panel_open, panel_wait)
 
-    runner = PipelineRunner(
-        boards_dir=args.boards_dir or str(_bdir()),
-        workspace=workspace,
-        on_note=notes.note,
-    )
-
-    result = runner.run_full(
-        source_dir=source_dir,
-        board_id=board_id or None,
-        expected=expected,
-        progress_callback=notes.stage_done,
-        panel_open=panel_open,
-        panel_wait=panel_wait,
+    from firmforge.adapters.commands import run_pipeline, result_payload
+    result = run_pipeline(
+        mode="run", board=board_id, app=source_dir, expected=expected,
+        workspace=args.workspace or "", boards_dir=args.boards_dir,
+        panel_open=panel_open, panel_wait=panel_wait,
+        progress_callback=notes.stage_done, on_note=notes.note,
     )
 
     if getattr(args, "json", False):
-        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+        return _json_out(result_payload(result), 0 if result.overall_success else 1)
 
     print()
     print("FirmForge 5-Stage Pipeline")
@@ -494,13 +438,10 @@ def _cmd_build_batch(args: argparse.Namespace, spec: str) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     """ff build: Review + Build only."""
-    from firmforge.core.pipeline_runner import PipelineRunner
-
     apps = getattr(args, "apps", "") or ""
     if apps:
         return _cmd_build_batch(args, apps)
 
-    workspace = Path(args.workspace or ".")
     source_dir = args.app
     if not source_dir:
         if getattr(args, "json", False):
@@ -512,13 +453,15 @@ def cmd_build(args: argparse.Namespace) -> int:
     if not getattr(args, "json", False):
         notes.header(args.board or "(自动识别)", source_dir)
 
-    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
-                            workspace=workspace, on_note=notes.note)
-    result = runner.build(source_dir=source_dir, board_id=args.board or None,
-                          progress_callback=notes.stage_done)
+    from firmforge.adapters.commands import run_pipeline, result_payload
+    result = run_pipeline(
+        mode="build", board=args.board, app=source_dir,
+        workspace=args.workspace or "", boards_dir=args.boards_dir,
+        progress_callback=notes.stage_done, on_note=notes.note,
+    )
 
     if getattr(args, "json", False):
-        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+        return _json_out(result_payload(result), 0 if result.overall_success else 1)
 
     print()
     for s in result.stages:
@@ -542,8 +485,6 @@ def cmd_review(args: argparse.Namespace) -> int:
     存在的理由很具体：改完代码想确认"审查这关过不过"，不该被
     Build / Flash 拖进去；反过来改了知识库或豁免表想复验审查，也不该动板子。
     """
-    from firmforge.core.pipeline_runner import PipelineRunner
-
     source_dir = args.app
     if not source_dir:
         if getattr(args, "json", False):
@@ -555,15 +496,15 @@ def cmd_review(args: argparse.Namespace) -> int:
     if not getattr(args, "json", False):
         notes.header(args.board or "(自动识别)", source_dir)
 
-    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
-                            workspace=Path(args.workspace or "."),
-                            on_note=notes.note)
-    result = runner.run_full(source_dir=source_dir, board_id=args.board or None,
-                             only=("review",),
-                             progress_callback=notes.stage_done)
+    from firmforge.adapters.commands import run_pipeline, result_payload
+    result = run_pipeline(
+        mode="review", board=args.board, app=source_dir,
+        workspace=args.workspace or "", boards_dir=args.boards_dir,
+        progress_callback=notes.stage_done, on_note=notes.note,
+    )
 
     if getattr(args, "json", False):
-        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+        return _json_out(result_payload(result), 0 if result.overall_success else 1)
 
     print()
     _print_stage_list(result)
@@ -578,8 +519,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
     板子上已经是想验的那份固件时用这个 —— 否则每次验串口都要重跑一遍
     cppcheck（冷跑约 100 秒）加编译，纯属浪费。
     """
-    from firmforge.core.pipeline_runner import PipelineRunner
-
     if not args.board:
         if getattr(args, "json", False):
             return _json_out({"error": "board is required"}, 1)
@@ -592,18 +531,17 @@ def cmd_verify(args: argparse.Namespace) -> int:
         notes.header(args.board, "(不编译、不烧录，只验串口)")
         _note_panel(args, panel_open, panel_wait)
 
-    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
-                            workspace=Path(args.workspace or "."),
-                            on_note=notes.note)
-    result = runner.run_full(board_id=args.board,
-                             expected=getattr(args, "expected", "") or "",
-                             only=("verify",),
-                             progress_callback=notes.stage_done,
-                             panel_open=panel_open,
-                             panel_wait=panel_wait)
+    from firmforge.adapters.commands import run_pipeline, result_payload
+    result = run_pipeline(
+        mode="verify", board=args.board,
+        expected=getattr(args, "expected", "") or "",
+        workspace=args.workspace or "", boards_dir=args.boards_dir,
+        panel_open=panel_open, panel_wait=panel_wait,
+        progress_callback=notes.stage_done, on_note=notes.note,
+    )
 
     if getattr(args, "json", False):
-        return _json_out(_pipeline_payload(result), 0 if result.overall_success else 1)
+        return _json_out(result_payload(result), 0 if result.overall_success else 1)
 
     print()
     _print_stage_list(result)
@@ -627,8 +565,6 @@ def cmd_flash(args: argparse.Namespace) -> int:
        rglob 既可能找不到，也可能找到**别的项目**的固件。现在按
        `--firmware` → state 记录 → 构建缓存（唯一才用，多份报错列候选）。
     """
-    from firmforge.core.pipeline_runner import PipelineRunner
-
     if not args.board:
         if getattr(args, "json", False):
             return _json_out({"error": "board is required"}, 1)
@@ -640,26 +576,17 @@ def cmd_flash(args: argparse.Namespace) -> int:
     if not getattr(args, "json", False):
         notes.header(args.board, build or "(固件由 state/缓存解析)")
 
-    runner = PipelineRunner(boards_dir=args.boards_dir or str(_bdir()),
-                            workspace=Path(args.workspace or "."),
-                            on_note=notes.note)
-    result = runner.run_full(board_id=args.board,
-                             only=("flash",),
-                             firmware=args.firmware or "",
-                             app_name=build,
-                             progress_callback=notes.stage_done)
+    from firmforge.adapters.commands import run_pipeline, flash_payload
+    result = run_pipeline(
+        mode="flash", board=args.board,
+        firmware=args.firmware or "", app_name=build,
+        workspace=args.workspace or "", boards_dir=args.boards_dir,
+        progress_callback=notes.stage_done, on_note=notes.note,
+    )
 
     s4 = next((s for s in result.stages if s.name == "Flash"), None)
     if getattr(args, "json", False):
-        return _json_out({
-            "success": bool(result.overall_success),
-            "board": args.board,
-            "firmware": (s4.details.get("firmware_path", "") if s4 else ""),
-            "bytes_written": (s4.details.get("bytes_written", 0) if s4 else 0),
-            "elapsed_ms": round(result.total_elapsed_ms),
-            "error": (s4.error if s4 and not s4.success else ""),
-            "candidates": (s4.details.get("candidates", []) if s4 else []),
-        }, 0 if result.overall_success else 1)
+        return _json_out(flash_payload(result), 0 if result.overall_success else 1)
 
     print()
     if s4 is None:
@@ -686,7 +613,6 @@ def cmd_status(args: argparse.Namespace) -> int:
     自己去读 state.json 并猜指纹语义。流水线的增量跳过是四指纹驱动的
     （源码 / hex / 端口 / 板卡），不提这个，跳过就会被当成 bug。
     """
-    from firmforge.core.pipeline_runner import PipelineRunner
     from firmforge.core.pipeline_state import PipelineState
 
     workspace = Path(args.workspace or ".")
@@ -694,7 +620,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     data = state.data
 
     if getattr(args, "json", False):
-        return _json_out({"workspace": str(workspace), "state": data})
+        from firmforge.adapters.commands import do_status
+        return _json_out(do_status(workspace=str(workspace)))
 
     print(f"运行状态：{paths_runtime(workspace)}")
     if not data:
@@ -994,9 +921,9 @@ def setup_argument_parser() -> argparse.ArgumentParser:
 
 def cmd_context(args: argparse.Namespace) -> int:
     """ff context: chip knowledge reference (registers/pins/baud)."""
-    from firmforge.adapters.mcp_server import _do_context
+    from firmforge.adapters.commands import do_context
 
-    payload = _do_context(board=args.board or "", topic=args.topic or "")
+    payload = do_context(board=args.board or "", topic=args.topic or "")
     if getattr(args, "json", False):
         return _json_out(payload, 0 if "error" not in payload else 1)
 
@@ -1112,13 +1039,13 @@ def _parse_pc(text: str) -> int:
 def cmd_inspect(args: argparse.Namespace) -> int:
     """ff inspect: 只读观测 —— 复位原因 / CPU 位置 / 关键变量 / 外设寄存器。
 
-    参数校验与请求构造都在 `_do_inspect` 里 —— MCP 的 ff_inspect 调的是同一份，
+    参数校验与请求构造都在 `commands.do_inspect` 里 —— MCP 的 ff_inspect 调的是同一份，
     否则「CLI 允许 / MCP 拒绝」这种漂移迟早出现（board 自动选择、平台校验、
     pc 与读内存互斥这三段逻辑本来就有 30 行）。
     """
-    from firmforge.adapters.mcp_server import _do_inspect
+    from firmforge.adapters.commands import do_inspect
 
-    payload = _do_inspect(
+    payload = do_inspect(
         board=args.board or "",
         build=getattr(args, "build", None) or "",
         elf=getattr(args, "elf", None) or "",

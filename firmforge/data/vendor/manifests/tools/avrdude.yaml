@@ -18,6 +18,15 @@ install:
   root: "~/.firmforge/toolchains/avrdude/"
   bin: "bin/avrdude"
   conf: "bin/avrdude.conf"
+  binaries: [avrdude]
+  # 探测顺序（probe → probe_glob → PATH）。canonical 布局是 bin/ 子目录
+  # （setup.py 从 avr-gcc bundle 抽出后复制到 root/bin/）；扁平 root 是
+  # 旧布局兼容 —— bin_exists 只认文件，两者不会误命中对方。
+  probe:
+    - "~/.firmforge/toolchains/avrdude/bin"
+    - "~/.firmforge/toolchains/avrdude"
+  probe_glob:
+    - "~/AppData/Local/Microsoft/WinGet/Packages/AVRDudes.AVRDUDE*"  # winget（exe 在包根目录）
   # Avrdude is bundled inside the avr-gcc archive — copy bin/avrdude* after
   # avr-gcc is installed instead of downloading the archive again.
   from_gcc: true

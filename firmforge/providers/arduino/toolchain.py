@@ -1,31 +1,28 @@
 """Toolchain detection and path resolution for Arduino AVR.
 
-Search order:
-  1. ~/.firmforge/toolchains/<tool>/   (FirmForge canonical install path)
-  2. PATH                              (anywhere on system)
-  3. ~/AppData/Local/mcu-tools/        (manual bare-metal install)
-  4. winget                            (system package manager)
+位置声明在 `data/vendor/manifests/tools/{avr_gcc,avrdude}.yaml`（与 STM32 侧
+`tool_probe` 同一机制），本模块只做汇总。改探测位置改 manifest，不改代码。
 
-Strategy: canonical path checked first; fallback chain for backward
-compatibility with existing toolchains from other install sources.
+Search order (manifest probe → probe_glob → PATH):
+  1. ~/.firmforge/toolchains/<tool>/bin/   (ff setup 的 canonical 安装)
+  2. mcu-tools / winget 等手动安装位置     (manifest 的 probe / probe_glob)
+  3. PATH
+
+注：avrdude 的 canonical 布局是 `toolchains/avrdude/bin/avrdude.exe` ——
+setup.py 从 avr-gcc bundle 抽出后复制到 `root/bin/`。旧代码查的是扁平
+`toolchains/avrdude/avrdude.exe`，从未命中过（一直靠 PATH 兜底工作）；
+manifest 里两个布局都列了，bin/ 优先。
 """
 
 from __future__ import annotations
 
-import glob
 import logging
 import os
-import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 
-from firmforge.infrastructure import paths
-from firmforge.providers.textio import run_text
+from firmforge.infrastructure.tool_probe import find_external_tool
 
 logger = logging.getLogger(__name__)
-
-# Canonical toolchain root (planning §4.2)
-CANONICAL_TOOLCHAIN_ROOT = paths.toolchains_dir()
 
 
 @dataclass
@@ -39,81 +36,20 @@ class ToolchainPaths:
 
 
 def find_avr_gcc() -> tuple[str | None, str | None]:
-    """Find avr-gcc executable. Returns (path, bin_dir).
-
-    Search order: canonical → mcu-tools → winget → PATH.
-    """
-    # 0. Canonical path (FirmForge auto-install)
-    canonical_bin = CANONICAL_TOOLCHAIN_ROOT / "avr-gcc" / "bin"
-    gcc_exe = canonical_bin / "avr-gcc.exe"
-    if gcc_exe.exists():
-        return str(gcc_exe), str(canonical_bin)
-
-    # 1. PATH
-    try:
-        r = run_text(["avr-gcc", "--version"], timeout=5)
-        if r.returncode == 0:
-            return "avr-gcc", None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # 2. mcu-tools manual install
-    home = os.path.expanduser("~")
-    mcu_tools_gcc = os.path.join(
-        home, "AppData", "Local", "mcu-tools", "avr-gcc", "bin", "avr-gcc.exe"
-    )
-    if os.path.exists(mcu_tools_gcc):
-        return mcu_tools_gcc, os.path.dirname(mcu_tools_gcc)
-
-    # 3. winget install
-    pattern = os.path.join(
-        home, "AppData", "Local", "Microsoft", "WinGet", "Packages",
-        "ZakKemble.avr-gcc*"
-    )
-    dirs = glob.glob(pattern)
-    if dirs:
-        bin_dir = os.path.join(dirs[0], "bin")
-        gcc_path = os.path.join(bin_dir, "avr-gcc.exe")
-        if os.path.exists(gcc_path):
-            return gcc_path, bin_dir
-
-    return None, None
+    """Find avr-gcc executable. Returns (path, bin_dir)."""
+    tool = find_external_tool("avr_gcc", "avr-gcc")
+    if not tool:
+        return None, None
+    return tool.exe, tool.bin_dir
 
 
 def find_avrdude() -> tuple[str | None, str | None]:
-    """Find avrdude executable. Returns (path, conf_path).
-
-    Search order: canonical → PATH → winget.
-    """
-    # 0. Canonical path
-    canonical_avrdude = CANONICAL_TOOLCHAIN_ROOT / "avrdude"
-    avrdude_exe = canonical_avrdude / "avrdude.exe"
-    avrdude_conf = canonical_avrdude / "avrdude.conf"
-    if avrdude_exe.exists():
-        return str(avrdude_exe), str(avrdude_conf) if avrdude_conf.exists() else None
-
-    # 1. PATH
-    try:
-        r = run_text(["avrdude", "--version"], timeout=5)
-        if r.returncode == 0:
-            return "avrdude", None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # 2. winget install
-    home = os.path.expanduser("~")
-    pattern = os.path.join(
-        home, "AppData", "Local", "Microsoft", "WinGet", "Packages",
-        "AVRDudes.AVRDUDE*"
-    )
-    dirs = glob.glob(pattern)
-    if dirs:
-        exe_path = os.path.join(dirs[0], "avrdude.exe")
-        conf_path = os.path.join(dirs[0], "avrdude.conf")
-        if os.path.exists(exe_path):
-            return exe_path, conf_path if os.path.exists(conf_path) else None
-
-    return None, None
+    """Find avrdude executable. Returns (path, conf_path)."""
+    tool = find_external_tool("avrdude", "avrdude")
+    if not tool:
+        return None, None
+    # conf 与可执行文件同目录：canonical（bin/）与 winget（包根）都如此。
+    return tool.exe, tool.resolve("avrdude.conf")
 
 
 def resolve_toolchain() -> ToolchainPaths:

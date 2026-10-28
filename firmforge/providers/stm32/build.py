@@ -33,7 +33,6 @@ hal_conf.h 与 linker script 为什么在**板卡目录**里而不是 B 区
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import shutil
@@ -48,6 +47,7 @@ from firmforge.core.resources import boards_dir
 from firmforge.infrastructure import paths
 from firmforge.providers.base import BuildDiagnostic, BuildProvider, BuildResult
 from firmforge.providers.gcc_diagnostics import parse_gcc_diagnostics
+from firmforge.providers.sdk_cache import build_archive, read_lock, write_lock
 from firmforge.providers.stm32.toolchain import Stm32Toolchain, resolve_toolchain
 from firmforge.providers.textio import run_text
 
@@ -123,7 +123,9 @@ class Stm32BuildProvider(BuildProvider):
                                        board_id=board_id, app_name=src.name)
         out.mkdir(parents=True, exist_ok=True)
 
-        start = time.time()
+        # perf_counter 而非 time.time()：时长测量用单调高精度时钟
+        #（理由见 arduino/flash.py 同款注释 —— Windows 上 time.time() 粒度 15.6ms）。
+        start = time.perf_counter()
         result = BuildResult(success=False)
 
         # -- 前置检查：缺什么就说清楚，别等到 subprocess 报 FileNotFound ----
@@ -132,7 +134,7 @@ class Stm32BuildProvider(BuildProvider):
             result.stderr = gate
             result.errors = [BuildDiagnostic(severity="error",
                                              message=gate, raw=gate)]
-            result.elapsed_ms = (time.time() - start) * 1000
+            result.elapsed_ms = (time.perf_counter() - start) * 1000
             return result
 
         sdk = self._resolve_sdk()
@@ -145,7 +147,7 @@ class Stm32BuildProvider(BuildProvider):
             result.errors = [BuildDiagnostic(severity="error",
                                              message=result.stderr,
                                              raw=result.stderr)]
-            result.elapsed_ms = (time.time() - start) * 1000
+            result.elapsed_ms = (time.perf_counter() - start) * 1000
             return result
 
         user_sources = self._collect_sources(src, out)
@@ -155,7 +157,7 @@ class Stm32BuildProvider(BuildProvider):
                                              file=str(src),
                                              message=result.stderr,
                                              raw=result.stderr)]
-            result.elapsed_ms = (time.time() - start) * 1000
+            result.elapsed_ms = (time.perf_counter() - start) * 1000
             return result
 
         firmware_elf = out / "firmware.elf"
@@ -175,7 +177,7 @@ class Stm32BuildProvider(BuildProvider):
                 result.errors = self.parse_build_errors(stderr)
             return result
         finally:
-            result.elapsed_ms = (time.time() - start) * 1000
+            result.elapsed_ms = (time.perf_counter() - start) * 1000
 
     def parse_build_errors(self, stderr: str) -> list[BuildDiagnostic]:
         """arm-none-eabi-gcc 诊断格式与 avr-gcc 同源，走共用解析。"""
@@ -462,18 +464,12 @@ class Stm32BuildProvider(BuildProvider):
             return None
         cache = self._sdk_cache_dir(sdk)
         archive = cache / "hal.a"
-        # 声明文件统一叫 lock.json（派生物，标准 §5.2）；旧缓存的
-        # manifest.json 仍可读，下次重建即改名，不会让旧缓存白丢一次。
-        lock_file = cache / "lock.json"
-        if not lock_file.is_file():
-            lock_file = cache / "manifest.json"
-        if not archive.is_file() or not lock_file.is_file():
+        if not archive.is_file():
             return None
-        try:
-            manifest = json.loads(lock_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        if manifest.get("__key__") != self._sdk_cache_key(sdk, common_flags):
+        # lock 读取/命名约定见 providers/sdk_cache.py（lock.json 优先，
+        # 旧 manifest.json 回退 —— 不让旧缓存白丢一次）。
+        lock = read_lock(cache)
+        if not lock or lock.get("__key__") != self._sdk_cache_key(sdk, common_flags):
             return None
         return str(archive)
 
@@ -541,29 +537,23 @@ class Stm32BuildProvider(BuildProvider):
                     return None, stdout_all, stderr_all, r.returncode
                 objs.append(obj)
 
-            if archive.exists():
-                archive.unlink()     # arm-ar rcs 会追加，必须先删
             ar = str(Path(gcc).with_name(
                 "arm-none-eabi-ar.exe" if os.name == "nt" else "arm-none-eabi-ar"))
-            r = run_text([ar, "rcs", str(archive), *objs])
-            stdout_all += r.stdout
-            stderr_all += r.stderr
-            if r.returncode != 0:
-                return None, stdout_all, stderr_all, r.returncode
+            ar_stdout, ar_stderr, ar_rc = build_archive(archive, objs, ar_tool=ar)
+            stdout_all += ar_stdout
+            stderr_all += ar_stderr
+            if ar_rc != 0:
+                return None, stdout_all, stderr_all, ar_rc
 
-            # 写 lock.json（派生物声明文件，标准 §5.2），并清掉旧名
-            lock_path = cache / "lock.json"
-            lock_path.write_text(json.dumps({
+            # 写 lock.json（派生物声明文件，标准 §5.2；写时改掉旧名）
+            write_lock(cache, {
                 "schema": "cache/lock/v1",
                 "kind": "derived",
                 "generator": "firmforge.providers.stm32.build",
                 "__key__": self._sdk_cache_key(sdk, common_flags),
                 "__sources__": len(sources),
                 "__toolchain__": self.get_toolchain_version(),
-            }, indent=2), encoding="utf-8")
-            legacy = cache / "manifest.json"
-            if legacy.is_file():
-                legacy.unlink()
+            })
             return str(archive), stdout_all, stderr_all, 0
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

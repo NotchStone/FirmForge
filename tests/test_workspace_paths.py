@@ -76,7 +76,7 @@ def test_verify_panel_lands_in_workspace(tmp_path, monkeypatch):
 
     monkeypatch.setattr(PipelineRunner, "_collector_thread", _stub_collector)
     # 不起 HTTP 服务（端口与别的测试会打架）
-    monkeypatch.setattr("firmforge.adapters.mcp_server._start_monitor_httpd",
+    monkeypatch.setattr("firmforge.adapters.panel_service.start_panel_httpd",
                         lambda root: 0)
 
     stage = runner._stage_verify("arduino_mega", "")
@@ -133,28 +133,28 @@ def spy_runner(monkeypatch):
 
 
 def test_do_run_uses_explicit_workspace(tmp_path, spy_runner):
-    from firmforge.adapters import mcp_server
+    from firmforge.adapters import commands
 
     target = tmp_path / "proj"
-    mcp_server._do_run("arduino_mega", "app", "", str(target))
+    commands.do_run("arduino_mega", "app", "", str(target))
     assert Path(str(spy_runner["workspace"])) == target.resolve()
 
 
 def test_do_run_uses_env_workspace(tmp_path, spy_runner, monkeypatch):
-    from firmforge.adapters import mcp_server
+    from firmforge.adapters import commands
 
     target = tmp_path / "env-proj"
     monkeypatch.setenv("FIRMFORGE_WORKSPACE", str(target))
-    mcp_server._do_run("arduino_mega", "app", "", "")
+    commands.do_run("arduino_mega", "app", "", "")
     assert Path(str(spy_runner["workspace"])) == target.resolve()
 
 
 def test_do_build_and_flash_honour_workspace(tmp_path, spy_runner):
-    from firmforge.adapters import mcp_server
+    from firmforge.adapters import commands
 
     target = tmp_path / "proj"
-    mcp_server._do_build("arduino_mega", "app", str(target))
+    commands.do_build("arduino_mega", "app", str(target))
     assert Path(str(spy_runner["workspace"])) == target.resolve()
 
-    mcp_server._do_flash("arduino_mega", "firmware.hex", str(target))
+    commands.do_flash("arduino_mega", "firmware.hex", str(target))
     assert Path(str(spy_runner["workspace"])) == target.resolve()

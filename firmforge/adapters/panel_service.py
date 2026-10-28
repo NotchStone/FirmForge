@@ -43,6 +43,23 @@ def clear_stream_queue():
     global _stream_queue
     _stream_queue = None
 
+
+def write_goto_panel(root: str, http_port: int) -> str:
+    """Write goto_panel.html (browser entry point redirecting to the live panel).
+
+    Single implementation shared by pipeline_runner (S5 panel mode) and
+    mcp_server (ff_monitor). Returns the written path.
+    """
+    goto = paths.runtime_dir(root) / "goto_panel.html"
+    try:
+        goto.parent.mkdir(parents=True, exist_ok=True)
+        goto.write_text(
+            f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>',
+            encoding="utf-8")
+    except Exception:
+        pass
+    return str(goto)
+
 _modbus_request_queue = None
 _modbus_response_queue = None
 

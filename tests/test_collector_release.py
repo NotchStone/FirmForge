@@ -52,7 +52,7 @@ def harness(tmp_path, monkeypatch):
     )
     # 不起 HTTP 服务（端口与别的测试会打架）
     monkeypatch.setattr(
-        "firmforge.adapters.mcp_server._start_monitor_httpd",
+        "firmforge.adapters.panel_service.start_panel_httpd",
         lambda root: 0,
     )
 

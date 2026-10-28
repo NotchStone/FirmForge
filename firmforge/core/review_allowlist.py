@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -219,9 +219,3 @@ def summarize(table: ReviewAllowlist) -> str:
     files = sorted({r.file for r in table.rules if r.file})
     scope = f"（{len(files)} 条限定到具体文件）" if files else "（全局）"
     return f"审查豁免 {len(table.rules)} 条{scope}，来自 {table.origin}"
-
-
-def iter_symbols(table: ReviewAllowlist) -> Iterable[str]:
-    """已豁免的符号名（测试与诊断用）。"""
-    for rule in table.rules:
-        yield rule.symbol

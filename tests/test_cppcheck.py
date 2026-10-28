@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from firmforge.providers.arduino import cppcheck as cc
+from firmforge.providers import cppcheck as cc
 
 
 # --------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 规划 v2.3 R6: providers/base.py is the boundary. New boards fill adapters;
 NEVER modify the core framework.
 
-Protocol: every MCU board must supply Build + Flash + Test providers.
+Protocol: every MCU board must supply Build + Flash providers.
 Each provider receives a board config dict (board.json deserialized) at init.
 """
 
@@ -25,10 +25,6 @@ class BuildError(ProviderError):
 
 class FlashError(ProviderError):
     """Flashing failure -- parsed from programmer output."""
-
-
-class TestError(ProviderError):
-    """On-hardware test assertion failure."""
 
 
 class BuildStage(Enum):
@@ -77,21 +73,7 @@ class FlashResult:
     stdout: str = ""
     stderr: str = ""
     elapsed_ms: float = 0.0
-
-
-@dataclass
-class TestResult:
-    """Structured on-hardware test result.
-
-    Carries information for TEST_DIAGNOSE (§2.5).
-    """
-    success: bool
-    test_name: str = ""
-    assertions_passed: int = 0
-    assertions_failed: int = 0
-    serial_output: str = ""  # captured serial output for verdict analysis
-    failures: list[dict[str, Any]] = field(default_factory=list)
-    elapsed_ms: float = 0.0
+    baud_retries: int = 0
 
 
 class BuildProvider(abc.ABC):
@@ -164,39 +146,3 @@ class FlashProvider(abc.ABC):
         """Return programmer version string."""
         return "unknown"
 
-
-class TestProvider(abc.ABC):
-    """Abstract on-hardware test adapter.
-
-    Captures serial output, runs assertions, collects evidence
-    for verify stage .
-
-    Subclass contract:
-      - run_test(test_spec) -> TestResult
-      - serial_capture() -> str (raw serial output)
-    """
-
-    def __init__(self, board_config: dict[str, Any]) -> None:
-        self._board_config = board_config
-
-    @abc.abstractmethod
-    def connect(self, port: str, baudrate: int = 115200) -> None:
-        """Open serial connection to the board."""
-
-    @abc.abstractmethod
-    def disconnect(self) -> None:
-        """Close serial connection."""
-
-    @abc.abstractmethod
-    def collect_output(self, timeout_ms: float = 5000) -> str:
-        """Read buffered serial output."""
-
-    @abc.abstractmethod
-    def run_test(
-        self, test_spec: dict[str, Any], port: str | None = None
-    ) -> TestResult:
-        """Execute a test specification against the board."""
-
-    @abc.abstractmethod
-    def send_input(self, data: bytes) -> None:
-        """Send data to the board's serial port (for interactive tests)."""

@@ -13,6 +13,7 @@ probe 条目语义（**重要，别再猜**）
 
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 from dataclasses import dataclass
@@ -70,12 +71,28 @@ class ExternalTool:
         return str(p) if p.exists() else None
 
 
+def _found_at(bin_dir: Path, name: str, tool: str,
+              install: dict) -> ExternalTool | None:
+    """`name`（或其 .exe）是 `bin_dir` 下的文件 → 命中，否则 None。"""
+    if not (bin_dir.is_dir() and bin_exists(bin_dir, name)):
+        return None
+    # Prefer the real filename (`.exe` on Windows) over the bare name.
+    candidate = bin_dir / name
+    if not candidate.is_file():
+        candidate = bin_dir / f"{name}.exe"
+    return ExternalTool(tool=tool, exe=str(candidate),
+                        bin_dir=str(bin_dir), install=install)
+
+
 def find_external_tool(tool: str, binary: str | None = None) -> ExternalTool | None:
     """定位 `tool`，返回 `ExternalTool` 或 None。
 
-    顺序：manifest 的 `probe` 路径 → PATH。`binary` 缺省取 manifest 的
-    `install.binaries[0]`。找不到时返回 None（**不抛异常**），由调用方决定
-    是降级还是给可操作的报错。
+    顺序：manifest 的 `probe` 精确路径 → `probe_glob` 通配路径 → PATH。
+    `binary` 缺省取 manifest 的 `install.binaries[0]`。找不到时返回 None
+    （**不抛异常**），由调用方决定是降级还是给可操作的报错。
+
+    `probe_glob` 用于 winget 这类**目录名带版本号**的安装位置
+    （如 `ZakKemble.avr-gcc_*`）—— 精确路径写不了，只能通配。
     """
     manifest = load_manifest(tool)
     install = manifest.get("install", {}) or {}
@@ -83,14 +100,15 @@ def find_external_tool(tool: str, binary: str | None = None) -> ExternalTool | N
     name = binary or (names[0] if names else tool)
 
     for raw in install.get("probe", []) or []:
-        p = Path(os.path.expanduser(str(raw)))
-        if p.is_dir() and bin_exists(p, name):
-            # Prefer the real filename (`.exe` on Windows) over the bare name.
-            candidate = p / name
-            if not candidate.is_file():
-                candidate = p / f"{name}.exe"
-            return ExternalTool(tool=tool, exe=str(candidate),
-                                bin_dir=str(p), install=install)
+        hit = _found_at(Path(os.path.expanduser(str(raw))), name, tool, install)
+        if hit:
+            return hit
+
+    for raw in install.get("probe_glob", []) or []:
+        for candidate_dir in sorted(glob.glob(os.path.expanduser(str(raw)))):
+            hit = _found_at(Path(candidate_dir), name, tool, install)
+            if hit:
+                return hit
 
     found = shutil.which(name)
     if found:

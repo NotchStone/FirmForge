@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from firmforge.providers.base import FlashProvider, FlashResult, FlashError
+from firmforge.providers.arduino.chip_profiles import CHIP_PROFILES, ChipProfile
 from firmforge.providers.arduino.toolchain import resolve_toolchain
 from firmforge.providers.textio import run_text
 
@@ -32,41 +33,18 @@ _HARD_FAIL_MARKERS = (
 
 
 class ArduinoFlashProvider(FlashProvider):
-    """Arduino AVR programmer adapter (avrdude)."""
+    """Arduino AVR programmer adapter (avrdude).
 
-    PROGRAMMER = "wiring"
-    BAUD = 115200
-
-    MCU_MAP: dict[str, str] = {
-        "ATmega2560": "m2560",
-        "ATmega328P": "m328p",
-        "ATmega328":  "m328p",
-        "ATmega168P": "m168p",
-        "ATmega168":  "m168p",
-        "ATmega88P":  "m88p",
-        "ATmega48P":  "m48p",
-        "ATmega32U4": "m32u4",
-    }
-
-    _BAUD_MAP: dict[str, int] = {
-        "m328p": 115200,
-        "m2560": 115200,
-        "m32u4": 57600,
-        "m168p": 19200,
-        "m88p":  19200,
-        "m48p":  19200,
-    }
-
-    _PART_PROGRAMMER: dict[str, str] = {
-        "m2560": "wiring",
-        "m328p": "arduino",
-        "m32u4": "avr109",
-    }
+    芯片事实（avrdude part / 波特率 / 编程器）来自
+    ``arduino/chip_profiles.py`` 的单表 —— 此前 MCU_MAP / _BAUD_MAP /
+    _PART_PROGRAMMER 三张表各记一半，漏登记的芯片静默 fallback 成 m2560。
+    """
 
     def __init__(self, board_config: dict[str, Any]) -> None:
         super().__init__(board_config)
         self._toolchain = resolve_toolchain()
-        self._mcu_part = self._resolve_mcu_part()
+        self._profile = self._resolve_profile()
+        self._mcu_part = self._profile.part
 
     # ------------------------------------------------------------------
     # Public API
@@ -178,7 +156,6 @@ class ArduinoFlashProvider(FlashProvider):
         # 时长测量本来就该用单调高精度时钟。
         start = time.perf_counter()
 
-        conf_arg = f"-C{os.path.abspath(self._toolchain.avrdude_conf)}" if self._toolchain.avrdude_conf else ""
         hex_win = os.path.abspath(firmware_path)
         programmer = self._resolve_programmer()
         op_flag = "w" if operation == "flash" else "v"
@@ -254,15 +231,19 @@ class ArduinoFlashProvider(FlashProvider):
         return FlashResult(success=False, stderr=f"{operation.capitalize()} failed across all baud rates",
                            elapsed_ms=elapsed)
 
-    def _resolve_mcu_part(self) -> str:
+    def _resolve_profile(self) -> ChipProfile:
         chip = self._board_config.get("mcu", {}).get("chip", "")
-        part = self.MCU_MAP.get(chip)
-        if not part:
-            raise FlashError(f"Unknown MCU chip '{chip}' — add to MCU_MAP in flash.py")
-        return part
+        profile = CHIP_PROFILES.get(chip)
+        if profile is None:
+            # 不能猜：编程器选错不是慢，是根本连不上（wiring vs arduino 的
+            # 握手协议不同）。宁可让调用方补登记。
+            raise FlashError(
+                f"Unknown MCU chip '{chip}' — add to CHIP_PROFILES in "
+                f"firmforge/providers/arduino/chip_profiles.py")
+        return profile
 
     def _resolve_baud(self) -> int:
-        return self._BAUD_MAP.get(self._mcu_part, self.BAUD)
+        return self._profile.flash_baud
 
     def _get_baud_fallbacks(self) -> list[int]:
         fallbacks = [57600, 19200]
@@ -280,7 +261,7 @@ class ArduinoFlashProvider(FlashProvider):
         return fallbacks
 
     def _resolve_programmer(self) -> str:
-        return self._PART_PROGRAMMER.get(self._mcu_part, "wiring")
+        return self._profile.programmer
 
     @staticmethod
     def _bootloader_reset(port: str) -> None:

@@ -17,12 +17,12 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from firmforge.providers.base import BuildProvider, FlashProvider, TestProvider
+from firmforge.providers.base import BuildProvider, FlashProvider
 from firmforge.providers.com_port import ComPort, com_port_clean_close
 
 __all__ = [
-    "BuildProvider", "FlashProvider", "TestProvider",
-    "get_build_provider", "get_flash_provider", "get_test_provider",
+    "BuildProvider", "FlashProvider",
+    "get_build_provider", "get_flash_provider",
     "ComPort", "com_port_clean_close",
 ]
 
@@ -59,7 +59,3 @@ def get_flash_provider(platform: str, board_config: dict) -> FlashProvider:
     module_path, class_name = entry["flash"].split(":")
     cls = _resolve(module_path, class_name)
     return cls(board_config)
-
-
-__all__ = ["BuildProvider", "FlashProvider", "TestProvider",
-           "get_build_provider", "get_flash_provider"]

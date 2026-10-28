@@ -340,14 +340,20 @@ class PipelineRunner:
         result.board = board_id or "unknown"
 
         # Detect port for fingerprint tracking
+        #
+        # 只在真有源码目录时探：端口唯一的去处是 compute_fingerprints，而下面
+        # 的指纹计算本身就要求 build_source 非空（否则整份指纹是 {}）。少了这道
+        # 门，`ff flash` / `ff verify` 这种"不编译只烧/只验"的调用会白探一次串口，
+        # 在 S4 之前或 S1 之后冒出一条与本次动作无关的端口日志。
         detected_port = ""
         board_config = s1.details.get("config", {})
-        try:
-            from firmforge.providers import get_flash_provider
-            flasher = get_flash_provider(board_config.get("platform", "arduino"), board_config)
-            detected_port = flasher.detect_port() or ""
-        except Exception:
-            pass
+        if source_dir:
+            try:
+                from firmforge.providers import get_flash_provider
+                flasher = get_flash_provider(board_config.get("platform", "arduino"), board_config)
+                detected_port = flasher.detect_port() or ""
+            except Exception:
+                pass
         state.mark_done("detect", board_id=board_id)
 
         # 只有 Review/Build 需要源码目录。`ff flash` / `ff verify` 单独跑时
@@ -400,7 +406,12 @@ class PipelineRunner:
                     return result
                 state.reset_compile_rounds()
                 fw_path = s3.details.get("firmware_path", "")
-                state.mark_done("build", hex=fw_path)
+                # board_id 必须一起记：产物躺在 `cache/build/<board>/<app>/` 下，
+                # 但 state 是**按工作区**一份的。只记路径的话，同一个工作区里
+                # 编过 A 板再跑 B 板，B 的 S3 会拿 A 的 hex 去「复用」
+                # （2026-10-28 实测：STM32 的 ff run 复用了 AVR 的 5340 B hex，
+                #  OpenOCD 报 checksum mismatch 才没写进去）。
+                state.mark_done("build", hex=fw_path, board_id=board_id or "")
                 s3.details.update(_artifact_info(fw_path))
         else:
             # 不编译。**只有真要烧的时候才需要定位产物** —— `ff verify` 只连
@@ -708,60 +719,6 @@ class PipelineRunner:
         except Exception:
             pass  # never let a callback crash the pipeline
 
-    def _write_serial_summary(self, source_dir: str | None, s5: PipelineStage):
-        """Write serial_live.html static snapshot after ff_run."""
-        if not source_dir:
-            return
-        output = s5.details.get("serial_output", "") if s5.details else ""
-        baud = s5.details.get("matched_baud", 0) if s5.details else 0
-        port = s5.details.get("port", "?") if s5.details else "?"
-        html_path = paths.runtime_dir(self._workspace) / "serial_live.html"
-        html_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            html_path.write_text(self._build_serial_html(output, baud, port, source_dir), encoding="utf-8")
-        except Exception:
-            pass
-
-    @staticmethod
-    def _build_serial_html(output: str, baud: int, port: str,
-                           source_dir: str) -> str:
-        lines = output.splitlines() if output.strip() else ["(no serial data)"]
-        rows = ""
-        for line in lines[:100]:
-            safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            rows += f'<div class="line">{safe}</div>\n'
-
-        return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta http-equiv="refresh" content="2">
-<title>FirmForge Serial Output</title>
-<style>
-:root{{--bg:#1a1a2e;--panel:#16213e;--text:#e0e0e0;--accent:#00d4aa;--dim:#666;--border:#2a2a4a}}
-*{{margin:0;padding:0;box-sizing:border-box}}
-body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:13px;height:100vh;display:flex;flex-direction:column}}
-.header{{background:var(--panel);padding:8px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}}
-.header span{{font-size:12px;color:var(--dim)}}
-.header .port{{color:var(--accent)}}
-.output{{flex:1;overflow-y:auto;padding:10px 16px;line-height:1.6}}
-.output .line{{padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.03);white-space:pre-wrap;word-break:break-all}}
-.footer{{background:var(--panel);padding:5px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--dim);text-align:center}}
-@media(prefers-color-scheme:light){{:root{{--bg:#f5f5f5;--panel:#e8e8e8;--text:#333;--dim:#888;--border:#ddd;--accent:#007bff}}}}
-</style></head>
-<body>
-<div class="header">
-  <span>Serial Monitor <span class="port">{port} @ {baud} baud</span></span>
-  <span>{source_dir or "ff_run"}</span>
-</div>
-<div class="output">
-  {rows}
-</div>
-<div class="footer">
-  Captured during S5 Test stage | reload page for latest snapshot
-</div>
-</body>
-</html>"""
-
     # ===================================================================
     # Stage 1: Detect
     # ===================================================================
@@ -1042,7 +999,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         返回 `CppcheckReport`；任何异常都落成一个 `ok=False` 的报告，
         绝不是一个空列表（空列表的含义是"干净"，两者不能混）。
         """
-        from firmforge.providers.arduino.cppcheck import CppcheckReport, run_cppcheck
+        from firmforge.providers.cppcheck import CppcheckReport, run_cppcheck
 
         if not source_dir:
             return CppcheckReport(ok=False, status="skipped",
@@ -1385,8 +1342,13 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                 f"现有：{names}。先跑 ff build --app <源码目录>，"
                 f"或用 --firmware <路径> 指定")
 
-        recorded = (state.data.get("stages", {}).get("build", {}) or {}).get("hex", "")
-        if recorded and Path(recorded).is_file():
+        # state 记录只在**同一个板卡**上才可信：state 一个工作区一份，而产物
+        # 是按板卡分目录存的。不核板卡的话，先在同一个工作区编过 AVR，再来烧
+        # STM32，这里会把 AVR 的 hex 当成「上次构建产物」直接烧上去。
+        build_rec = (state.data.get("stages", {}).get("build", {}) or {})
+        recorded = build_rec.get("hex", "")
+        recorded_board = str(build_rec.get("board_id") or "")
+        if recorded and recorded_board == (board_id or "") and Path(recorded).is_file():
             return recorded, [], "state 记录的上次构建产物"
 
         if len(found) == 1:
@@ -1445,7 +1407,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
             if not build_result.success:
                 stage.error = build_result.stderr[-500:] if build_result.stderr else "Build failed (no error output)"
-                self._handle_build_error(build_result, source_dir, board_id or "")
+                hints = self._handle_build_error(build_result, source_dir, board_id or "")
+                if hints:
+                    stage.details["history_hints"] = hints
 
         except ImportError as e:
             stage.success = False
@@ -1698,12 +1662,12 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             # 采集本身照旧（数据写 serial_live.html），只是不再对外提供 web 服务。
             if panel:
                 try:
-                    from firmforge.adapters.mcp_server import _start_monitor_httpd
-                    http_port = _start_monitor_httpd(str(root))
+                    # core 层禁止反向 import adapter 层（mcp_server 曾是中转，
+                    # 造成 core↔adapter 惰性循环依赖）——面板服务直接走 panel_service。
+                    from firmforge.adapters.panel_service import start_panel_httpd, write_goto_panel
+                    http_port = start_panel_httpd(str(root))
                     if http_port:
-                        goto_panel = str(paths.runtime_dir(root) / "goto_panel.html")
-                        with open(goto_panel, "w", encoding="utf-8") as f:
-                            f.write(f'<script>window.location.replace("http://127.0.0.1:{http_port}/serial_live.html");</script>')
+                        write_goto_panel(root, http_port)
                         stage.details["panel_url"] = f"http://127.0.0.1:{http_port}/serial_live.html"
                         stage.details["panel_file"] = (
                             f"{paths.RUNTIME_DIR_NAME}/goto_panel.html")
@@ -1735,6 +1699,43 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         except Exception:
             return default_baud, default_parity
 
+    @staticmethod
+    def _open_serial_port(port: str, baud: int, parity: str):
+        """带 10 次重试地打开 COM 口（avrdude 可能还没放干净）。
+
+        返回 (wrapper, last_err)；wrapper 为 None 即打开失败。
+        初始打开与面板暂停后的重开走同一份 —— 此前两处各写一遍重试循环，
+        已经漂移过一次（一侧记错误原因、一侧不记）。
+        """
+        from firmforge.providers.com_port import ComPort
+        ser_wrapper = None
+        last_err = ""
+        for _retry in range(10):
+            try:
+                ser_wrapper = ComPort(port, baud, timeout=0.3, parity=parity)
+                ser_wrapper.__enter__()
+                break
+            except Exception as exc:
+                # 记下最后一次的真实原因。最常见的两条：
+                #   PermissionError / "拒绝访问"  → 端口被别的进程持有
+                #   FileNotFoundError            → 端口消失（拔线 / 驱动未装）
+                # 这两条与「打开了但没数据」的处置完全不同，不能合并成一句话。
+                last_err = f"{type(exc).__name__}: {exc}"
+                time.sleep(0.5)
+        return ser_wrapper, last_err
+
+    @staticmethod
+    def _close_serial(ser, ser_wrapper) -> None:
+        """优雅关闭 COM 口（best-effort，异常一律吞掉）。"""
+        try:
+            ser.close()
+        except Exception:
+            pass
+        try:
+            ser_wrapper.__exit__(None, None, None)
+        except Exception:
+            pass
+
     def _collector_thread(self, html_path: str, port: str, baud: int,
                           sample_ready, sample_lines_out: list, total_lines_out: list,
                           stages_info: str = "", process_info: str = "",
@@ -1742,11 +1743,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
         """Daemon thread — opens COM4, reads serial, writes HTML + signals sample.
 
         `open_error_out`：打开端口失败时的原因（异常文本）由这里回传主线程。
-        没有它，打开失败与「端口打开了但没数据」在 S5 里长得一模一样 ——
-        见下面 10 次重试那一处的注释。
+        没有它，打开失败与「端口打开了但没数据」在 S5 里长得一模一样。
         """
         try:
-            import json
             from pathlib import Path
 
             data_dir = str(Path(html_path).parent)
@@ -1759,21 +1758,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             tx_total = [0]
 
             # Open COM4 (retry up to 10x — avrdude may still be releasing port)
-            from firmforge.providers.com_port import ComPort
-            ser_wrapper = None
-            last_open_err = ""
-            for _retry in range(10):
-                try:
-                    ser_wrapper = ComPort(port, baud, timeout=0.3, parity=parity)
-                    ser_wrapper.__enter__()
-                    break
-                except Exception as exc:
-                    # 记下最后一次的真实原因。最常见的两条：
-                    #   PermissionError / "拒绝访问"  → 端口被别的进程持有
-                    #   FileNotFoundError            → 端口消失（拔线 / 驱动未装）
-                    # 这两条与「打开了但没数据」的处置完全不同，不能合并成一句话。
-                    last_open_err = f"{type(exc).__name__}: {exc}"
-                    time.sleep(0.5)
+            ser_wrapper, last_open_err = self._open_serial_port(port, baud, parity)
             if ser_wrapper is None:
                 if open_error_out is not None:
                     open_error_out.append(last_open_err or "unknown")
@@ -1809,14 +1794,9 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
             lines: list[str] = []
             pause_path = os.path.join(data_dir, "serial_live.html.pause")
 
-            html = _render_panel(port, baud, lines, 0, 0,
-                                 not os.path.exists(pause_path),
-                                 stages_info, process_info)
-            try:
-                with open(html_path, "w", encoding="utf-8") as f:
-                    f.write(html)
-            except Exception:
-                pass
+            _write_file(html_path, _render_panel(
+                port, baud, lines, 0, 0,
+                not os.path.exists(pause_path), stages_info, process_info))
 
             while True:
                 # Check .stop (full exit — Stop button or tab close)
@@ -1825,11 +1805,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
                 # Check .pause (COM4 close — Close button on panel)
                 if os.path.exists(pause_path):
-                    # Close COM4 gracefully
-                    try: ser.close()
-                    except Exception: pass
-                    try: ser_wrapper.__exit__(None, None, None)
-                    except Exception: pass
+                    self._close_serial(ser, ser_wrapper)
                     ser = None
                     # Wait for .pause to be removed (Open button)
                     while os.path.exists(pause_path):
@@ -1839,20 +1815,15 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
                     if os.path.exists(stop_path):
                         break
                     # Reopen COM4 (read latest panel baud/parity config)
-                    ser_wrapper = None
                     baud, parity = self._load_serial_config(data_dir, baud, parity)
-                    for _retry2 in range(10):
-                        try:
-                            ser_wrapper = ComPort(port, baud, timeout=0.3, parity=parity)
-                            ser_wrapper.__enter__()
-                            break
-                        except Exception:
-                            time.sleep(0.5)
+                    ser_wrapper, _ = self._open_serial_port(port, baud, parity)
                     if ser_wrapper is None:
                         break
                     ser = ser_wrapper.ser
-                    try: ser.reset_input_buffer()
-                    except Exception: pass
+                    try:
+                        ser.reset_input_buffer()
+                    except Exception:
+                        pass
                     lines.clear()  # don't accumulate old data on reopen
                     rx_total[0] = 0; tx_total[0] = 0
                     continue
@@ -1893,61 +1864,29 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
 
                 if chunk:
                     rx_total[0] += len(chunk)
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode("ascii", errors="replace")
-                    buf += chunk
-                    while chr(10) in buf:
-                        line, buf = buf.split(chr(10), 1)
-                        line = line.rstrip(chr(13))
-                        if line:
-                            lines.append(line)
+                    buf = _append_chunk(buf, chunk, lines)
 
                 # Write HTML (throttled: max 3.3 fps)
                 now = time.time()
                 if now - last_write >= 0.3:
-                    html = _render_panel(port, baud, lines, rx_total[0], tx_total[0],
-                                         not os.path.exists(pause_path),
-                                         stages_info, process_info)
-                    try:
-                        with open(html_path, "w", encoding="utf-8") as f:
-                            f.write(html)
-                    except Exception:
-                        pass
+                    _write_file(html_path, _render_panel(
+                        port, baud, lines, rx_total[0], tx_total[0],
+                        not os.path.exists(pause_path),
+                        stages_info, process_info))
                     last_write = now
 
                 # Push to SSE stream (instant updates, zero polling latency)
-                _sse_pushed = getattr(ser, '_sse_pushed', 0)
-                if _sse_pushed < len(lines):
-                    try:
-                        from firmforge.adapters.mcp_server import _get_stream_queue
-                        _get_stream_queue().put_nowait({
-                            "new": lines[_sse_pushed:],  # delta only
-                            "total": len(lines),
-                            "rx": rx_total[0],
-                            "tx": tx_total[0],
-                            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-                            "stages": stages_info,
-                        })
-                        setattr(ser, '_sse_pushed', len(lines))
-                    except Exception:
-                        pass
+                _push_sse(ser, lines, rx_total[0], tx_total[0], stages_info)
 
                 time.sleep(0.05)
 
             # Cleanup: close COM4 gracefully
-            try:
-                ser.close()
-            except Exception:
-                pass
-            try:
-                ser_wrapper.__exit__(None, None, None)
-            except Exception:
-                pass
+            self._close_serial(ser, ser_wrapper)
 
             # Clear stream queue so SSE handler exits
             try:
-                from firmforge.adapters.mcp_server import _clear_stream_queue
-                _clear_stream_queue()
+                from firmforge.adapters.panel_service import clear_stream_queue
+                clear_stream_queue()
             except Exception:
                 pass
 
@@ -1986,22 +1925,81 @@ body{{background:var(--bg);color:var(--text);font-family:'Cascadia Code','Fira C
     # Error handling
     # ===================================================================
 
-    def _handle_build_error(self, build_result: Any, source_dir: str, board_id: str) -> None:
-        """Record build error to experience ledger."""
+    def _handle_build_error(self, build_result: Any, source_dir: str,
+                            board_id: str) -> list[str]:
+        """记录构建错误到 experience ledger，返回同模式的历史修复提示。
+
+        写读闭环（规划 §2.8.1 的「inject into context」此前只有写、没有读）：
+        先查后记 —— 顺序不能反，否则刚写入的 "pending" 教训会作为提示返回。
+        platform 从板卡档案解析：此前硬编码 "arduino"，STM32 的构建失败也被
+        记成 arduino，之后按 platform 过滤检索永远错位。
+        """
+        hints: list[str] = []
         try:
+            stderr = (build_result.stderr if hasattr(build_result, "stderr")
+                      and build_result.stderr else "Build error")
+            config = (self._detector.resolve_board(board_id)
+                      if board_id else None) or {}
+            platform = config.get("platform", "arduino")
+            tool = "arm-none-eabi-gcc" if platform == "stm32" else "avr-gcc"
+
+            hints = self._ledger.get_hints(stderr[:200], platform=platform)
             self._ledger.record_from_recovery(
                 state="compile_fix",
-                error_message=build_result.stderr[:200] if hasattr(build_result, "stderr") and build_result.stderr else "Build error",
+                error_message=stderr[:200],
                 fix_applied="pending",
                 source_file=source_dir,
-                platform="arduino",
+                platform=platform,
                 board=board_id,
-                tool="avr-gcc",
+                tool=tool,
             )
         except Exception:
             pass
+        return hints
 
 _PANEL_TEMPLATE = None
+
+
+def _append_chunk(buf: str, chunk, lines: list) -> str:
+    """把一段串口字节按行拆开追加进 lines，返回剩余的半行缓冲。"""
+    if isinstance(chunk, bytes):
+        chunk = chunk.decode("ascii", errors="replace")
+    buf += chunk
+    while chr(10) in buf:
+        line, buf = buf.split(chr(10), 1)
+        line = line.rstrip(chr(13))
+        if line:
+            lines.append(line)
+    return buf
+
+
+def _write_file(path: str, content: str) -> None:
+    """Best-effort 写文件（面板渲染）：失败只说明目录没了，不是线程退出的理由。"""
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception:
+        pass
+
+
+def _push_sse(ser, lines: list, rx: int, tx: int, stages_info: str) -> None:
+    """把新增行推给 SSE 流（只推 delta，零轮询延迟）。"""
+    _sse_pushed = getattr(ser, '_sse_pushed', 0)
+    if _sse_pushed >= len(lines):
+        return
+    try:
+        from firmforge.adapters.panel_service import get_stream_queue
+        get_stream_queue().put_nowait({
+            "new": lines[_sse_pushed:],  # delta only
+            "total": len(lines),
+            "rx": rx,
+            "tx": tx,
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "stages": stages_info,
+        })
+        setattr(ser, '_sse_pushed', len(lines))
+    except Exception:
+        pass
 
 
 def _render_panel(port, baud, lines, rx_count, tx_count, is_open, stages_str="", process_str=""):
@@ -2100,8 +2098,8 @@ def _exec_modbus(ser, tx_total, rx_total):
                     "crc_ok": ok, "regs": regs, "rx_bytes": len(resp), "tx_bytes": len(frame)})
         # Push counter update to SSE (modbus doesn't append to lines)
         try:
-            from firmforge.adapters.mcp_server import _get_stream_queue
-            _get_stream_queue().put_nowait({
+            from firmforge.adapters.panel_service import get_stream_queue
+            get_stream_queue().put_nowait({
                 "new": [], "rx": rx_total[0], "tx": tx_total[0],
                 "ts": time.strftime("%Y-%m-%d %H:%M:%S")
             })
